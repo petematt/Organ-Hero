@@ -1,0 +1,413 @@
+import { describe, expect, it } from 'vitest';
+import { cloneConfig, DEFAULT_CONFIG } from '../../config';
+import { evaluateOrder } from '../../game/orders';
+import { resolveSongTarget } from '../../game/songs';
+import { buildStatsSummary } from '../../game/stats';
+import {
+  composeEffectiveStat,
+  computeFightChance,
+  computeGoalChance,
+  computeGoalieBlockChance,
+  computeRedirectLatency,
+  computeShooterAccuracy,
+  computeSkateSpeed,
+  computeStealChance,
+  decayMoodOffset,
+} from '../formulas';
+import { MatchSimulation } from '../match';
+import {
+  applyPuckFriction,
+  CENTER_Y,
+  collidePuckWithBoards,
+  computeReboundVelocity,
+} from '../physics';
+import { SeededRNG } from '../rng';
+
+describe('SeededRNG & rollAgainst', () => {
+  it('produces identical sequences for the same seed', () => {
+    const a = new SeededRNG(42);
+    const b = new SeededRNG(42);
+    for (let i = 0; i < 50; i++) {
+      expect(a.next()).toBe(b.next());
+    }
+  });
+
+  it('respects rollAgainst clamping and statistical distribution over 10k samples', () => {
+    const rng = new SeededRNG(999);
+    expect(rng.rollAgainst(0)).toBe(false);
+    expect(rng.rollAgainst(-0.5)).toBe(false);
+    expect(rng.rollAgainst(1)).toBe(true);
+    expect(rng.rollAgainst(1.5)).toBe(true);
+
+    let hits = 0;
+    const N = 10000;
+    for (let i = 0; i < N; i++) {
+      if (rng.rollAgainst(0.35)) hits++;
+    }
+    const ratio = hits / N;
+    expect(ratio).toBeGreaterThan(0.33);
+    expect(ratio).toBeLessThan(0.37);
+  });
+});
+
+describe('Simulation Formulas & Mood Drift', () => {
+  const cfg = DEFAULT_CONFIG;
+
+  it('clamps goal_chance between 0.05 and 0.90', () => {
+    // High block chance > shooter accuracy -> clamped to 0.05
+    expect(computeGoalChance(0.1, 0.8, cfg)).toBeCloseTo(0.05);
+    // High accuracy - 0 block -> clamped to 0.90
+    expect(computeGoalChance(0.99, 0.0, cfg)).toBeCloseTo(0.90);
+    // Normal range
+    expect(computeGoalChance(0.65, 0.35, cfg)).toBeCloseTo(0.30);
+  });
+
+  it('prevents zero skate_speed when stamina or aggression hits 0', () => {
+    const speedAtZero = computeSkateSpeed(0, 0, cfg);
+    expect(speedAtZero).toBeGreaterThan(10);
+    expect(speedAtZero).toBeCloseTo(cfg.S_skateSpeed * 0.2 * 0.35);
+  });
+
+  it('computes goalie block, shooter accuracy, steal, fight, and redirect latency', () => {
+    expect(computeGoalieBlockChance(0.8, 0.5, cfg)).toBeCloseTo(cfg.G_goalieBlock * 0.4);
+    expect(computeShooterAccuracy(0.8, cfg)).toBeCloseTo(cfg.A_shooterAccuracy * 0.8);
+    expect(computeStealChance(0.6, 0.5, cfg)).toBeCloseTo(cfg.T_stealChance * 0.3);
+    expect(computeFightChance(0.2, 0.8, cfg)).toBeCloseTo(cfg.F_fightChance * 0.8 * 0.8);
+    expect(computeRedirectLatency(1.0, 1.0, cfg)).toBeCloseTo(0.15); // floor
+  });
+
+  it('decays mood offset by half after 1 half-life', () => {
+    const initial = 0.4;
+    const afterOneHalfLife = decayMoodOffset(initial, 8, 8);
+    expect(afterOneHalfLife).toBeCloseTo(0.2, 5);
+    expect(composeEffectiveStat(0.7, 0.5, 0.2)).toBe(1.0);
+    expect(composeEffectiveStat(0.2, -0.5, 0)).toBe(0.0);
+  });
+});
+
+describe('Rink Physics & 60-Degree Rebound Vector', () => {
+  const cfg = DEFAULT_CONFIG;
+
+  it('reflects puck off boards with restitution 0.6', () => {
+    const res = collidePuckWithBoards(
+      { x: 2, y: 200 },
+      { x: -100, y: 50 },
+      5,
+      0.6
+    );
+    expect(res.bounced).toBe(true);
+    expect(res.pos.x).toBe(5);
+    expect(res.vel.x).toBeCloseTo(60);
+    expect(res.vel.y).toBeCloseTo(50);
+  });
+
+  it('bounces puck off rounded rink corners', () => {
+    const res = collidePuckWithBoards(
+      { x: 8, y: 8 },
+      { x: -120, y: -120 },
+      5,
+      0.6
+    );
+    expect(res.bounced).toBe(true);
+    expect(res.vel.x).toBeGreaterThan(0);
+    expect(res.vel.y).toBeGreaterThan(0);
+  });
+
+  it('decays puck velocity via exponential friction', () => {
+    const v0 = { x: 300, y: 0 };
+    const v1 = applyPuckFriction(v0, 1.0, cfg);
+    expect(v1.x).toBeCloseTo(300 * Math.exp(-cfg.puckFrictionPerSec));
+  });
+
+  it('redirects blocked shots at 60 degrees from the goal line toward the horizontal center line', () => {
+    const rng = new SeededRNG(10);
+    // Puck above center line (y = 150 < 212.5) saved by Home goalie -> should move +X and +Y (toward 212.5)
+    const vAbove = computeReboundVelocity('home', 150, 500, cfg, rng);
+    expect(vAbove.x).toBeGreaterThan(0);
+    expect(vAbove.y).toBeGreaterThan(0);
+    const angleFromGoalLine = Math.atan2(Math.abs(vAbove.x), Math.abs(vAbove.y));
+    expect((angleFromGoalLine * 180) / Math.PI).toBeCloseTo(60, 2);
+
+    // Puck below center line (y = 280 > 212.5) saved by Away goalie -> should move -X and -Y (toward 212.5)
+    const vBelow = computeReboundVelocity('away', 280, 500, cfg, rng);
+    expect(vBelow.x).toBeLessThan(0);
+    expect(vBelow.y).toBeLessThan(0);
+  });
+});
+
+describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
+  it('steal pass transfers possession and stuns victim', () => {
+    const cfg = cloneConfig();
+    cfg.T_stealChance = 10; // guarantee steal roll = 1.0
+    const sim = new MatchSimulation(cfg, 123);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+
+    sim.gainPossession(homeS1);
+    sim.handleCarrierCollision(awayS1, homeS1);
+
+    expect(sim.puck.carrierId).toBe(awayS1.id);
+    expect(awayS1.mode).toBe('POSSESSING');
+    expect(homeS1.mode).toBe('STUNNED');
+  });
+
+  it('steal fail + fight pass locks both in 6s brawl, then sends instigator to 30s penalty box', () => {
+    const cfg = cloneConfig();
+    cfg.T_stealChance = 0; // steal always fails
+    cfg.F_fightChance = 10; // fight always succeeds
+    const sim = new MatchSimulation(cfg, 123);
+    sim.phase = 'PLAYING';
+
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+    sim.gainPossession(homeS1);
+    sim.handleCarrierCollision(awayS1, homeS1);
+
+    expect(awayS1.mode).toBe('FIGHTING');
+    expect(homeS1.mode).toBe('FIGHTING');
+    expect(awayS1.isFightInstigator).toBe(true);
+    expect(sim.puck.carrierId).toBeNull();
+
+    // Advance 6.1 game seconds to finish brawl
+    for (let i = 0; i < 62; i++) {
+      sim.step(0.1);
+    }
+    expect(awayS1.mode).toBe('PENALTY_BOX');
+    expect(awayS1.stateTimer).toBeGreaterThan(28);
+    expect(homeS1.mode).not.toBe('PENALTY_BOX');
+
+    // Advance 30 playing game seconds so instigator leaves box
+    let playingElapsed = 0;
+    while (playingElapsed < 30.2) {
+      if (sim.phase !== 'PLAYING') {
+        sim.phase = 'PLAYING';
+      }
+      sim.step(0.1);
+      playingElapsed += 0.1;
+    }
+    expect(awayS1.mode).toBe('DEFENDING');
+  });
+
+  it('allows both strikers of a team into the penalty box simultaneously (no cap)', () => {
+    const sim = new MatchSimulation(cloneConfig(), 123);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+    const awayS2 = sim.players.find((p) => p.id === 'away-s2')!;
+
+    sim.startFight(awayS1, homeS1);
+    sim.startFight(awayS2, homeS2);
+
+    for (let i = 0; i < 65; i++) {
+      sim.step(0.1);
+    }
+    expect(awayS1.mode).toBe('PENALTY_BOX');
+    expect(awayS2.mode).toBe('PENALTY_BOX');
+  });
+
+  it('shoots when possession_timer exceeds max_possession or within min_shot_distance', () => {
+    const sim = new MatchSimulation(cloneConfig(), 555);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    // Move away strikers far away so no collision interrupts
+    for (const p of sim.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 100, y: 390 };
+      }
+    }
+    homeS1.pos = { x: 200, y: CENTER_Y };
+    sim.gainPossession(homeS1);
+
+    // Step past maxPossessionSec (4.0s)
+    for (let i = 0; i < 45; i++) {
+      sim.step(0.1);
+    }
+    expect(sim.events.some((e) => e.type === 'SHOT')).toBe(true);
+  });
+});
+
+describe('Possession Targeting, Songs & Crowd Volume', () => {
+  it('resolves song target from current possessor or last possessor when loose, and locks on tap', () => {
+    expect(resolveSongTarget('charge', 'home', 'away')).toBe('home');
+    expect(resolveSongTarget('charge', null, 'away')).toBe('away');
+    expect(resolveSongTarget('hold_the_line', null, 'away')).toBe('home');
+    expect(resolveSongTarget('grudge_toccata', 'home', 'home')).toBe('both');
+
+    const sim = new MatchSimulation(cloneConfig(), 77);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+
+    sim.gainPossession(awayS1);
+    // Drop puck loose -> lastPossessor is still 'away'
+    sim.puck.carrierId = null;
+    sim.currentPossessor = null;
+
+    const active = sim.playSong('charge');
+    expect(active.target).toBe('away');
+
+    // Now flip possession to 'home' mid-song -> active song target stays locked to 'away'!
+    sim.gainPossession(homeS1);
+    sim.step(0.5);
+    expect(sim.activeSong?.target).toBe('away');
+  });
+
+  it('doubles effect and boosts crowd +15% on cue hit, halves effect and drops crowd -10% on stale repeat', () => {
+    const sim = new MatchSimulation(cloneConfig(), 88);
+    sim.phase = 'PLAYING';
+    const startCrowd = sim.crowdVolume;
+
+    sim.triggerCue('BREAKAWAY', 'charge', 'home', 'BREAKAWAY!');
+    const firstPlay = sim.playSong('charge');
+    expect(firstPlay.cueHit).toBe(true);
+    expect(firstPlay.stale).toBe(false);
+    expect(firstPlay.multiplier).toBe(2.0);
+    expect(sim.crowdVolume).toBe(startCrowd + 15);
+
+    // Repeat same song immediately -> stale!
+    const secondPlay = sim.playSong('charge');
+    expect(secondPlay.stale).toBe(true);
+    expect(secondPlay.multiplier).toBe(0.5);
+    expect(sim.crowdVolume).toBe(startCrowd + 15 - 10);
+  });
+
+  it('decays crowd volume after 12 game seconds of silence', () => {
+    const cfg = cloneConfig();
+    cfg.goalCrowdBoost = 0;
+    cfg.fightCrowdBoost = 0;
+    const sim = new MatchSimulation(cfg, 99);
+    sim.phase = 'PLAYING';
+    const initial = sim.crowdVolume;
+    for (let i = 0; i < 150; i++) {
+      sim.step(0.1); // 15 game seconds
+    }
+    expect(sim.crowdVolume).toBeLessThan(initial);
+  });
+});
+
+describe('Official Orders & Tie Handling', () => {
+  it('evaluates all 5 orders and fails win-based orders on a tie', () => {
+    expect(
+      evaluateOrder('home_wins', {
+        homeGoals: 2,
+        awayGoals: 2,
+        totalFights: 0,
+        averageCrowdVolume: 70,
+        isMatchOver: true,
+      }).passed
+    ).toBe(false);
+
+    expect(
+      evaluateOrder('clean_sheet', {
+        homeGoals: 3,
+        awayGoals: 3,
+        totalFights: 0,
+        averageCrowdVolume: 70,
+        isMatchOver: true,
+      }).passed
+    ).toBe(false);
+
+    expect(
+      evaluateOrder('clean_sheet', {
+        homeGoals: 3,
+        awayGoals: 1,
+        totalFights: 1,
+        averageCrowdVolume: 50,
+        isMatchOver: true,
+      }).passed
+    ).toBe(true);
+
+    expect(
+      evaluateOrder('blood_on_ice', {
+        homeGoals: 0,
+        awayGoals: 0,
+        totalFights: 3,
+        averageCrowdVolume: 50,
+        isMatchOver: true,
+      }).passed
+    ).toBe(true);
+
+    expect(
+      evaluateOrder('blowout', {
+        homeGoals: 4,
+        awayGoals: 2,
+        totalFights: 2,
+        averageCrowdVolume: 50,
+        isMatchOver: true,
+      }).passed
+    ).toBe(true);
+
+    expect(
+      evaluateOrder('bring_the_noise', {
+        homeGoals: 0,
+        awayGoals: 2,
+        totalFights: 0,
+        averageCrowdVolume: 65,
+        isMatchOver: true,
+      }).passed
+    ).toBe(true);
+  });
+});
+
+describe('Determinism & Breakdown Attribution', () => {
+  it('reproduces identical match event logs for the same seed and song inputs', () => {
+    const runMatch = (seed: number) => {
+      const sim = new MatchSimulation(cloneConfig(), seed);
+      for (let tick = 0; tick < 1200; tick++) {
+        if (tick === 60) sim.playSong('charge');
+        if (tick === 300) sim.playSong('grudge_toccata');
+        if (tick === 600) sim.playSong('hold_the_line');
+        sim.step(1 / 30);
+      }
+      return {
+        homeScore: sim.homeScore,
+        awayScore: sim.awayScore,
+        events: sim.events,
+        puckPos: sim.puck.pos,
+      };
+    };
+
+    const m1 = runMatch(2026);
+    const m2 = runMatch(2026);
+    expect(m1).toEqual(m2);
+  });
+
+  it('attributes goals, saves/steals, and fights to active songs accurately', () => {
+    const summary = buildStatsSummary(
+      [
+        {
+          type: 'GOAL',
+          period: 1,
+          timeRemainingSec: 200,
+          team: 'home',
+          activeSongId: 'charge',
+          activeSongTarget: 'home',
+        },
+        {
+          type: 'SAVE',
+          period: 1,
+          timeRemainingSec: 180,
+          team: 'away',
+          activeSongId: 'hold_the_line',
+          activeSongTarget: 'away',
+        },
+        {
+          type: 'FIGHT',
+          period: 1,
+          timeRemainingSec: 150,
+          team: 'home',
+          activeSongId: 'grudge_toccata',
+          activeSongTarget: 'both',
+        },
+      ],
+      [{ period: 1, volume: 70 }],
+      1
+    );
+
+    expect(summary.goalsDuringCharge).toBe(1);
+    expect(summary.savesAndStealsDuringHold).toBe(1);
+    expect(summary.fightsDuringGrudge).toBe(1);
+  });
+});
