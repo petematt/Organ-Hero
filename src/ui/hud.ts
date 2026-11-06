@@ -48,7 +48,7 @@ export class HudController {
   public update(sim: MatchSimulation): void {
     this.scoreHomeEl.textContent = String(sim.homeScore);
     this.scoreAwayEl.textContent = String(sim.awayScore);
-    this.periodLabelEl.textContent = `PERIOD ${sim.period}`;
+    this.periodLabelEl.textContent = `P${sim.period}`;
 
     const totalSecs = Math.ceil(sim.periodTimeRemainingSec);
     const mins = Math.floor(totalSecs / 60);
@@ -89,31 +89,31 @@ export class HudController {
     this.hudOrderTitleEl.title = `${orderDef.title}: ${orderDef.description} (${evalRes.reason})`;
 
     if (evalRes.liveStatus === 'ON_TRACK' || evalRes.liveStatus === 'PASSED') {
-      this.hudOrderStatusEl.textContent = 'ON TRACK';
+      this.hudOrderStatusEl.textContent = 'OK';
       this.hudOrderStatusEl.className = 'order-status-pill status-track';
     } else if (evalRes.liveStatus === 'AT_RISK') {
-      this.hudOrderStatusEl.textContent = 'AT RISK';
+      this.hudOrderStatusEl.textContent = 'RISK';
       this.hudOrderStatusEl.className = 'order-status-pill status-risk';
     } else {
-      this.hudOrderStatusEl.textContent = 'FAILED';
+      this.hudOrderStatusEl.textContent = 'FAIL';
       this.hudOrderStatusEl.className = 'order-status-pill status-fail';
     }
 
-    // Possession Indicator on the Organ Console
+    // Compact Possession Indicator on the Organ Console
     if (sim.currentPossessor !== null) {
       const teamUpper = sim.currentPossessor.toUpperCase();
       this.possBannerEl.className = `possession-banner poss-solid poss-${sim.currentPossessor}`;
       this.possDotEl.textContent = '●';
-      this.possLabelEl.textContent = `${teamUpper} POSSESSION — SONGS TARGET ${teamUpper} / DEFENDER`;
+      this.possLabelEl.textContent = `${teamUpper} POSS`;
     } else if (sim.lastPossessor !== null) {
       const teamUpper = sim.lastPossessor.toUpperCase();
       this.possBannerEl.className = `possession-banner poss-loose poss-${sim.lastPossessor}`;
       this.possDotEl.textContent = '◌';
-      this.possLabelEl.textContent = `${teamUpper} — LAST TOUCH (LOOSE PUCK COUNTS TOWARD ${teamUpper})`;
+      this.possLabelEl.textContent = `${teamUpper} LAST`;
     } else {
       this.possBannerEl.className = 'possession-banner poss-none';
       this.possDotEl.textContent = '●';
-      this.possLabelEl.textContent = 'OPENING DROP — DEFAULTS TO HOME POSSESSION';
+      this.possLabelEl.textContent = 'HOME DROP';
     }
 
     // Active song pill & screen-edge tint
@@ -122,7 +122,7 @@ export class HudController {
       const rem = (sim.activeSong.remainingSec * 0.5).toFixed(1);
       const lockLabel = sim.activeSong.target.toUpperCase();
       this.activeSongPillEl.classList.remove('hidden');
-      this.activeSongTextEl.textContent = `♪ ${sDef.shortTitle.toUpperCase()} → LOCKED: ${lockLabel} (${rem}s)`;
+      this.activeSongTextEl.textContent = `♪ ${sDef.shortTitle} → ${lockLabel} (${rem}s)`;
       this.edgeTintEl.style.boxShadow = `inset 0 0 36px ${sDef.color}55`;
     } else {
       this.activeSongPillEl.classList.add('hidden');
@@ -143,19 +143,19 @@ export class HudController {
 
     this.targetLabelChargeEl.textContent =
       sim.activeSong?.songId === 'charge'
-        ? `LOCKED: ${sim.activeSong.target.toUpperCase()}`
+        ? `🔒 ${sim.activeSong.target.toUpperCase()}`
         : `${liveChargeTarget.toUpperCase()} (${
-            sim.currentPossessor ? 'Possessor' : 'Last Touch'
+            sim.currentPossessor ? 'Poss' : 'Last'
           })`;
 
     this.targetLabelHoldEl.textContent =
       sim.activeSong?.songId === 'hold_the_line'
-        ? `LOCKED: ${sim.activeSong.target.toUpperCase()}`
-        : `${liveHoldTarget.toUpperCase()} (Defending)`;
+        ? `🔒 ${sim.activeSong.target.toUpperCase()}`
+        : `${liveHoldTarget.toUpperCase()} (Def)`;
 
     this.targetLabelGrudgeEl.textContent =
       sim.activeSong?.songId === 'grudge_toccata'
-        ? 'LOCKED: BOTH TEAMS'
+        ? '🔒 BOTH'
         : 'BOTH TEAMS';
 
     const songIds: SongId[] = ['charge', 'hold_the_line', 'grudge_toccata'];

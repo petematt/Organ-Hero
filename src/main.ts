@@ -9,14 +9,23 @@ import { HudController } from './ui/hud';
 import { RinkRenderer } from './ui/rinkRenderer';
 import { ScreenModalManager } from './ui/screens';
 
-function parseUrlParams(): { seed: number | null; debug: boolean } {
+function parseUrlParams(): {
+  seed: number | null;
+  debug: boolean;
+  autostart: boolean;
+  screen: string | null;
+} {
   const params = new URLSearchParams(window.location.search);
   const seedRaw = params.get('seed');
   const parsedSeed = seedRaw !== null ? parseInt(seedRaw, 10) : NaN;
   const debug = params.get('debug') === '1';
+  const autostart = params.get('autostart') === '1';
+  const screen = params.get('screen');
   return {
     seed: Number.isNaN(parsedSeed) ? null : parsedSeed,
     debug,
+    autostart,
+    screen,
   };
 }
 
@@ -54,10 +63,12 @@ class OrganHeroApp {
     this.screens = new ScreenModalManager({
       onTakeSeat: () => {
         this.synth.unlock();
+        void this.enterFullscreenIfPossible();
         const assigned = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
         this.screens.showOrderClipboard(assigned, this.currentSeed);
       },
       onStartMatchWithOrder: (orderId: OrderId) => {
+        void this.enterFullscreenIfPossible();
         this.startNewMatch(this.currentSeed, orderId);
       },
       onContinueNextPeriod: () => {
@@ -101,9 +112,71 @@ class OrganHeroApp {
 
     this.bindControls();
     this.hud.update(this.sim);
-    this.screens.showStartSeatScreen();
+    if (urlOpts.autostart) {
+      this.screens.hide();
+      this.startNewMatch(this.currentSeed, initialOrder);
+      for (let i = 0; i < 240; i++) {
+        this.sim.step(1 / 60);
+      }
+      this.hud.update(this.sim);
+    } else if (urlOpts.screen === 'clipboard') {
+      this.screens.showOrderClipboard(initialOrder, this.currentSeed);
+    } else {
+      this.screens.showStartSeatScreen();
+    }
 
     requestAnimationFrame((t) => this.loop(t));
+  }
+
+  private isFullscreenActive(): boolean {
+    const doc = document as Document & { webkitFullscreenElement?: Element };
+    return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+  }
+
+  private async enterFullscreenIfPossible(): Promise<void> {
+    if (this.isFullscreenActive()) return;
+    const el = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    };
+    try {
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen();
+      }
+    } catch {
+      // Ignore if blocked by browser or unsupported
+    }
+    this.updateFullscreenBtnState();
+    setTimeout(() => this.renderer.resize(), 80);
+  }
+
+  private async toggleFullscreen(): Promise<void> {
+    const doc = document as Document & {
+      webkitExitFullscreen?: () => Promise<void>;
+    };
+    try {
+      if (this.isFullscreenActive()) {
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen();
+        } else if (doc.webkitExitFullscreen) {
+          await doc.webkitExitFullscreen();
+        }
+      } else {
+        await this.enterFullscreenIfPossible();
+      }
+    } catch {
+      // Ignore errors
+    }
+    this.updateFullscreenBtnState();
+    setTimeout(() => this.renderer.resize(), 80);
+  }
+
+  private updateFullscreenBtnState(): void {
+    const fsBtn = document.getElementById('btn-fullscreen');
+    if (fsBtn) {
+      fsBtn.classList.toggle('active-toggle', this.isFullscreenActive());
+    }
   }
 
   private bindAudioHooks(): void {
@@ -123,6 +196,7 @@ class OrganHeroApp {
     this.isPaused = false;
     this.simAccumulatorSec = 0;
     this.hud.update(this.sim);
+    setTimeout(() => this.renderer.resize(), 20);
   }
 
   private bindControls(): void {
@@ -153,8 +227,18 @@ class OrganHeroApp {
     const barsBtn = document.getElementById('btn-bars-toggle')!;
     barsBtn.addEventListener('click', () => {
       this.renderer.showStatBars = !this.renderer.showStatBars;
-      barsBtn.textContent = `Bars: ${this.renderer.showStatBars ? 'ON' : 'OFF'}`;
       barsBtn.classList.toggle('active-toggle', this.renderer.showStatBars);
+    });
+
+    // Fullscreen toggle button
+    const fsBtn = document.getElementById('btn-fullscreen');
+    fsBtn?.addEventListener('click', () => {
+      void this.toggleFullscreen();
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      this.updateFullscreenBtnState();
+      this.renderer.resize();
     });
 
     // Pause button
@@ -169,7 +253,7 @@ class OrganHeroApp {
       this.debugPanel.toggle();
     });
 
-    // Keyboard shortcuts (1/2/3 for songs, Space for pause, ` for debug)
+    // Keyboard shortcuts (1/2/3 for songs, Space for pause, F for fullscreen, ` for debug)
     window.addEventListener('keydown', (e) => {
       if (
         document.activeElement &&
@@ -186,6 +270,9 @@ class OrganHeroApp {
       } else if (e.key === ' ') {
         e.preventDefault();
         this.togglePause();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        void this.toggleFullscreen();
       } else if (e.key === '`') {
         e.preventDefault();
         this.debugPanel.toggle();

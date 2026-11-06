@@ -36,25 +36,22 @@
     <main id="app-viewport" class="perch-viewport">
       <!-- Top Jumbotron Scoreboard HUD -->
       <header id="jumbotron-hud" class="jumbotron-hud">
-        <div class="hud-team hud-home">
-          <span class="team-badge home-badge">HOME</span>
-          <span id="score-home" class="team-score">0</span>
-        </div>
+        <div class="hud-score-cluster">
+          <div class="hud-team hud-home">
+            <span class="team-badge home-badge">HOME</span>
+            <span id="score-home" class="team-score">0</span>
+          </div>
 
-        <div class="hud-center-clock">
           <div class="period-pill">
-            <span id="period-label">PERIOD 1</span>
+            <span id="period-label">P1</span>
             <span class="dot-sep">•</span>
             <span id="clock-display" class="clock-digits">4:00</span>
           </div>
-          <div id="cue-banner" class="cue-banner hidden">
-            <span id="cue-text">BREAKAWAY! PLAY CHARGE!</span>
-          </div>
-        </div>
 
-        <div class="hud-team hud-away">
-          <span id="score-away" class="team-score">0</span>
-          <span class="team-badge away-badge">AWAY</span>
+          <div class="hud-team hud-away">
+            <span id="score-away" class="team-score">0</span>
+            <span class="team-badge away-badge">AWAY</span>
+          </div>
         </div>
 
         <div class="hud-crowd-order">
@@ -90,7 +87,18 @@
             type="button"
             title="Show/Hide Overhead Player Stat Bars"
           >
-            Bars: ON
+            Bars
+          </button>
+          <button
+            id="btn-fullscreen"
+            class="hud-btn"
+            type="button"
+            title="Toggle Fullscreen (F)"
+            aria-label="Toggle Fullscreen"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: middle;">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
           </button>
           <button
             id="btn-pause"
@@ -113,82 +121,89 @@
 
       <!-- Center Ice Rink Canvas Area -->
       <section id="rink-stage" class="rink-stage">
+        <div id="cue-banner" class="cue-banner hidden">
+          <span id="cue-text">BREAKAWAY! PLAY CHARGE!</span>
+        </div>
         <canvas id="rink-canvas"></canvas>
         <div id="edge-tint" class="edge-tint"></div>
       </section>
 
       <!-- Bottom Pipe Organ Music Stand Console -->
       <footer id="organ-console" class="organ-console">
-        <div class="organ-wood-rail">
-          <div id="possession-banner" class="possession-banner poss-none">
-            <span class="poss-dot" id="poss-dot">●</span>
-            <span id="poss-label">FACEOFF — PUCK AT CENTER ICE</span>
+        <div class="music-stand-row">
+          <!-- Compact Possession Indicator Pillar -->
+          <div class="organ-status-col">
+            <div id="possession-banner" class="possession-banner poss-none" title="Current or Last-Touch Puck Possession">
+              <span class="poss-dot" id="poss-dot">●</span>
+              <span id="poss-label">OPENING DROP</span>
+            </div>
+            <div id="active-song-pill" class="active-song-pill hidden">
+              <span id="active-song-text">♪ CHARGE! (2.5s)</span>
+            </div>
           </div>
-          <div id="active-song-pill" class="active-song-pill hidden">
-            <span id="active-song-text">♪ PLAYING: CHARGE! (3.2s)</span>
+
+          <!-- 3 Song Buttons -->
+          <div class="music-stand-buttons">
+            <button
+              id="btn-song-charge"
+              class="song-btn song-charge"
+              type="button"
+              data-song="charge"
+            >
+              <div class="song-btn-top">
+                <span class="song-key-hint">[1]</span>
+                <span class="song-title">♪ CHARGE!</span>
+                <span id="stale-badge-charge" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">+FOC +AGG (Offense)</div>
+              <div class="song-btn-target">
+                Target: <strong id="target-label-charge">HOME</strong>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-charge" class="song-progress-fill"></div>
+              </div>
+            </button>
+
+            <button
+              id="btn-song-hold"
+              class="song-btn song-hold"
+              type="button"
+              data-song="hold_the_line"
+            >
+              <div class="song-btn-top">
+                <span class="song-key-hint">[2]</span>
+                <span class="song-title">♫ HOLD THE LINE</span>
+                <span id="stale-badge-hold_the_line" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">+DEF +GOALIE −AGG</div>
+              <div class="song-btn-target">
+                Target: <strong id="target-label-hold">AWAY</strong>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-hold_the_line" class="song-progress-fill"></div>
+              </div>
+            </button>
+
+            <button
+              id="btn-song-grudge"
+              class="song-btn song-grudge"
+              type="button"
+              data-song="grudge_toccata"
+            >
+              <div class="song-btn-top">
+                <span class="song-key-hint">[3]</span>
+                <span class="song-title">♬ GRUDGE TOCCATA</span>
+                <span id="stale-badge-grudge_toccata" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">++AGG −FOC (Brawl)</div>
+              <div class="song-btn-target">
+                Target: <strong id="target-label-grudge">BOTH</strong>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-grudge_toccata" class="song-progress-fill"></div>
+              </div>
+            </button>
           </div>
-        </div>
-
-        <div class="music-stand-buttons">
-          <button
-            id="btn-song-charge"
-            class="song-btn song-charge"
-            type="button"
-            data-song="charge"
-          >
-            <div class="song-btn-top">
-              <span class="song-key-hint">[1]</span>
-              <span class="song-title">♪ CHARGE! FANFARE</span>
-              <span id="stale-badge-charge" class="stale-badge hidden">STALE</span>
-            </div>
-            <div class="song-btn-desc">Offense: +Focus &amp; +Aggression</div>
-            <div class="song-btn-target">
-              Target: <strong id="target-label-charge">HOME (Possessor)</strong>
-            </div>
-            <div class="song-progress-bar">
-              <div id="progress-charge" class="song-progress-fill"></div>
-            </div>
-          </button>
-
-          <button
-            id="btn-song-hold"
-            class="song-btn song-hold"
-            type="button"
-            data-song="hold_the_line"
-          >
-            <div class="song-btn-top">
-              <span class="song-key-hint">[2]</span>
-              <span class="song-title">♫ HOLD THE LINE</span>
-              <span id="stale-badge-hold_the_line" class="stale-badge hidden">STALE</span>
-            </div>
-            <div class="song-btn-desc">Defense/Goalie: +Focus, +Stamina, −Aggression</div>
-            <div class="song-btn-target">
-              Target: <strong id="target-label-hold">AWAY (Defending)</strong>
-            </div>
-            <div class="song-progress-bar">
-              <div id="progress-hold_the_line" class="song-progress-fill"></div>
-            </div>
-          </button>
-
-          <button
-            id="btn-song-grudge"
-            class="song-btn song-grudge"
-            type="button"
-            data-song="grudge_toccata"
-          >
-            <div class="song-btn-top">
-              <span class="song-key-hint">[3]</span>
-              <span class="song-title">♬ GRUDGE TOCCATA</span>
-              <span id="stale-badge-grudge_toccata" class="stale-badge hidden">STALE</span>
-            </div>
-            <div class="song-btn-desc">Chaos Brawl: ++Aggression, −Focus</div>
-            <div class="song-btn-target">
-              Target: <strong id="target-label-grudge">BOTH TEAMS</strong>
-            </div>
-            <div class="song-progress-bar">
-              <div id="progress-grudge_toccata" class="song-progress-fill"></div>
-            </div>
-          </button>
         </div>
       </footer>
     </main>

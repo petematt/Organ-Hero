@@ -92,12 +92,16 @@ body {
   line-height: 1.45;
 }
 
-/* Main Organist Perch Grid Layout */
+/* Main Organist Perch Grid Layout — strictly constrained to viewport width/height */
 .perch-viewport {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: 100vw;
+  max-width: 100vw;
   height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   padding-top: env(safe-area-inset-top, 0px);
   padding-right: env(safe-area-inset-right, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -109,26 +113,36 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 4px 10px;
   background: linear-gradient(180deg, #172133 0%, #0e1521 100%);
   border-bottom: 2px solid #283548;
-  min-height: 52px;
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.hud-score-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .hud-team {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .team-badge {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  padding: 4px 10px;
-  border-radius: 5px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  padding: 3px 7px;
+  border-radius: 4px;
 }
 
 .home-badge {
@@ -143,84 +157,57 @@ body {
 
 .team-score {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  min-width: 24px;
+  min-width: 18px;
   text-align: center;
-}
-
-.hud-center-clock {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
 }
 
 .period-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   background: #090d14;
   border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 3px 12px;
+  border-radius: 5px;
+  padding: 2px 8px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .clock-digits {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 17px;
+  font-size: 15px;
   color: #fde047;
-}
-
-.cue-banner {
-  background: #f59e0b;
-  color: #090d14;
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 2px 10px;
-  border-radius: 4px;
-  animation: cuePulse 0.6s infinite alternate;
-}
-
-@keyframes cuePulse {
-  from {
-    transform: scale(1);
-    background-color: #f59e0b;
-  }
-  to {
-    transform: scale(1.04);
-    background-color: #fde047;
-  }
 }
 
 .hud-crowd-order {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .crowd-meter-wrap {
-  width: 115px;
+  width: 92px;
+  flex-shrink: 0;
 }
 
 .crowd-label-row {
   display: flex;
   justify-content: space-between;
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #cbd5e1;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .crowd-bar-track {
   width: 100%;
-  height: 8px;
+  height: 7px;
   background: #090d14;
   border: 1px solid #334155;
   border-radius: 4px;
@@ -245,12 +232,13 @@ body {
 .hud-order-box {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: rgba(15, 23, 42, 0.85);
   border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 11px;
+  min-width: 0;
 }
 
 .order-tag {
@@ -258,19 +246,23 @@ body {
   font-weight: 700;
   font-size: 10px;
   color: var(--brass-gold);
+  flex-shrink: 0;
 }
 
 .order-summary-text {
   font-weight: 600;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .order-status-pill {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
   font-size: 10px;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .status-track {
@@ -294,20 +286,21 @@ body {
 .hud-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .hud-btn {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 10px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
   background: #1e293b;
   color: var(--text-primary);
   border: 1px solid #475569;
-  border-radius: 6px;
+  border-radius: 5px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
 }
@@ -325,17 +318,50 @@ body {
   border-color: #60a5fa;
 }
 
-/* Center Ice Rink Stage */
+/* Center Ice Rink Stage — maximized area */
 .rink-stage {
   position: relative;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: radial-gradient(circle at center, #131c29 0%, #090d14 100%);
   overflow: hidden;
+}
+
+/* Floating Cue Banner inside Rink Stage so it never inflates HUD height */
+.cue-banner {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  background: #f59e0b;
+  color: #090d14;
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1.5px solid #fef08a;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: cuePulse 0.6s infinite alternate;
+}
+
+@keyframes cuePulse {
+  from {
+    transform: translateX(-50%) scale(1);
+    background-color: #f59e0b;
+  }
+  to {
+    transform: translateX(-50%) scale(1.04);
+    background-color: #fde047;
+  }
 }
 
 #rink-canvas {
@@ -349,57 +375,68 @@ body {
   transition: box-shadow 0.25s ease;
 }
 
-/* Bottom Pipe Organ Music Stand Console */
+/* Bottom Pipe Organ Music Stand Console — sleek single-row layout */
 .organ-console {
   background: linear-gradient(180deg, var(--bg-organ-trim) 0%, var(--bg-organ-wood) 100%);
-  border-top: 3px solid #854d0e;
-  padding: 6px 12px 8px;
+  border-top: 2px solid #854d0e;
+  padding: 5px 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.music-stand-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.organ-status-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  min-width: 102px;
+  max-width: 130px;
 }
 
-.organ-wood-rail {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
+/* Compact Possession Indicator */
 .possession-banner {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 6px;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 5px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .poss-solid.poss-home {
-  background: rgba(37, 99, 235, 0.32);
-  border: 2px solid #60a5fa;
+  background: rgba(37, 99, 235, 0.35);
+  border: 1.5px solid #60a5fa;
   color: #e0f2fe;
 }
 
 .poss-solid.poss-away {
-  background: rgba(220, 38, 38, 0.32);
-  border: 2px solid #f87171;
+  background: rgba(220, 38, 38, 0.35);
+  border: 1.5px solid #f87171;
   color: #fee2e2;
 }
 
 .poss-loose.poss-home {
   background: rgba(37, 99, 235, 0.16);
-  border: 2px dashed #60a5fa;
+  border: 1.5px dashed #60a5fa;
   color: #bae6fd;
 }
 
 .poss-loose.poss-away {
   background: rgba(220, 38, 38, 0.16);
-  border: 2px dashed #f87171;
+  border: 1.5px dashed #f87171;
   color: #fecaca;
 }
 
@@ -415,22 +452,27 @@ body {
   color: #fef08a;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 6px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .music-stand-buttons {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
 }
 
 .song-btn {
   position: relative;
-  min-height: 62px;
-  padding: 8px 12px 11px;
-  border-radius: 8px;
+  min-height: 54px;
+  padding: 5px 10px 8px;
+  border-radius: 7px;
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   border: 2px solid #475569;
   color: var(--text-primary);
@@ -439,7 +481,8 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 3px;
+  gap: 2px;
+  min-width: 0;
   overflow: hidden;
   transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease;
 }
@@ -486,20 +529,25 @@ body {
 .song-btn-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .song-key-hint {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--brass-gold);
+  flex-shrink: 0;
 }
 
 .song-title {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.03em;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stale-badge {
@@ -507,20 +555,27 @@ body {
   background: #be123c;
   color: #fff;
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .song-btn-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .song-btn-target {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .song-btn-target strong {
@@ -532,7 +587,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 4px;
+  height: 3px;
   background: rgba(15, 23, 42, 0.7);
 }
 
@@ -553,60 +608,60 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px;
+  padding: 10px;
 }
 
 .modal-card {
   width: 100%;
-  max-width: 680px;
-  max-height: 92dvh;
+  max-width: 660px;
+  max-height: 94dvh;
   overflow-y: auto;
   background: linear-gradient(180deg, #182234 0%, #0f1726 100%);
   border: 2px solid #475569;
   border-radius: 12px;
-  padding: 20px 24px;
+  padding: 16px 20px;
   color: var(--text-primary);
 }
 
 .modal-eyebrow {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--brass-gold);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .modal-title {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 22px;
-  margin-bottom: 10px;
+  font-size: 20px;
+  margin-bottom: 8px;
 }
 
 .modal-lead {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   color: #cbd5e1;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .seat-tips-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .seat-tip {
   background: rgba(15, 23, 42, 0.75);
   border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 7px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 11px;
 }
 
 .seat-tip strong {
@@ -618,12 +673,12 @@ body {
   background: rgba(234, 179, 8, 0.12);
   border: 1px solid rgba(234, 179, 8, 0.5);
   border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
 }
 
 .spotlight-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--brass-gold);
@@ -631,35 +686,35 @@ body {
 
 .spotlight-title {
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .spotlight-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: #e2e8f0;
 }
 
 .picker-heading {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .order-options-list {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .order-option-btn {
   background: #0f172a;
   border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 6px;
+  padding: 6px 8px;
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -674,7 +729,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 12px;
   margin-bottom: 2px;
 }
 
@@ -688,7 +743,7 @@ body {
 }
 
 .order-opt-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 
@@ -697,21 +752,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   background: #090d14;
   border: 1px solid #334155;
   border-radius: 8px;
-  padding: 10px 18px;
-  margin-bottom: 12px;
+  padding: 8px 14px;
+  margin-bottom: 10px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .b-team span {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
-  margin: 0 6px;
+  font-size: 22px;
+  margin: 0 5px;
 }
 
 .b-team.home {
@@ -724,31 +779,31 @@ body {
 .breakdown-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .breakdown-col {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid #334155;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .breakdown-col h3,
 .impact-callout-box h3 {
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   color: #fde047;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .stat-kv-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 11px;
 }
 
 .stat-kv-list li {
@@ -757,7 +812,7 @@ body {
 }
 
 .sparkline-box {
-  margin-top: 6px;
+  margin-top: 4px;
   display: flex;
   justify-content: center;
 }
@@ -766,14 +821,14 @@ body {
   background: rgba(30, 41, 59, 0.65);
   border: 1px solid #475569;
   border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
 }
 
 .impact-callout-box ul {
-  padding-left: 18px;
-  font-size: 12px;
-  line-height: 1.5;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.4;
   color: #e2e8f0;
 }
 
@@ -784,21 +839,21 @@ body {
   background: #090d14;
   border: 1px solid #334155;
   border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 14px;
-  font-size: 13px;
+  padding: 7px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
 }
 
 .order-reason-sub {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 
 .order-final-banner {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 8px;
-  margin-bottom: 12px;
-  font-size: 13px;
+  margin-bottom: 10px;
+  font-size: 12px;
 }
 
 .banner-pass {
@@ -816,13 +871,13 @@ body {
 .period-summary-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  margin-bottom: 10px;
 }
 
 .period-summary-table th,
 .period-summary-table td {
-  padding: 6px 8px;
+  padding: 5px 6px;
   border-bottom: 1px solid #334155;
   text-align: center;
 }
@@ -834,7 +889,7 @@ body {
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .modal-actions.multi-actions {
@@ -843,12 +898,12 @@ body {
 
 .primary-cta-btn,
 .secondary-cta-btn {
-  min-height: 46px;
-  padding: 10px 18px;
-  border-radius: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 7px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -870,7 +925,7 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 340px;
+  width: 330px;
   max-width: 90vw;
   z-index: 800;
   background: #0f172a;
@@ -883,34 +938,34 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: #1e293b;
   border-bottom: 1px solid #334155;
 }
 
 .debug-header h2 {
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .debug-body {
-  padding: 12px 14px;
+  padding: 10px 12px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .debug-section h3 {
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--brass-gold);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .debug-slider-row {
   display: grid;
-  grid-template-columns: 1fr 110px 42px;
+  grid-template-columns: 1fr 100px 40px;
   align-items: center;
   gap: 6px;
   font-size: 11px;
@@ -937,7 +992,7 @@ body {
   border: 1px solid #475569;
   border-radius: 6px;
   color: #fff;
-  padding: 6px 8px;
+  padding: 5px 8px;
   font-family: 'JetBrains Mono', monospace;
 }
 
@@ -948,31 +1003,103 @@ body {
 }
 
 /* Compact 16:9 Mobile Landscape Adjustments */
-@media (max-height: 500px) {
+@media (max-height: 500px), (max-width: 860px) {
   .jumbotron-hud {
-    min-height: 44px;
-    padding: 4px 10px;
+    min-height: 36px;
+    padding: 3px 8px;
+    gap: 6px;
+  }
+  .team-badge {
+    font-size: 11px;
+    padding: 2px 5px;
   }
   .team-score {
-    font-size: 20px;
+    font-size: 17px;
+    min-width: 15px;
+  }
+  .period-pill {
+    padding: 1px 6px;
+    font-size: 11px;
+  }
+  .clock-digits {
+    font-size: 13px;
+  }
+  .crowd-meter-wrap {
+    width: 68px;
+  }
+  .crowd-label-row {
+    font-size: 9px;
+  }
+  .order-tag {
+    display: none;
+  }
+  .hud-order-box {
+    padding: 2px 5px;
+    font-size: 10px;
+  }
+  .hud-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    font-size: 11px;
   }
   .organ-console {
-    padding: 4px 10px 6px;
-    gap: 4px;
+    padding: 4px 8px;
+  }
+  .music-stand-row {
+    gap: 6px;
+  }
+  .organ-status-col {
+    min-width: 82px;
+    max-width: 96px;
+  }
+  .possession-banner {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+  .active-song-pill {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  .music-stand-buttons {
+    gap: 6px;
   }
   .song-btn {
-    min-height: 56px;
-    padding: 6px 10px 8px;
+    min-height: 44px;
+    padding: 4px 8px 6px;
   }
   .song-title {
-    font-size: 12px;
+    font-size: 11px;
   }
   .song-btn-desc {
     display: none;
   }
-  .seat-tips-grid,
-  .order-options-list,
-  .breakdown-columns {
-    grid-template-columns: 1fr;
+  .song-btn-target {
+    font-size: 9.5px;
+  }
+  .modal-card {
+    padding: 12px 16px;
+  }
+  .modal-title {
+    font-size: 17px;
+    margin-bottom: 6px;
+  }
+  .modal-lead {
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .seat-tips-grid {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .seat-tip {
+    padding: 6px 8px;
+    font-size: 10.5px;
+  }
+  .primary-cta-btn,
+  .secondary-cta-btn {
+    min-height: 36px;
+    padding: 6px 14px;
+    font-size: 12px;
   }
 }

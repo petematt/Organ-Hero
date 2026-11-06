@@ -61,7 +61,7 @@ export class RinkRenderer {
     ctx.save();
     ctx.clearRect(0, 0, cw, ch);
 
-    const pad = 16;
+    const pad = 6;
     const scaleX = (cw - pad * 2) / RINK_WIDTH;
     const scaleY = (ch - pad * 2) / RINK_HEIGHT;
     const scale = Math.min(scaleX, scaleY);
