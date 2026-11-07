@@ -73,6 +73,10 @@ export class RinkRenderer {
   private lastScreenCenterY: number = 0;
   private lastCssScale: number = 1;
 
+  // Offscreen canvas used so the Zamboni's 2-loop path erases the on-ice stats like a real squeegee
+  private summaryCanvas: HTMLCanvasElement;
+  private summaryCtx: CanvasRenderingContext2D;
+
   constructor(canvas: HTMLCanvasElement, callbacks?: IceSummaryCallbacks) {
     this.canvas = canvas;
     this.callbacks = callbacks ?? null;
@@ -81,6 +85,14 @@ export class RinkRenderer {
       throw new Error('Could not initialize 2D canvas context');
     }
     this.ctx = context;
+
+    this.summaryCanvas = document.createElement('canvas');
+    const sCtx = this.summaryCanvas.getContext('2d');
+    if (!sCtx) {
+      throw new Error('Could not initialize offscreen summary 2D context');
+    }
+    this.summaryCtx = sCtx;
+
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.bindIcePointerEvents();
@@ -257,8 +269,12 @@ export class RinkRenderer {
 
     this.canvas.style.width = `${Math.floor(rect.width)}px`;
     this.canvas.style.height = `${Math.floor(rect.height)}px`;
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    const pixelW = Math.max(1, Math.floor(rect.width * dpr));
+    const pixelH = Math.max(1, Math.floor(rect.height * dpr));
+    this.canvas.width = pixelW;
+    this.canvas.height = pixelH;
+    this.summaryCanvas.width = pixelW;
+    this.summaryCanvas.height = pixelH;
   }
 
   public render(sim: MatchSimulation, realDtSec: number): void {
@@ -275,17 +291,17 @@ export class RinkRenderer {
       this.summaryEnterElapsedSec += realDtSec;
 
       if (this.isZamboniClearing) {
-        // Zamboni sweep + camera pullback (2.25 real seconds)
-        const zamboniDurationSec = 2.25;
+        // 2-loop Zamboni resurfacing + synchronized camera pullback (4.6 real seconds)
+        const zamboniDurationSec = 4.6;
         this.zamboniProgress = Math.min(
           1,
           this.zamboniProgress + realDtSec / zamboniDurationSec
         );
-        const eased = easeInOutCubic(this.zamboniProgress);
-        this.intermissionZoomBlend = 1 - eased;
+        // Pull out smoothly so the full rink is visible as the Zamboni loops, reaching 0.0 right as Zamboni finishes
+        this.intermissionZoomBlend = Math.pow(1 - this.zamboniProgress, 1.85);
 
-        // Bring HUD & Organ Console back into frame as the camera pulls back
-        if (this.zamboniProgress >= 0.28) {
+        // Bring HUD & Organ Console back into frame during the final pass as zoom finishes returning to normal
+        if (this.zamboniProgress >= 0.72) {
           const viewport = document.getElementById('app-viewport');
           viewport?.classList.remove('ice-focus-mode');
         }
@@ -487,8 +503,10 @@ export class RinkRenderer {
   }
 
   /**
-   * Draws the Period Breakdown or Final Game Breakdown painted onto center ice,
-   * clipped by the Zamboni's conditioner blade when the Zamboni is clearing the ice.
+   * Draws the Period Breakdown or Final Game Breakdown painted onto center ice.
+   * When the Zamboni is active, it drives a 2-loop resurfacing pattern (entering from the left,
+   * completing an outer loop and inner loop at ~1/4 rink height width, then exiting to the right),
+   * erasing the on-ice breakdown text along its path like a giant squeegee.
    */
   private drawOnIceSummaryAndZamboni(
     ctx: CanvasRenderingContext2D,
@@ -500,39 +518,76 @@ export class RinkRenderer {
 
     if (fadeAlpha <= 0.01) return;
 
-    // Zamboni wipes from bottom (y = 396) up to top (y = 26)
-    const wipeY = this.isZamboniClearing
-      ? 396 - easeInOutCubic(this.zamboniProgress) * 370
-      : 425;
-
     ctx.save();
     this.roundedRinkPath(ctx);
     ctx.clip();
 
-    // 1. Draw the on-ice breakdown text clipped above wipeY (so the Zamboni erases it as it drives up!)
-    ctx.save();
-    ctx.globalAlpha = fadeAlpha;
-    if (this.isZamboniClearing) {
-      ctx.beginPath();
-      ctx.rect(0, 0, RINK_WIDTH, Math.max(0, wipeY));
-      ctx.clip();
+    if (!this.isZamboniClearing) {
+      ctx.save();
+      ctx.globalAlpha = fadeAlpha;
+      this.iceButtons = [];
+      if (sim.phase === 'MATCH_OVER') {
+        this.drawGameBreakdownOnIce(ctx, sim);
+      } else {
+        this.drawPeriodBreakdownOnIce(ctx, sim);
+      }
+      ctx.restore();
+      this.drawIceScrollIndicator(ctx, fadeAlpha);
+      ctx.restore();
+      return;
     }
+
+    // Zamboni is active: render the on-ice stats to summaryCanvas, then erase the swept 2-loop path
+    if (
+      this.summaryCanvas.width !== this.canvas.width ||
+      this.summaryCanvas.height !== this.canvas.height
+    ) {
+      this.summaryCanvas.width = this.canvas.width;
+      this.summaryCanvas.height = this.canvas.height;
+    }
+
+    const totalLen = this.getZamboniTotalLength();
+    const currentDist = this.zamboniProgress * totalLen;
+    // The rear conditioner squeegee bar is 48 units behind the Zamboni center
+    const eraseDist = Math.max(0, currentDist - 48);
+    // Zamboni conditioner swath width is ~1/4 of the rink height (425 / 4 = 106.25 -> 110 with overlap)
+    const swathWidth = 110;
+
+    const sCtx = this.summaryCtx;
+    sCtx.save();
+    sCtx.setTransform(1, 0, 0, 1, 0, 0);
+    sCtx.clearRect(0, 0, this.summaryCanvas.width, this.summaryCanvas.height);
+    sCtx.setTransform(ctx.getTransform());
 
     this.iceButtons = [];
     if (sim.phase === 'MATCH_OVER') {
-      this.drawGameBreakdownOnIce(ctx, sim);
+      this.drawGameBreakdownOnIce(sCtx, sim);
     } else {
-      this.drawPeriodBreakdownOnIce(ctx, sim);
+      this.drawPeriodBreakdownOnIce(sCtx, sim);
     }
+
+    if (eraseDist > 0) {
+      sCtx.save();
+      sCtx.globalCompositeOperation = 'destination-out';
+      sCtx.strokeStyle = '#000000';
+      sCtx.lineWidth = swathWidth;
+      sCtx.lineCap = 'round';
+      sCtx.lineJoin = 'round';
+      sCtx.beginPath();
+      this.traceZamboniPathUpTo(sCtx, eraseDist);
+      sCtx.stroke();
+      sCtx.restore();
+    }
+    sCtx.restore();
+
+    // 1. Draw the remaining (unerased) on-ice breakdown from summaryCanvas
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.summaryCanvas, 0, 0);
     ctx.restore();
 
-    // 2. If Zamboni is active, draw the wet resurfaced ice trail behind it and the Zamboni machine at wipeY!
-    if (this.isZamboniClearing) {
-      this.drawZamboniAndWetWake(ctx, wipeY);
-    } else {
-      // Draw subtle vertical scroll track indicator on the right edge of the center-ice board
-      this.drawIceScrollIndicator(ctx, fadeAlpha);
-    }
+    // 2. Draw the glistening wet resurfaced ice wake along the swept path and the Zamboni machine itself
+    this.drawZamboniAndWetWake(ctx, currentDist, eraseDist, swathWidth);
 
     ctx.restore();
   }
@@ -1099,135 +1154,422 @@ export class RinkRenderer {
     ctx.restore();
   }
 
+  private getZamboniSegments(): Array<
+    | {
+        type: 'line';
+        x1: number;
+        y1: number;
+        x2: number;
+        y2: number;
+        length: number;
+      }
+    | {
+        type: 'arc';
+        cx: number;
+        cy: number;
+        r: number;
+        startAngle: number;
+        endAngle: number;
+        ccw: boolean;
+        length: number;
+      }
+  > {
+    // Rink is 1000 x 425. Zamboni conditioner width is ~108 (~1/4 of 425).
+    // Loop 1 (Outer loop): Left->Right along top (y=52), right endzone turn, Right->Left along bottom (y=373), left endzone turn.
+    // Loop 2 (Inner loop): Left->Right along upper-mid (y=140), right inner turn, Right->Left along lower-mid (y=285), left inner turn.
+    // Exit: Left->Right along center ice (y=212.5) exiting off the right side of the rink.
+    const r1 = (373 - 52) * 0.5; // 160.5
+    const r2 = (373 - 140) * 0.5; // 116.5
+    const r3 = (285 - 140) * 0.5; // 72.5
+    const r4 = (285 - CENTER_Y) * 0.5; // 36.25
+
+    return [
+      {
+        type: 'line',
+        x1: -95,
+        y1: 52,
+        x2: 835,
+        y2: 52,
+        length: 835 - -95,
+      },
+      {
+        type: 'arc',
+        cx: 835,
+        cy: 212.5,
+        r: r1,
+        startAngle: -Math.PI * 0.5,
+        endAngle: Math.PI * 0.5,
+        ccw: false,
+        length: Math.PI * r1,
+      },
+      {
+        type: 'line',
+        x1: 835,
+        y1: 373,
+        x2: 120,
+        y2: 373,
+        length: 835 - 120,
+      },
+      {
+        type: 'arc',
+        cx: 120,
+        cy: 256.5,
+        r: r2,
+        startAngle: Math.PI * 0.5,
+        endAngle: Math.PI * 1.5,
+        ccw: false,
+        length: Math.PI * r2,
+      },
+      {
+        type: 'line',
+        x1: 120,
+        y1: 140,
+        x2: 845,
+        y2: 140,
+        length: 845 - 120,
+      },
+      {
+        type: 'arc',
+        cx: 845,
+        cy: 212.5,
+        r: r3,
+        startAngle: -Math.PI * 0.5,
+        endAngle: Math.PI * 0.5,
+        ccw: false,
+        length: Math.PI * r3,
+      },
+      {
+        type: 'line',
+        x1: 845,
+        y1: 285,
+        x2: 135,
+        y2: 285,
+        length: 845 - 135,
+      },
+      {
+        type: 'arc',
+        cx: 135,
+        cy: 248.75,
+        r: r4,
+        startAngle: Math.PI * 0.5,
+        endAngle: Math.PI * 1.5,
+        ccw: false,
+        length: Math.PI * r4,
+      },
+      {
+        type: 'line',
+        x1: 135,
+        y1: CENTER_Y,
+        x2: 1095,
+        y2: CENTER_Y,
+        length: 1095 - 135,
+      },
+    ];
+  }
+
+  private getZamboniTotalLength(): number {
+    let sum = 0;
+    for (const seg of this.getZamboniSegments()) {
+      sum += seg.length;
+    }
+    return sum;
+  }
+
+  private traceZamboniPathUpTo(
+    ctx: CanvasRenderingContext2D,
+    maxDist: number
+  ): void {
+    const segments = this.getZamboniSegments();
+    let remaining = maxDist;
+    ctx.moveTo(-95, 52);
+
+    for (const seg of segments) {
+      if (remaining <= 0) break;
+      const segDist = Math.min(remaining, seg.length);
+      const frac = segDist / seg.length;
+
+      if (seg.type === 'line') {
+        ctx.lineTo(
+          seg.x1 + (seg.x2 - seg.x1) * frac,
+          seg.y1 + (seg.y2 - seg.y1) * frac
+        );
+      } else {
+        const endA = seg.startAngle + (seg.endAngle - seg.startAngle) * frac;
+        ctx.arc(seg.cx, seg.cy, seg.r, seg.startAngle, endA, seg.ccw);
+      }
+      remaining -= segDist;
+    }
+  }
+
+  private traceZamboniPathWindow(
+    ctx: CanvasRenderingContext2D,
+    startDist: number,
+    endDist: number
+  ): void {
+    if (endDist <= startDist) return;
+    const segments = this.getZamboniSegments();
+    let cursor = 0;
+    let started = false;
+
+    for (const seg of segments) {
+      const segStart = cursor;
+      const segEnd = cursor + seg.length;
+      cursor = segEnd;
+
+      if (segEnd <= startDist) continue;
+      if (segStart >= endDist) break;
+
+      const f0 = clamp((startDist - segStart) / seg.length, 0, 1);
+      const f1 = clamp((endDist - segStart) / seg.length, 0, 1);
+      if (f1 <= f0) continue;
+
+      if (seg.type === 'line') {
+        const sx = seg.x1 + (seg.x2 - seg.x1) * f0;
+        const sy = seg.y1 + (seg.y2 - seg.y1) * f0;
+        const ex = seg.x1 + (seg.x2 - seg.x1) * f1;
+        const ey = seg.y1 + (seg.y2 - seg.y1) * f1;
+        if (!started) {
+          ctx.moveTo(sx, sy);
+          started = true;
+        }
+        ctx.lineTo(ex, ey);
+      } else {
+        const a0 = seg.startAngle + (seg.endAngle - seg.startAngle) * f0;
+        const a1 = seg.startAngle + (seg.endAngle - seg.startAngle) * f1;
+        if (!started) {
+          ctx.moveTo(
+            seg.cx + Math.cos(a0) * seg.r,
+            seg.cy + Math.sin(a0) * seg.r
+          );
+          started = true;
+        }
+        ctx.arc(seg.cx, seg.cy, seg.r, a0, a1, seg.ccw);
+      }
+    }
+  }
+
+  private sampleZamboniPose(dist: number): {
+    x: number;
+    y: number;
+    angle: number;
+  } {
+    const segments = this.getZamboniSegments();
+    let remaining = clamp(dist, 0, this.getZamboniTotalLength());
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (remaining <= seg.length || i === segments.length - 1) {
+        const frac = clamp(remaining / seg.length, 0, 1);
+        if (seg.type === 'line') {
+          return {
+            x: seg.x1 + (seg.x2 - seg.x1) * frac,
+            y: seg.y1 + (seg.y2 - seg.y1) * frac,
+            angle: Math.atan2(seg.y2 - seg.y1, seg.x2 - seg.x1),
+          };
+        } else {
+          const theta =
+            seg.startAngle + (seg.endAngle - seg.startAngle) * frac;
+          return {
+            x: seg.cx + Math.cos(theta) * seg.r,
+            y: seg.cy + Math.sin(theta) * seg.r,
+            angle: theta + Math.PI * 0.5,
+          };
+        }
+      }
+      remaining -= seg.length;
+    }
+
+    return { x: 1095, y: CENTER_Y, angle: 0 };
+  }
+
   /**
-   * Draws the wet-ice resurfacing wake behind the Zamboni and the Zamboni machine itself
-   * at `wipeY`, erasing the on-ice stats like a giant squeegee.
+   * Draws the wet-ice resurfacing wake along the 2-loop path and the Zamboni machine itself
+   * (sized at ~1/4 the rink height = ~106 units wide).
    */
   private drawZamboniAndWetWake(
     ctx: CanvasRenderingContext2D,
-    wipeY: number
+    currentDist: number,
+    eraseDist: number,
+    swathWidth: number
   ): void {
-    const bandW = 352;
-    const bandX = CENTER_X - bandW * 0.5;
-
     ctx.save();
 
-    // 1. Freshly resurfaced glistening wet ice wake below wipeY
-    const wakeH = Math.max(0, 396 - wipeY);
-    if (wakeH > 0) {
-      const wetGrad = ctx.createLinearGradient(0, wipeY, 0, wipeY + Math.min(180, wakeH));
-      wetGrad.addColorStop(0, 'rgba(56, 189, 248, 0.36)');
-      wetGrad.addColorStop(0.35, 'rgba(186, 230, 253, 0.22)');
-      wetGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-      ctx.fillStyle = wetGrad;
-      ctx.fillRect(bandX, wipeY, bandW, wakeH);
+    // 1. Freshly resurfaced glistening wet ice sheet along the entire swept path so far
+    if (eraseDist > 0) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.14)';
+      ctx.lineWidth = swathWidth - 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      this.traceZamboniPathUpTo(ctx, eraseDist);
+      ctx.stroke();
 
-      // Specular wet-ice diagonal sheen streaks
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 6; i++) {
-        const sy = wipeY + 12 + i * 24;
-        if (sy > 390) break;
-        ctx.beginPath();
-        ctx.moveTo(bandX + 20 + (i % 2) * 40, sy);
-        ctx.lineTo(bandX + bandW - 30 - ((i + 1) % 2) * 35, sy);
-        ctx.stroke();
-      }
+      // Extra-wet glossy water wake immediately behind the conditioner bar (last 850 units)
+      const wakeStart = Math.max(0, eraseDist - 850);
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.lineWidth = swathWidth - 6;
+      ctx.beginPath();
+      this.traceZamboniPathWindow(ctx, wakeStart, eraseDist);
+      ctx.stroke();
+
+      // Specular white center reflection rib along the fresh water wake
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+      ctx.lineWidth = swathWidth * 0.34;
+      ctx.beginPath();
+      this.traceZamboniPathWindow(
+        ctx,
+        Math.max(0, eraseDist - 520),
+        eraseDist
+      );
+      ctx.stroke();
+      ctx.restore();
     }
 
-    // 2. Wide Conditioner Squeegee & Water Spreader Bar right at wipeY (the "big eraser" edge)
-    ctx.fillStyle = '#0ea5e9';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(bandX - 6, wipeY - 6, bandW + 12, 12, 4);
-    ctx.fill();
-    ctx.stroke();
+    // 2. Sample Zamboni position and heading angle along the 2-loop trajectory
+    const pose = this.sampleZamboniPose(currentDist);
+    ctx.translate(pose.x, pose.y);
+    ctx.rotate(pose.angle);
 
-    // Brass trim on conditioner bar
-    ctx.fillStyle = '#eab308';
-    ctx.fillRect(bandX + 4, wipeY - 2, bandW - 8, 4);
+    // In local Zamboni space:
+    // +X is forward (direction of travel), Y is perpendicular width.
+    // Conditioner width is 108 units (~1/4 of RINK_HEIGHT = 425), spanning y = [-54, +54].
+    const halfSwath = swathWidth * 0.5; // 55
+    const halfBodyW = 48; // Chassis width = 96 (~1/4 rink height)
+    const rearX = -46;
+    const frontX = 66;
+    const bodyLen = frontX - rearX; // 112
 
-    // Water mist spray droplets along the squeegee bar
-    ctx.fillStyle = '#e0f2fe';
-    for (let i = 0; i < 14; i++) {
-      const mx = bandX + 12 + (i * (bandW - 24)) / 13;
-      const my = wipeY + 7 + Math.sin(this.animTime * 25 + i) * 3;
+    // Headlight beams shining ahead (+X) onto the uncleaned ice/stats
+    const beamGrad = ctx.createLinearGradient(frontX, 0, frontX + 68, 0);
+    beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.58)');
+    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+    ctx.fillStyle = beamGrad;
+    for (const ly of [-28, 28]) {
       ctx.beginPath();
-      ctx.arc(mx, my, 2.2, 0, Math.PI * 2);
+      ctx.moveTo(frontX - 2, ly - 8);
+      ctx.lineTo(frontX + 68, ly - 24);
+      ctx.lineTo(frontX + 68, ly + 24);
+      ctx.lineTo(frontX - 2, ly + 8);
+      ctx.closePath();
       ctx.fill();
     }
 
-    // 3. Main Zamboni Tractor Body centered at (CENTER_X, wipeY - 34)
-    const zx = CENTER_X - 42;
-    const zy = wipeY - 66;
-    const zw = 84;
-    const zh = 62;
-
-    // Headlight beams shining ahead onto the uncleaned stats
-    const beamGrad = ctx.createLinearGradient(0, zy, 0, zy - 48);
-    beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
-    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
-    ctx.fillStyle = beamGrad;
+    // Rear Conditioner Squeegee & Water Spreader Bar at x = [-56, -42], y = [-55, +55] (the "big eraser" blade)
+    ctx.fillStyle = '#0ea5e9';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
-    ctx.moveTo(zx + 14, zy);
-    ctx.lineTo(zx - 4, zy - 48);
-    ctx.lineTo(zx + 32, zy - 48);
-    ctx.closePath();
+    ctx.roundRect(-56, -halfSwath, 14, swathWidth, 4);
     ctx.fill();
+    ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(zx + zw - 14, zy);
-    ctx.lineTo(zx + zw - 32, zy - 48);
-    ctx.lineTo(zx + zw + 4, zy - 48);
-    ctx.closePath();
-    ctx.fill();
+    // Brass spreader towel bar along the rear conditioner
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(-52, -halfSwath + 5, 5, swathWidth - 10);
 
-    // Tires
+    // Water mist spray droplets trailing behind the conditioner bar
+    ctx.fillStyle = '#e0f2fe';
+    for (let i = 0; i < 9; i++) {
+      const my = -halfSwath + 9 + (i * (swathWidth - 18)) / 8;
+      const mx = -61 - Math.abs(Math.sin(this.animTime * 24 + i * 1.3)) * 5;
+      ctx.beginPath();
+      ctx.arc(mx, my, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 4 Heavy-duty studded ice tires (top and bottom of chassis)
     ctx.fillStyle = '#090d14';
-    ctx.fillRect(zx - 4, zy + 8, 5, 16);
-    ctx.fillRect(zx + zw - 1, zy + 8, 5, 16);
-    ctx.fillRect(zx - 4, zy + zh - 22, 5, 16);
-    ctx.fillRect(zx + zw - 1, zy + zh - 22, 5, 16);
+    // Rear tires
+    ctx.fillRect(-30, -halfBodyW - 5, 24, 7);
+    ctx.fillRect(-30, halfBodyW - 2, 24, 7);
+    // Front tires
+    ctx.fillRect(26, -halfBodyW - 5, 24, 7);
+    ctx.fillRect(26, halfBodyW - 2, 24, 7);
 
-    // Zamboni chassis (White & Stadium Blue)
+    // Main Zamboni Chassis (Crisp Arena White & Dark Slate border)
     ctx.fillStyle = '#f8fafc';
     ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
-    ctx.roundRect(zx, zy, zw, zh, 8);
+    ctx.roundRect(rearX, -halfBodyW, bodyLen, halfBodyW * 2, 12);
     ctx.fill();
     ctx.stroke();
 
-    // Front snow tank (Stadium Blue)
+    // Front Snow Dump Tank (Stadium Blue, x = [-4, 58], y = [-41, +41])
     ctx.fillStyle = '#1d4ed8';
-    ctx.beginPath();
-    ctx.roundRect(zx + 5, zy + 5, zw - 10, 34, 5);
-    ctx.fill();
-
-    // Gold racing stripe & ZAMBONI label
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(zx + 5, zy + 20, zw - 10, 10);
-    ctx.fillStyle = '#090d14';
-    ctx.font = '700 8px "Chakra Petch", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('ZAMBONI', CENTER_X, zy + 25.5);
-
-    // Driver cab & steering wheel at rear of Zamboni
-    ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.roundRect(zx + 14, zy + 42, zw - 28, 16, 4);
-    ctx.fill();
-
-    // Driver helmet
-    ctx.fillStyle = '#eab308';
-    ctx.strokeStyle = '#090d14';
+    ctx.strokeStyle = '#1e3a8a';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(CENTER_X, zy + 50, 6, 0, Math.PI * 2);
+    ctx.roundRect(-4, -halfBodyW + 7, 62, (halfBodyW - 7) * 2, 8);
     ctx.fill();
     ctx.stroke();
+
+    // Snow conveyor auger vents on front tank
+    ctx.strokeStyle = 'rgba(147, 197, 253, 0.45)';
+    ctx.lineWidth = 1.5;
+    for (let vx = 8; vx <= 46; vx += 9) {
+      ctx.beginPath();
+      ctx.moveTo(vx, -halfBodyW + 14);
+      ctx.lineTo(vx, halfBodyW - 14);
+      ctx.stroke();
+    }
+
+    // Gold racing stripe & ZAMBONI badge across the tank
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(6, -13, 44, 26, 4);
+    ctx.fill();
+
+    // Keep "ZAMBONI" text right-side-up whether driving Left->Right or Right->Left
+    ctx.save();
+    ctx.translate(28, 0);
+    if (Math.cos(pose.angle) < 0) {
+      ctx.rotate(Math.PI);
+    }
+    ctx.fillStyle = '#090d14';
+    ctx.font = '700 9.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ZAMBONI', 0, 0.5);
+    ctx.restore();
+
+    // Rear Operator Cab & Console (x = [-38, -8], y = [-30, +30])
+    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-38, -30, 28, 60, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Steering wheel
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(-16, 0, 5.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Driver helmet & shoulders at the controls
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.roundRect(-32, -12, 11, 24, 5);
+    ctx.fill();
+
+    ctx.fillStyle = '#eab308';
+    ctx.strokeStyle = '#090d14';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(-25, 0, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Flashing amber warning beacon on corner of cab
+    const strobeAlpha = 0.45 + 0.55 * Math.abs(Math.sin(this.animTime * 14));
+    ctx.fillStyle = `rgba(245, 158, 11, ${strobeAlpha.toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(-33, -23, 5, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
