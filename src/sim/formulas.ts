@@ -60,14 +60,16 @@ export function computeGoalChance(
 }
 
 /**
- * skate_speed = S * max(minStaminaSpeedFactor, stamina) * (0.35 + 0.65 * aggression)
+ * skate_speed = S * (minStaminaSpeedFactor + (1 - minStaminaSpeedFactor) * stamina) * (0.35 + 0.65 * aggression)
  */
 export function computeSkateSpeed(
   stamina: number,
   aggression: number,
   cfg: GameConfig
 ): number {
-  const stamFactor = Math.max(cfg.minStaminaSpeedFactor, clamp(stamina, 0, 1));
+  const stamFactor =
+    cfg.minStaminaSpeedFactor +
+    (1 - cfg.minStaminaSpeedFactor) * clamp(stamina, 0, 1);
   const aggFactor = 0.35 + 0.65 * clamp(aggression, 0, 1);
   return cfg.S_skateSpeed * stamFactor * aggFactor;
 }

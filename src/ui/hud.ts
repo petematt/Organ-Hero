@@ -141,22 +141,35 @@ export class HudController {
       sim.lastPossessor
     );
 
-    this.targetLabelChargeEl.textContent =
-      sim.activeSong?.songId === 'charge'
-        ? `🔒 ${sim.activeSong.target.toUpperCase()}`
-        : `${liveChargeTarget.toUpperCase()} (${
-            sim.currentPossessor ? 'Poss' : 'Last'
-          })`;
+    const chargeLocked = sim.activeSong?.songId === 'charge';
+    const chargeTarget =
+      chargeLocked && sim.activeSong ? sim.activeSong.target : liveChargeTarget;
+    this.targetLabelChargeEl.textContent = chargeLocked
+      ? `🔒 ${chargeTarget.toUpperCase()}`
+      : `${chargeTarget.toUpperCase()} (${
+          sim.currentPossessor ? 'Poss' : 'Last'
+        })`;
+    this.targetLabelChargeEl.className = `target-pill target-${chargeTarget}${
+      chargeLocked ? ' is-locked' : ''
+    }`;
 
-    this.targetLabelHoldEl.textContent =
-      sim.activeSong?.songId === 'hold_the_line'
-        ? `🔒 ${sim.activeSong.target.toUpperCase()}`
-        : `${liveHoldTarget.toUpperCase()} (Def)`;
+    const holdLocked = sim.activeSong?.songId === 'hold_the_line';
+    const holdTarget =
+      holdLocked && sim.activeSong ? sim.activeSong.target : liveHoldTarget;
+    this.targetLabelHoldEl.textContent = holdLocked
+      ? `🔒 ${holdTarget.toUpperCase()}`
+      : `${holdTarget.toUpperCase()} (Def)`;
+    this.targetLabelHoldEl.className = `target-pill target-${holdTarget}${
+      holdLocked ? ' is-locked' : ''
+    }`;
 
-    this.targetLabelGrudgeEl.textContent =
-      sim.activeSong?.songId === 'grudge_toccata'
-        ? '🔒 BOTH'
-        : 'BOTH TEAMS';
+    const grudgeLocked = sim.activeSong?.songId === 'grudge_toccata';
+    this.targetLabelGrudgeEl.textContent = grudgeLocked
+      ? '🔒 BOTH'
+      : 'BOTH TEAMS';
+    this.targetLabelGrudgeEl.className = `target-pill target-both${
+      grudgeLocked ? ' is-locked' : ''
+    }`;
 
     const songIds: SongId[] = ['charge', 'hold_the_line', 'grudge_toccata'];
     for (const id of songIds) {

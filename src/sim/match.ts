@@ -189,8 +189,9 @@ export class MatchSimulation {
       p.attackPath = null;
       p.possessionTimer = 0;
       p.fightPartnerId = null;
+      p.isFightInstigator = false;
       if (p.mode === 'PENALTY_BOX') {
-        // Stay in penalty box across faceoffs until timer expires
+        // Stay in penalty box across mid-period faceoffs until timer expires
         p.pos = this.getPenaltyBoxPos(p.team, p.id);
         p.vel = { x: 0, y: 0 };
       } else {
@@ -222,9 +223,15 @@ export class MatchSimulation {
     this.periodTimeRemainingSec = this.cfg.periodDurationSec;
     this.activeCue = null;
 
-    // Restore stamina between periods
+    // Restore stamina and clear all penalties / brawls / stuns between periods
     for (const p of this.players) {
       p.stamina = 1.0;
+      p.mode = 'DEFENDING';
+      p.stateTimer = 0;
+      p.possessionTimer = 0;
+      p.fightPartnerId = null;
+      p.isFightInstigator = false;
+      p.collisionCooldown = 0;
     }
 
     this.setupFaceoff();

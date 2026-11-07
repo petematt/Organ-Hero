@@ -97,7 +97,7 @@ export const DEFAULT_CONFIG: GameConfig = {
 
   minGoalChance: 0.05,
   maxGoalChance: 0.90,
-  minStaminaSpeedFactor: 0.20,
+  minStaminaSpeedFactor: 0.55,
 
   periodDurationSec: 240,
   songActiveDurationSec: 10,
@@ -119,12 +119,12 @@ export const DEFAULT_CONFIG: GameConfig = {
   puckRadius: 5,
   creaseRadius: 34,
 
-  strikerStaminaDrainPerSec: 0.004,
-  strikerCollisionStaminaDrain: 0.02,
-  goalieStaminaDrainPerSec: 0.0015,
-  goalieSaveStaminaDrain: 0.04,
-  penaltyBoxStaminaRecoveryPerSec: 0.01,
-  brawlLoserStaminaHit: 0.10,
+  strikerStaminaDrainPerSec: 0.0018,
+  strikerCollisionStaminaDrain: 0.008,
+  goalieStaminaDrainPerSec: 0.0012,
+  goalieSaveStaminaDrain: 0.03,
+  penaltyBoxStaminaRecoveryPerSec: 0.015,
+  brawlLoserStaminaHit: 0.08,
 
   moodRobbedAggression: 0.15,
   moodRobbedFocus: -0.05,
@@ -212,7 +212,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   ],
 };
 
-const STORAGE_KEY = 'organ_hero_config_v1';
+const STORAGE_KEY = 'organ_hero_config_v2';
 
 export function cloneConfig(cfg: GameConfig = DEFAULT_CONFIG): GameConfig {
   return JSON.parse(JSON.stringify(cfg));

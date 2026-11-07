@@ -65,7 +65,9 @@ describe('Simulation Formulas & Mood Drift', () => {
   it('prevents zero skate_speed when stamina or aggression hits 0', () => {
     const speedAtZero = computeSkateSpeed(0, 0, cfg);
     expect(speedAtZero).toBeGreaterThan(10);
-    expect(speedAtZero).toBeCloseTo(cfg.S_skateSpeed * 0.2 * 0.35);
+    expect(speedAtZero).toBeCloseTo(
+      cfg.S_skateSpeed * cfg.minStaminaSpeedFactor * 0.35
+    );
   });
 
   it('computes goalie block, shooter accuracy, steal, fight, and redirect latency', () => {
@@ -189,7 +191,7 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(awayS1.mode).toBe('DEFENDING');
   });
 
-  it('allows both strikers of a team into the penalty box simultaneously (no cap)', () => {
+  it('allows both strikers of a team into the penalty box simultaneously (no cap) and clears all penalties when a new period starts', () => {
     const sim = new MatchSimulation(cloneConfig(), 123);
     sim.phase = 'PLAYING';
     const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
@@ -205,6 +207,16 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     }
     expect(awayS1.mode).toBe('PENALTY_BOX');
     expect(awayS2.mode).toBe('PENALTY_BOX');
+
+    // Start Period 2 -> all penalties must be cleared and players returned to DEFENDING at their faceoff spots
+    sim.startNextPeriod();
+    expect(sim.period).toBe(2);
+    expect(awayS1.mode).toBe('DEFENDING');
+    expect(awayS2.mode).toBe('DEFENDING');
+    expect(awayS1.stateTimer).toBe(0);
+    expect(awayS2.stateTimer).toBe(0);
+    expect(awayS1.pos).toEqual(awayS1.homeSpot);
+    expect(awayS2.pos).toEqual(awayS2.homeSpot);
   });
 
   it('shoots when possession_timer exceeds max_possession or within min_shot_distance', () => {
