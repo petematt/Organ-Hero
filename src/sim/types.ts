@@ -68,6 +68,8 @@ export interface PuckState {
   vel: Vec2;
   carrierId: string | null;
   inFlightShotFrom: Team | null;
+  isScoringShot: boolean;
+  shotStartPos: Vec2 | null;
   shooterAccuracy: number;
   shooterId: string | null;
   trail: Vec2[];

@@ -226,6 +226,45 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     }
     expect(sim.events.some((e) => e.type === 'SHOT')).toBe(true);
   });
+
+  it('pre-rolls scoring shots on launch and only registers a GOAL once the puck crosses into the net', () => {
+    const cfg = cloneConfig();
+    cfg.A_shooterAccuracy = 10;
+    cfg.G_goalieBlock = 0;
+    cfg.maxGoalChance = 1.0;
+    const sim = new MatchSimulation(cfg, 888);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    for (const p of sim.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 100, y: 390 };
+      }
+    }
+    homeS1.pos = { x: 560, y: CENTER_Y };
+    sim.gainPossession(homeS1);
+    sim.shootPuck(homeS1);
+
+    // Immediately after shot release: isScoringShot is true, shotStartPos recorded, score is still 0
+    expect(sim.puck.isScoringShot).toBe(true);
+    expect(sim.puck.shotStartPos).not.toBeNull();
+    expect(sim.homeScore).toBe(0);
+
+    // Step in small increments: while puck is at the outer crease (x < 735), goal must NOT be registered yet
+    let sawInCreaseBeforeGoal = false;
+    for (let i = 0; i < 60; i++) {
+      sim.step(1 / 120);
+      if (sim.puck.pos.x > 700 && sim.puck.pos.x < 742 && sim.homeScore === 0) {
+        sawInCreaseBeforeGoal = true;
+      }
+      if (sim.homeScore === 1) {
+        expect(sim.puck.pos.x).toBeGreaterThanOrEqual(742);
+        break;
+      }
+    }
+    expect(sawInCreaseBeforeGoal).toBe(true);
+    expect(sim.homeScore).toBe(1);
+    expect(sim.phase).toBe('GOAL_CELEBRATION');
+  });
 });
 
 describe('Possession Targeting, Songs & Crowd Volume', () => {

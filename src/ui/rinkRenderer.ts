@@ -18,6 +18,11 @@ export class RinkRenderer {
   public showStatBars: boolean = true; // Default ON per user requirement
   private animTime: number = 0;
 
+  // Dynamic camera zoom & focus state for scoring shots and goal impacts
+  private camZoom: number = 1.0;
+  private camFocusX: number = CENTER_X;
+  private camFocusY: number = CENTER_Y;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const context = canvas.getContext('2d');
@@ -58,6 +63,38 @@ export class RinkRenderer {
     const cw = this.canvas.width;
     const ch = this.canvas.height;
 
+    // Compute camera zoom & focus target
+    let targetZoom = 1.0;
+    let targetFocusX = CENTER_X;
+    let targetFocusY = CENTER_Y;
+
+    if (sim.puck.inFlightShotFrom !== null && sim.puck.isScoringShot) {
+      targetZoom = 1.14;
+      const goalX =
+        sim.puck.inFlightShotFrom === 'home' ? AWAY_GOAL_X - 85 : HOME_GOAL_X + 85;
+      targetFocusX = sim.puck.pos.x * 0.35 + goalX * 0.65;
+      targetFocusY = CENTER_Y + (sim.puck.pos.y - CENTER_Y) * 0.35;
+    } else if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.1) {
+      targetZoom = 1.16;
+      targetFocusX =
+        sim.puck.pos.x < CENTER_X ? HOME_GOAL_X + 95 : AWAY_GOAL_X - 95;
+      targetFocusY = CENTER_Y;
+    }
+
+    const lerpRate = Math.min(1, realDtSec * 9.5);
+    this.camZoom += (targetZoom - this.camZoom) * lerpRate;
+    this.camFocusX += (targetFocusX - this.camFocusX) * lerpRate;
+    this.camFocusY += (targetFocusY - this.camFocusY) * lerpRate;
+
+    // Screen shake punch right as the puck slams into the back of the net
+    let shakeX = 0;
+    let shakeY = 0;
+    if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.9) {
+      const intensity = ((sim.phaseTimerSec - 1.9) / 0.7) * 6.5;
+      shakeX = Math.sin(this.animTime * 95) * intensity;
+      shakeY = Math.cos(this.animTime * 115) * intensity;
+    }
+
     ctx.save();
     ctx.clearRect(0, 0, cw, ch);
 
@@ -71,6 +108,11 @@ export class RinkRenderer {
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
+    // Apply camera zoom & impact shake around the focus target
+    ctx.translate(CENTER_X + shakeX, CENTER_Y + shakeY);
+    ctx.scale(this.camZoom, this.camZoom);
+    ctx.translate(-this.camFocusX, -this.camFocusY);
+
     this.drawIceAndMarkings(ctx, sim);
     this.drawPenaltyBoxes(ctx, sim);
     this.drawPuckTrailAndPuck(ctx, sim);
@@ -82,6 +124,7 @@ export class RinkRenderer {
     }
 
     this.drawBrawlClouds(ctx, sim);
+    this.drawGoalImpact(ctx, sim);
     this.drawCallouts(ctx, sim);
     this.drawPhaseBanner(ctx, sim);
 
@@ -250,7 +293,76 @@ export class RinkRenderer {
   ): void {
     ctx.save();
     const trail = sim.puck.trail;
-    if (trail.length > 1) {
+
+    // Check if we should render the blazing scoring-shot streak (in flight OR lingering right after impact)
+    const isScoringInFlight =
+      sim.puck.inFlightShotFrom !== null && sim.puck.isScoringShot;
+    const isScoringLinger =
+      sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.85;
+    const streakAlpha = isScoringInFlight
+      ? 1.0
+      : isScoringLinger
+      ? Math.max(0, (sim.phaseTimerSec - 1.85) / 0.75)
+      : 0;
+
+    if (streakAlpha > 0 && sim.puck.shotStartPos) {
+      const start = sim.puck.shotStartPos;
+      const end = sim.puck.pos;
+
+      // 1. Muzzle flash starburst at shot release point
+      ctx.save();
+      ctx.globalAlpha = streakAlpha;
+      ctx.fillStyle = '#fef08a';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 2. Three-layer blazing laser/comet streak from stick to puck
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const drawStreakPath = () => {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        for (const pt of trail) {
+          ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.lineTo(end.x, end.y);
+      };
+
+      // Outer plasma glow
+      ctx.strokeStyle = `rgba(245, 158, 11, ${0.42 * streakAlpha})`;
+      ctx.lineWidth = 18;
+      drawStreakPath();
+      ctx.stroke();
+
+      // Mid fiery gold beam
+      ctx.strokeStyle = `rgba(250, 204, 21, ${0.9 * streakAlpha})`;
+      ctx.lineWidth = 9;
+      drawStreakPath();
+      ctx.stroke();
+
+      // Inner white-hot core
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.98 * streakAlpha})`;
+      ctx.lineWidth = 3.5;
+      drawStreakPath();
+      ctx.stroke();
+
+      // 3. Speed spark embers along the trail
+      for (let i = 0; i < trail.length; i += 2) {
+        const pt = trail[i];
+        const offset = (i % 4 === 0 ? 1 : -1) * (5 + (i % 3) * 2);
+        ctx.fillStyle = i % 4 === 0 ? '#ffffff' : '#fde047';
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y + offset, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (trail.length > 1) {
+      // Standard puck motion trail
       for (let i = 0; i < trail.length - 1; i++) {
         const alpha = ((i + 1) / trail.length) * 0.35;
         ctx.fillStyle =
@@ -269,22 +381,81 @@ export class RinkRenderer {
       }
     }
 
-    // Loose puck highlight ring
+    // Loose / Scoring puck highlight ring
     if (sim.puck.carrierId === null) {
-      ctx.strokeStyle =
-        sim.puck.inFlightShotFrom !== null
-          ? 'rgba(245, 158, 11, 0.85)'
-          : 'rgba(14, 165, 233, 0.55)';
-      ctx.lineWidth = 2;
+      if (isScoringInFlight) {
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
+        ctx.beginPath();
+        ctx.arc(
+          sim.puck.pos.x,
+          sim.puck.pos.y,
+          sim.cfg.puckRadius + 9,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      ctx.strokeStyle = isScoringInFlight
+        ? '#ffffff'
+        : sim.puck.inFlightShotFrom !== null
+        ? 'rgba(245, 158, 11, 0.85)'
+        : 'rgba(14, 165, 233, 0.55)';
+      ctx.lineWidth = isScoringInFlight ? 3 : 2;
       ctx.beginPath();
       ctx.arc(sim.puck.pos.x, sim.puck.pos.y, sim.cfg.puckRadius + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#090d16';
+    ctx.fillStyle = isScoringInFlight ? '#fef08a' : '#090d16';
     ctx.beginPath();
     ctx.arc(sim.puck.pos.x, sim.puck.pos.y, sim.cfg.puckRadius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  private drawGoalImpact(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    if (sim.phase !== 'GOAL_CELEBRATION') return;
+    const elapsed = 2.6 - sim.phaseTimerSec;
+    if (elapsed < 0 || elapsed > 1.4) return;
+
+    const prog = elapsed / 1.4;
+    const alpha = Math.max(0, 1 - prog);
+    const ix = sim.puck.pos.x;
+    const iy = sim.puck.pos.y;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Outer golden shockwave ring
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 5 * (1 - prog * 0.6);
+    ctx.beginPath();
+    ctx.arc(ix, iy, 10 + prog * 95, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner white-hot shockwave ring
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3 * (1 - prog * 0.5);
+    ctx.beginPath();
+    ctx.arc(ix, iy, 6 + prog * 55, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Radial celebration spark burst
+    for (let i = 0; i < 12; i++) {
+      const ang = (i * Math.PI * 2) / 12 + prog * 0.4;
+      const r1 = 12 + prog * 35;
+      const r2 = 22 + prog * 75;
+      ctx.strokeStyle = i % 2 === 0 ? '#fde047' : '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(ix + Math.cos(ang) * r1, iy + Math.sin(ang) * r1);
+      ctx.lineTo(ix + Math.cos(ang) * r2, iy + Math.sin(ang) * r2);
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
