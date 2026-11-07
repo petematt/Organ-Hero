@@ -57,7 +57,25 @@ class OrganHeroApp {
     this.bindAudioHooks();
 
     const canvas = document.getElementById('rink-canvas') as HTMLCanvasElement;
-    this.renderer = new RinkRenderer(canvas);
+    this.renderer = new RinkRenderer(canvas, {
+      onContinueNextPeriod: () => {
+        this.sim.startNextPeriod();
+        this.isPaused = false;
+        this.hud.update(this.sim);
+      },
+      onPlayAgainSameSeed: () => {
+        this.startNewMatch(this.currentSeed, this.sim.orderId);
+      },
+      onPlayAgainNewSeed: () => {
+        this.currentSeed = Math.floor(1000 + Math.random() * 9000);
+        const assigned = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
+        this.startNewMatch(this.currentSeed, assigned);
+      },
+      onChangeOrder: () => {
+        this.isPaused = true;
+        this.screens.showOrderClipboard(this.sim.orderId, this.currentSeed);
+      },
+    });
     this.hud = new HudController();
 
     this.screens = new ScreenModalManager({
@@ -102,6 +120,7 @@ class OrganHeroApp {
       onRestartWithSeed: (seed: number) => {
         this.currentSeed = seed;
         this.screens.hide();
+        this.renderer.resetIceSummaryImmediate();
         this.startNewMatch(this.currentSeed, this.sim.orderId);
       },
     });
@@ -190,6 +209,7 @@ class OrganHeroApp {
 
   private startNewMatch(seed: number, orderId: OrderId): void {
     this.currentSeed = seed;
+    this.renderer.resetIceSummaryImmediate();
     this.sim = new MatchSimulation(this.cfg, seed, orderId);
     this.bindAudioHooks();
     this.hasStartedMatch = true;
@@ -291,7 +311,8 @@ class OrganHeroApp {
     if (this.isPaused || !this.hasStartedMatch) return;
     if (
       this.sim.phase === 'PERIOD_END' ||
-      this.sim.phase === 'MATCH_OVER'
+      this.sim.phase === 'MATCH_OVER' ||
+      this.renderer.isSummaryOrZamboniActive()
     ) {
       return;
     }
@@ -304,7 +325,8 @@ class OrganHeroApp {
     if (!this.hasStartedMatch) return;
     if (
       this.sim.phase === 'PERIOD_END' ||
-      this.sim.phase === 'MATCH_OVER'
+      this.sim.phase === 'MATCH_OVER' ||
+      this.renderer.isSummaryOrZamboniActive()
     ) {
       return;
     }
@@ -338,13 +360,9 @@ class OrganHeroApp {
         this.sim.step(fixedStep);
 
         if (prevPhase !== this.sim.phase) {
-          if (this.sim.phase === 'PERIOD_END') {
+          if (this.sim.phase === 'PERIOD_END' || this.sim.phase === 'MATCH_OVER') {
             this.isPaused = true;
-            this.screens.showPeriodBreakdown(this.sim);
-            break;
-          } else if (this.sim.phase === 'MATCH_OVER') {
-            this.isPaused = true;
-            this.screens.showGameBreakdown(this.sim);
+            this.renderer.beginIceSummary(this.sim);
             break;
           }
         }

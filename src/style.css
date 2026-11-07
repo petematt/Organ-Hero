@@ -94,6 +94,7 @@ body {
 
 /* Main Organist Perch Grid Layout — strictly constrained to viewport width/height */
 .perch-viewport {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -110,6 +111,9 @@ body {
 
 /* Top Jumbotron Scoreboard HUD */
 .jumbotron-hud {
+  position: relative;
+  z-index: 15;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -121,6 +125,13 @@ body {
   width: 100%;
   min-width: 0;
   overflow: hidden;
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.perch-viewport.ice-focus-mode .jumbotron-hud {
+  transform: translateY(-115%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .hud-score-cluster {
@@ -318,9 +329,11 @@ body {
   border-color: #60a5fa;
 }
 
-/* Center Ice Rink Stage — maximized area */
+/* Center Ice Rink Stage — full-viewport stage behind HUD and Organ Console */
 .rink-stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -335,7 +348,7 @@ body {
 /* Floating Cue Banner inside Rink Stage so it never inflates HUD height */
 .cue-banner {
   position: absolute;
-  top: 6px;
+  top: 46px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
@@ -353,6 +366,10 @@ body {
   animation: cuePulse 0.6s infinite alternate;
 }
 
+.perch-viewport.ice-focus-mode .cue-banner {
+  display: none !important;
+}
+
 @keyframes cuePulse {
   from {
     transform: translateX(-50%) scale(1);
@@ -366,6 +383,9 @@ body {
 
 #rink-canvas {
   display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
 }
 
 .edge-tint {
@@ -377,11 +397,21 @@ body {
 
 /* Bottom Pipe Organ Music Stand Console — sleek single-row layout */
 .organ-console {
+  position: relative;
+  z-index: 15;
+  grid-row: 3;
   background: linear-gradient(180deg, var(--bg-organ-trim) 0%, var(--bg-organ-wood) 100%);
   border-top: 2px solid #854d0e;
   padding: 5px 10px;
   width: 100%;
   min-width: 0;
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.perch-viewport.ice-focus-mode .organ-console {
+  transform: translateY(115%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .music-stand-row {

@@ -1,4 +1,6 @@
+import { evaluateOrder, getOrderById } from '../game/orders';
 import { doesSongAffectTeam, SONGS } from '../game/songs';
+import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { MatchSimulation } from '../sim/match';
 import {
   AWAY_GOAL_X,
@@ -10,7 +12,28 @@ import {
   RINK_HEIGHT,
   RINK_WIDTH,
 } from '../sim/physics';
-import { PlayerEntity } from '../sim/types';
+import { clamp } from '../sim/rng';
+import { PlayerEntity, Vec2 } from '../sim/types';
+
+export interface IceSummaryCallbacks {
+  onContinueNextPeriod: () => void;
+  onPlayAgainNewSeed: () => void;
+  onPlayAgainSameSeed: () => void;
+  onChangeOrder: () => void;
+}
+
+interface IceButton {
+  id: string;
+  label: string;
+  rect: { x: number; y: number; w: number; h: number };
+  primary: boolean;
+  onClick: () => void;
+}
+
+function easeInOutCubic(t: number): number {
+  const x = clamp(t, 0, 1);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
 
 export class RinkRenderer {
   private canvas: HTMLCanvasElement;
@@ -23,8 +46,36 @@ export class RinkRenderer {
   private camFocusX: number = CENTER_X;
   private camFocusY: number = CENTER_Y;
 
-  constructor(canvas: HTMLCanvasElement) {
+  // Intermission & Game-End on-ice summary state
+  private callbacks: IceSummaryCallbacks | null = null;
+  private isIceSummaryActive: boolean = false;
+  private summaryEnterElapsedSec: number = 0;
+  private intermissionZoomBlend: number = 0; // 0 = normal play view, 1 = full-screen center ice
+  private skateOffStartPos: Map<string, Vec2> = new Map();
+
+  // Vertical drag scrolling on zoomed-in ice
+  private iceScrollFocusY: number = 148;
+  private iceScrollVelY: number = 0;
+  private isDraggingIce: boolean = false;
+  private dragLastClientY: number = 0;
+  private dragTotalDistPx: number = 0;
+  private hoveredButtonId: string | null = null;
+  private iceButtons: IceButton[] = [];
+
+  // Zamboni big-eraser & camera pullback state
+  private isZamboniClearing: boolean = false;
+  private zamboniProgress: number = 0;
+  private zamboniStartScrollY: number = CENTER_Y;
+  private zamboniOnFinish: (() => void) | null = null;
+
+  // Cached screen-to-rink transform parameters for pointer hit testing & drag scaling
+  private lastScreenCenterX: number = 0;
+  private lastScreenCenterY: number = 0;
+  private lastCssScale: number = 1;
+
+  constructor(canvas: HTMLCanvasElement, callbacks?: IceSummaryCallbacks) {
     this.canvas = canvas;
+    this.callbacks = callbacks ?? null;
     const context = canvas.getContext('2d');
     if (!context) {
       throw new Error('Could not initialize 2D canvas context');
@@ -32,6 +83,170 @@ export class RinkRenderer {
     this.ctx = context;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    this.bindIcePointerEvents();
+  }
+
+  public setCallbacks(callbacks: IceSummaryCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
+  public isSummaryOrZamboniActive(): boolean {
+    return this.isIceSummaryActive || this.isZamboniClearing;
+  }
+
+  /**
+   * Triggered when a period ends (PERIOD_END) or the match ends (MATCH_OVER).
+   * Players skate off the ice, UI above/below retracts, and camera zooms in on center ice.
+   */
+  public beginIceSummary(sim: MatchSimulation): void {
+    this.isIceSummaryActive = true;
+    this.isZamboniClearing = false;
+    this.zamboniProgress = 0;
+    this.summaryEnterElapsedSec = 0;
+    this.iceScrollFocusY = 148;
+    this.iceScrollVelY = 0;
+    this.hoveredButtonId = null;
+
+    this.skateOffStartPos.clear();
+    for (const p of sim.players) {
+      this.skateOffStartPos.set(p.id, { x: p.pos.x, y: p.pos.y });
+    }
+
+    const viewport = document.getElementById('app-viewport');
+    viewport?.classList.add('ice-focus-mode');
+  }
+
+  /**
+   * Immediately exits on-ice summary mode without Zamboni (e.g. when resetting from debug panel).
+   */
+  public resetIceSummaryImmediate(): void {
+    this.isIceSummaryActive = false;
+    this.isZamboniClearing = false;
+    this.zamboniProgress = 0;
+    this.intermissionZoomBlend = 0;
+    this.iceButtons = [];
+    const viewport = document.getElementById('app-viewport');
+    viewport?.classList.remove('ice-focus-mode');
+  }
+
+  /**
+   * Starts the synchronized camera pullback + Zamboni eraser sweep across center ice.
+   */
+  public startZamboniSweep(onFinish: () => void): void {
+    if (this.isZamboniClearing) return;
+    this.isZamboniClearing = true;
+    this.zamboniProgress = 0;
+    this.zamboniStartScrollY = this.iceScrollFocusY;
+    this.zamboniOnFinish = onFinish;
+    this.hoveredButtonId = null;
+    this.canvas.style.cursor = 'default';
+  }
+
+  private bindIcePointerEvents(): void {
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (!this.isIceSummaryActive || this.isZamboniClearing) return;
+      this.isDraggingIce = true;
+      this.dragLastClientY = e.clientY;
+      this.dragTotalDistPx = 0;
+      this.iceScrollVelY = 0;
+      this.canvas.setPointerCapture(e.pointerId);
+    });
+
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (!this.isIceSummaryActive || this.isZamboniClearing) {
+        if (this.canvas.style.cursor !== 'default') {
+          this.canvas.style.cursor = 'default';
+        }
+        return;
+      }
+
+      if (this.isDraggingIce) {
+        const dyPx = e.clientY - this.dragLastClientY;
+        this.dragLastClientY = e.clientY;
+        this.dragTotalDistPx += Math.abs(dyPx);
+
+        const deltaRinkY = dyPx / Math.max(0.2, this.lastCssScale);
+        this.iceScrollFocusY = clamp(
+          this.iceScrollFocusY - deltaRinkY,
+          128,
+          296
+        );
+        this.iceScrollVelY = -deltaRinkY * 35;
+        return;
+      }
+
+      // Hover state for on-ice action buttons
+      const pt = this.clientToRinkCoords(e.clientX, e.clientY);
+      const hit = this.findHitIceButton(pt.x, pt.y);
+      this.hoveredButtonId = hit ? hit.id : null;
+      this.canvas.style.cursor = hit ? 'pointer' : 'grab';
+    });
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (!this.isDraggingIce) return;
+      this.isDraggingIce = false;
+      try {
+        this.canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+
+      if (
+        this.isIceSummaryActive &&
+        !this.isZamboniClearing &&
+        this.dragTotalDistPx < 10 &&
+        this.summaryEnterElapsedSec > 0.45
+      ) {
+        const pt = this.clientToRinkCoords(e.clientX, e.clientY);
+        const hit = this.findHitIceButton(pt.x, pt.y);
+        if (hit) {
+          hit.onClick();
+        }
+      }
+    };
+
+    this.canvas.addEventListener('pointerup', handlePointerUp);
+    this.canvas.addEventListener('pointercancel', handlePointerUp);
+
+    // Wheel scrolling support on desktop
+    this.canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (!this.isIceSummaryActive || this.isZamboniClearing) return;
+        e.preventDefault();
+        const deltaRinkY = (e.deltaY * 0.65) / Math.max(0.2, this.lastCssScale);
+        this.iceScrollFocusY = clamp(
+          this.iceScrollFocusY + deltaRinkY,
+          128,
+          296
+        );
+      },
+      { passive: false }
+    );
+  }
+
+  private clientToRinkCoords(clientX: number, clientY: number): Vec2 {
+    const rect = this.canvas.getBoundingClientRect();
+    const cssX = clientX - rect.left;
+    const cssY = clientY - rect.top;
+    return {
+      x: this.camFocusX + (cssX - this.lastScreenCenterX) / Math.max(0.1, this.lastCssScale),
+      y: this.camFocusY + (cssY - this.lastScreenCenterY) / Math.max(0.1, this.lastCssScale),
+    };
+  }
+
+  private findHitIceButton(rinkX: number, rinkY: number): IceButton | null {
+    for (const btn of this.iceButtons) {
+      if (
+        rinkX >= btn.rect.x &&
+        rinkX <= btn.rect.x + btn.rect.w &&
+        rinkY >= btn.rect.y &&
+        rinkY <= btn.rect.y + btn.rect.h
+      ) {
+        return btn;
+      }
+    }
+    return null;
   }
 
   public resize(): void {
@@ -40,21 +255,10 @@ export class RinkRenderer {
     const rect = parent.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    // Letterbox to preserve 1000 x 425 rink aspect ratio with a small margin
-    const targetAspect = RINK_WIDTH / RINK_HEIGHT;
-    let drawW = rect.width;
-    let drawH = rect.height;
-
-    if (drawW / Math.max(1, drawH) > targetAspect) {
-      drawW = drawH * targetAspect;
-    } else {
-      drawH = drawW / targetAspect;
-    }
-
-    this.canvas.style.width = `${Math.floor(drawW)}px`;
-    this.canvas.style.height = `${Math.floor(drawH)}px`;
-    this.canvas.width = Math.max(1, Math.floor(drawW * dpr));
-    this.canvas.height = Math.max(1, Math.floor(drawH * dpr));
+    this.canvas.style.width = `${Math.floor(rect.width)}px`;
+    this.canvas.style.height = `${Math.floor(rect.height)}px`;
+    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   }
 
   public render(sim: MatchSimulation, realDtSec: number): void {
@@ -62,71 +266,968 @@ export class RinkRenderer {
     const ctx = this.ctx;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const viewW = cw / dpr;
+    const viewH = ch / dpr;
 
-    // Compute camera zoom & focus target
-    let targetZoom = 1.0;
-    let targetFocusX = CENTER_X;
-    let targetFocusY = CENTER_Y;
+    // Update Intermission / Game-End zoom & Zamboni state
+    if (this.isIceSummaryActive) {
+      this.summaryEnterElapsedSec += realDtSec;
 
-    if (sim.puck.inFlightShotFrom !== null && sim.puck.isScoringShot) {
-      targetZoom = 1.14;
-      const goalX =
-        sim.puck.inFlightShotFrom === 'home' ? AWAY_GOAL_X - 85 : HOME_GOAL_X + 85;
-      targetFocusX = sim.puck.pos.x * 0.35 + goalX * 0.65;
-      targetFocusY = CENTER_Y + (sim.puck.pos.y - CENTER_Y) * 0.35;
-    } else if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.1) {
-      targetZoom = 1.16;
-      targetFocusX =
-        sim.puck.pos.x < CENTER_X ? HOME_GOAL_X + 95 : AWAY_GOAL_X - 95;
-      targetFocusY = CENTER_Y;
+      if (this.isZamboniClearing) {
+        // Zamboni sweep + camera pullback (2.25 real seconds)
+        const zamboniDurationSec = 2.25;
+        this.zamboniProgress = Math.min(
+          1,
+          this.zamboniProgress + realDtSec / zamboniDurationSec
+        );
+        const eased = easeInOutCubic(this.zamboniProgress);
+        this.intermissionZoomBlend = 1 - eased;
+
+        // Bring HUD & Organ Console back into frame as the camera pulls back
+        if (this.zamboniProgress >= 0.28) {
+          const viewport = document.getElementById('app-viewport');
+          viewport?.classList.remove('ice-focus-mode');
+        }
+
+        if (this.zamboniProgress >= 1) {
+          const finishCb = this.zamboniOnFinish;
+          this.isIceSummaryActive = false;
+          this.isZamboniClearing = false;
+          this.zamboniProgress = 0;
+          this.intermissionZoomBlend = 0;
+          this.zamboniOnFinish = null;
+          this.iceButtons = [];
+          const viewport = document.getElementById('app-viewport');
+          viewport?.classList.remove('ice-focus-mode');
+          finishCb?.();
+        }
+      } else {
+        // Zooming in on center ice after period/match ends (1.05 real seconds)
+        const enterProg = Math.min(1, this.summaryEnterElapsedSec / 1.05);
+        this.intermissionZoomBlend = easeInOutCubic(enterProg);
+
+        // Apply drag inertia when not actively dragging
+        if (!this.isDraggingIce && Math.abs(this.iceScrollVelY) > 0.5) {
+          this.iceScrollFocusY = clamp(
+            this.iceScrollFocusY + this.iceScrollVelY * realDtSec,
+            128,
+            296
+          );
+          this.iceScrollVelY *= Math.pow(0.08, realDtSec);
+        }
+      }
+    } else {
+      this.intermissionZoomBlend = 0;
+    }
+
+    // Compute normal play layout bounds between HUD and Organ Console
+    const hudEl = document.getElementById('jumbotron-hud');
+    const consoleEl = document.getElementById('organ-console');
+    const hudH = hudEl ? hudEl.offsetHeight : 44;
+    const consoleH = consoleEl ? consoleEl.offsetHeight : 58;
+
+    const pad = 6;
+    const availW = Math.max(100, viewW - pad * 2);
+    const availH = Math.max(80, viewH - hudH - consoleH - pad * 2);
+    const baseCssScale = Math.min(availW / RINK_WIDTH, availH / RINK_HEIGHT);
+
+    const playCenterX = viewW * 0.5;
+    const playCenterY = hudH + pad + availH * 0.5;
+
+    // Full-screen center-ice zoom scale: fills 100% of screen with the ice sheet while fitting the 340-unit wide stats board
+    const fullIceCssScale = Math.min(
+      viewW / 355,
+      Math.max(viewW / 580, viewH / 225)
+    );
+
+    // Compute active gameplay camera zoom & focus target
+    let gameplayZoom = 1.0;
+    let gameplayFocusX = CENTER_X;
+    let gameplayFocusY = CENTER_Y;
+
+    if (!this.isIceSummaryActive) {
+      if (sim.puck.inFlightShotFrom !== null && sim.puck.isScoringShot) {
+        gameplayZoom = 1.14;
+        const goalX =
+          sim.puck.inFlightShotFrom === 'home'
+            ? AWAY_GOAL_X - 85
+            : HOME_GOAL_X + 85;
+        gameplayFocusX = sim.puck.pos.x * 0.35 + goalX * 0.65;
+        gameplayFocusY = CENTER_Y + (sim.puck.pos.y - CENTER_Y) * 0.35;
+      } else if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.1) {
+        gameplayZoom = 1.16;
+        gameplayFocusX =
+          sim.puck.pos.x < CENTER_X ? HOME_GOAL_X + 95 : AWAY_GOAL_X - 95;
+        gameplayFocusY = CENTER_Y;
+      }
     }
 
     const lerpRate = Math.min(1, realDtSec * 9.5);
-    this.camZoom += (targetZoom - this.camZoom) * lerpRate;
-    this.camFocusX += (targetFocusX - this.camFocusX) * lerpRate;
-    this.camFocusY += (targetFocusY - this.camFocusY) * lerpRate;
+    this.camZoom += (gameplayZoom - this.camZoom) * lerpRate;
+
+    if (this.isIceSummaryActive) {
+      const targetSummaryY = this.isZamboniClearing
+        ? this.zamboniStartScrollY * this.intermissionZoomBlend +
+          CENTER_Y * (1 - this.intermissionZoomBlend)
+        : CENTER_Y * (1 - this.intermissionZoomBlend) +
+          this.iceScrollFocusY * this.intermissionZoomBlend;
+      this.camFocusX = CENTER_X;
+      this.camFocusY = targetSummaryY;
+    } else {
+      this.camFocusX += (gameplayFocusX - this.camFocusX) * lerpRate;
+      this.camFocusY += (gameplayFocusY - this.camFocusY) * lerpRate;
+    }
 
     // Screen shake punch right as the puck slams into the back of the net
     let shakeX = 0;
     let shakeY = 0;
-    if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.9) {
+    if (
+      !this.isIceSummaryActive &&
+      sim.phase === 'GOAL_CELEBRATION' &&
+      sim.phaseTimerSec > 1.9
+    ) {
       const intensity = ((sim.phaseTimerSec - 1.9) / 0.7) * 6.5;
       shakeX = Math.sin(this.animTime * 95) * intensity;
       shakeY = Math.cos(this.animTime * 115) * intensity;
     }
 
+    // Blend between normal gameplay scale/center and full-screen center-ice scale/center
+    const playScale = baseCssScale * this.camZoom;
+    const activeCssScale =
+      playScale * (1 - this.intermissionZoomBlend) +
+      fullIceCssScale * this.intermissionZoomBlend;
+
+    const screenCenterX =
+      playCenterX * (1 - this.intermissionZoomBlend) +
+      viewW * 0.5 * this.intermissionZoomBlend;
+    const screenCenterY =
+      playCenterY * (1 - this.intermissionZoomBlend) +
+      viewH * 0.5 * this.intermissionZoomBlend;
+
+    this.lastScreenCenterX = screenCenterX;
+    this.lastScreenCenterY = screenCenterY;
+    this.lastCssScale = activeCssScale;
+
     ctx.save();
     ctx.clearRect(0, 0, cw, ch);
 
-    const pad = 6;
-    const scaleX = (cw - pad * 2) / RINK_WIDTH;
-    const scaleY = (ch - pad * 2) / RINK_HEIGHT;
-    const scale = Math.min(scaleX, scaleY);
-    const offsetX = (cw - RINK_WIDTH * scale) * 0.5;
-    const offsetY = (ch - RINK_HEIGHT * scale) * 0.5;
-
-    ctx.translate(offsetX, offsetY);
-    ctx.scale(scale, scale);
-
-    // Apply camera zoom & impact shake around the focus target
-    ctx.translate(CENTER_X + shakeX, CENTER_Y + shakeY);
-    ctx.scale(this.camZoom, this.camZoom);
-    ctx.translate(-this.camFocusX, -this.camFocusY);
+    ctx.scale(dpr, dpr);
+    ctx.translate(screenCenterX, screenCenterY);
+    ctx.scale(activeCssScale, activeCssScale);
+    ctx.translate(-this.camFocusX + shakeX, -this.camFocusY + shakeY);
 
     this.drawIceAndMarkings(ctx, sim);
     this.drawPenaltyBoxes(ctx, sim);
-    this.drawPuckTrailAndPuck(ctx, sim);
 
-    // Draw players sorted by Y for clean layering
-    const sortedPlayers = [...sim.players].sort((a, b) => a.pos.y - b.pos.y);
-    for (const p of sortedPlayers) {
-      this.drawPlayer(ctx, p, sim);
+    // Draw on-ice breakdown & Zamboni resurfacer directly on the ice surface!
+    if (this.isIceSummaryActive) {
+      this.drawOnIceSummaryAndZamboni(ctx, sim);
+    } else {
+      this.drawPuckTrailAndPuck(ctx, sim);
     }
 
-    this.drawBrawlClouds(ctx, sim);
-    this.drawGoalImpact(ctx, sim);
-    this.drawCallouts(ctx, sim);
-    this.drawPhaseBanner(ctx, sim);
+    // Draw players (during intermission, they skate off toward the bottom bench doors and exit!)
+    this.drawAllPlayers(ctx, sim);
+
+    if (!this.isIceSummaryActive) {
+      this.drawBrawlClouds(ctx, sim);
+      this.drawGoalImpact(ctx, sim);
+      this.drawCallouts(ctx, sim);
+      this.drawPhaseBanner(ctx, sim);
+    }
+
+    ctx.restore();
+  }
+
+  private drawAllPlayers(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    if (this.isIceSummaryActive) {
+      // Players skate off the ice during the first 1.0s of intermission
+      const skateProg = clamp(this.summaryEnterElapsedSec / 0.95, 0, 1);
+      if (skateProg >= 1) {
+        return; // All players have exited through the bench doors
+      }
+
+      const sortedPlayers = [...sim.players].sort((a, b) => a.pos.y - b.pos.y);
+      for (const p of sortedPlayers) {
+        const start = this.skateOffStartPos.get(p.id) ?? p.pos;
+        const benchDoor: Vec2 = {
+          x: p.team === 'home' ? CENTER_X - 58 : CENTER_X + 58,
+          y: RINK_HEIGHT + 28,
+        };
+        const curPos: Vec2 = {
+          x: start.x + (benchDoor.x - start.x) * skateProg,
+          y: start.y + (benchDoor.y - start.y) * skateProg,
+        };
+        const tempPlayer: PlayerEntity = {
+          ...p,
+          pos: curPos,
+          vel: {
+            x: benchDoor.x - start.x,
+            y: benchDoor.y - start.y,
+          },
+          mode: 'DEFENDING',
+          reactionTimer: 0,
+        };
+        ctx.save();
+        ctx.globalAlpha = 1 - Math.pow(skateProg, 2.5);
+        this.drawPlayer(ctx, tempPlayer, sim, false);
+        ctx.restore();
+      }
+      return;
+    }
+
+    const sortedPlayers = [...sim.players].sort((a, b) => a.pos.y - b.pos.y);
+    for (const p of sortedPlayers) {
+      this.drawPlayer(ctx, p, sim, true);
+    }
+  }
+
+  /**
+   * Draws the Period Breakdown or Final Game Breakdown painted onto center ice,
+   * clipped by the Zamboni's conditioner blade when the Zamboni is clearing the ice.
+   */
+  private drawOnIceSummaryAndZamboni(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    const fadeAlpha = this.isZamboniClearing
+      ? 1.0
+      : clamp((this.summaryEnterElapsedSec - 0.25) / 0.65, 0, 1);
+
+    if (fadeAlpha <= 0.01) return;
+
+    // Zamboni wipes from bottom (y = 396) up to top (y = 26)
+    const wipeY = this.isZamboniClearing
+      ? 396 - easeInOutCubic(this.zamboniProgress) * 370
+      : 425;
+
+    ctx.save();
+    this.roundedRinkPath(ctx);
+    ctx.clip();
+
+    // 1. Draw the on-ice breakdown text clipped above wipeY (so the Zamboni erases it as it drives up!)
+    ctx.save();
+    ctx.globalAlpha = fadeAlpha;
+    if (this.isZamboniClearing) {
+      ctx.beginPath();
+      ctx.rect(0, 0, RINK_WIDTH, Math.max(0, wipeY));
+      ctx.clip();
+    }
+
+    this.iceButtons = [];
+    if (sim.phase === 'MATCH_OVER') {
+      this.drawGameBreakdownOnIce(ctx, sim);
+    } else {
+      this.drawPeriodBreakdownOnIce(ctx, sim);
+    }
+    ctx.restore();
+
+    // 2. If Zamboni is active, draw the wet resurfaced ice trail behind it and the Zamboni machine at wipeY!
+    if (this.isZamboniClearing) {
+      this.drawZamboniAndWetWake(ctx, wipeY);
+    } else {
+      // Draw subtle vertical scroll track indicator on the right edge of the center-ice board
+      this.drawIceScrollIndicator(ctx, fadeAlpha);
+    }
+
+    ctx.restore();
+  }
+
+  private drawPeriodBreakdownOnIce(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    const pStats = buildStatsSummary(sim.events, sim.crowdSamples, sim.period);
+    const orderDef = getOrderById(sim.orderId);
+    const orderEval = evaluateOrder(sim.orderId, {
+      homeGoals: sim.homeScore,
+      awayGoals: sim.awayScore,
+      totalFights: sim.getTotalFights(),
+      averageCrowdVolume: sim.getAverageCrowdVolume(),
+      isMatchOver: false,
+    });
+
+    const bx = CENTER_X - 166;
+    const bw = 332;
+
+    // Frosted center-ice stencil backdrop so markings show through subtly while text is ultra-crisp
+    ctx.fillStyle = 'rgba(11, 20, 34, 0.84)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bx, 42, bw, 342, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Header
+    ctx.fillStyle = '#facc15';
+    ctx.font = '700 7.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `END OF PERIOD ${sim.period} • PLAYERS AT BENCH • STAMINA RESTORED`,
+      bx + 12,
+      56
+    );
+
+    // Drag-to-scroll badge
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + bw - 92, 48, 80, 13, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#bae6fd';
+    ctx.font = '700 6.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⇅ DRAG TO SCROLL', bx + bw - 52, 56.5);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '700 15px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`PERIOD ${sim.period} ICE BREAKDOWN`, bx + 12, 74);
+
+    // Score Banner (y = 82..114)
+    ctx.fillStyle = 'rgba(6, 11, 20, 0.9)';
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 82, bw - 24, 30, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.font = '700 11px "Chakra Petch", sans-serif';
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillText(`HOME  ${sim.homeScore}`, CENTER_X - 58, 101);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 8px "Chakra Petch", sans-serif';
+    ctx.fillText('VS', CENTER_X, 100);
+    ctx.fillStyle = '#f87171';
+    ctx.font = '700 11px "Chakra Petch", sans-serif';
+    ctx.fillText(`${sim.awayScore}  AWAY`, CENTER_X + 58, 101);
+
+    // Two Columns: Ice Telemetry & Organist Performance (y = 118..208)
+    const colW = (bw - 30) * 0.5;
+    const leftX = bx + 12;
+    const rightX = leftX + colW + 6;
+
+    for (const cx of [leftX, rightX]) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(cx, 118, colW, 88, 6);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`ICE TELEMETRY (P${sim.period})`, leftX + 8, 131);
+    ctx.fillText('ORGANIST PERFORMANCE', rightX + 8, 131);
+
+    const drawKvRow = (
+      x: number,
+      y: number,
+      w: number,
+      label: string,
+      val: string
+    ) => {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '500 8px "Inter", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x + 8, y);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 8px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(val, x + w - 8, y);
+    };
+
+    drawKvRow(
+      leftX,
+      146,
+      colW,
+      'Goals (H / A)',
+      `${pStats.homeGoals} – ${pStats.awayGoals}`
+    );
+    drawKvRow(
+      leftX,
+      160,
+      colW,
+      'Shots on Goal',
+      `${pStats.homeShots} – ${pStats.awayShots}`
+    );
+    drawKvRow(
+      leftX,
+      174,
+      colW,
+      'Goalie Saves',
+      `${pStats.homeSaves} – ${pStats.awaySaves}`
+    );
+    drawKvRow(
+      leftX,
+      188,
+      colW,
+      'Brawls / PIM',
+      `${pStats.fights} / ${pStats.penaltyMinutes}m`
+    );
+
+    drawKvRow(
+      rightX,
+      145,
+      colW,
+      'Songs (C/H/G)',
+      `${pStats.songsPlayed.charge}/${pStats.songsPlayed.hold_the_line}/${pStats.songsPlayed.grudge_toccata}`
+    );
+    drawKvRow(rightX, 157, colW, 'Cue Hits', `${pStats.cueHits} ★`);
+    drawKvRow(rightX, 169, colW, 'Stale Plays', `${pStats.stalePlays}`);
+    drawKvRow(
+      rightX,
+      181,
+      colW,
+      'Crowd Avg',
+      `${Math.round(pStats.avgCrowdVolume)}%`
+    );
+
+    // Mini Sparkline inside Right Column (y = 186..202)
+    this.drawCanvasSparkline(
+      ctx,
+      pStats.crowdSparkline,
+      rightX + 8,
+      185,
+      colW - 16,
+      16
+    );
+
+    // Organ Impact Box (y = 212..282)
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.78)';
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 212, bw - 24, 68, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText("🎹 YOUR ORGAN'S IMPACT THIS PERIOD", bx + 20, 225);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '500 7.8px "Inter", sans-serif';
+    const impactLines = pStats.impactLines.slice(0, 3);
+    for (let i = 0; i < impactLines.length; i++) {
+      ctx.fillText(`• ${impactLines[i]}`, bx + 20, 239 + i * 13);
+    }
+
+    // Official Order Status Row (y = 286..324)
+    ctx.fillStyle = 'rgba(6, 11, 20, 0.9)';
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 286, bw - 24, 36, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`DIRECTIVE: ${orderDef.title.toUpperCase()}`, bx + 20, 300);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '500 7.5px "Inter", sans-serif';
+    ctx.fillText(orderEval.reason, bx + 20, 313);
+
+    const statusColor =
+      orderEval.liveStatus === 'ON_TRACK'
+        ? '#22c55e'
+        : orderEval.liveStatus === 'AT_RISK'
+        ? '#eab308'
+        : '#ef4444';
+    ctx.fillStyle = statusColor + '33';
+    ctx.strokeStyle = statusColor;
+    ctx.beginPath();
+    ctx.roundRect(bx + bw - 82, 295, 62, 18, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 7.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      orderEval.liveStatus.replace('_', ' '),
+      bx + bw - 51,
+      306.5
+    );
+
+    // On-Ice Continue Button (y = 332..372)
+    const btnRect = { x: bx + 12, y: 332, w: bw - 24, h: 38 };
+    const continueBtn: IceButton = {
+      id: 'continue-period',
+      label: `▶ CONTINUE TO PERIOD ${sim.period + 1} (SEND ZAMBONI)`,
+      rect: btnRect,
+      primary: true,
+      onClick: () => {
+        this.startZamboniSweep(() => {
+          this.callbacks?.onContinueNextPeriod();
+        });
+      },
+    };
+    this.iceButtons.push(continueBtn);
+    this.drawIceButton(ctx, continueBtn);
+  }
+
+  private drawGameBreakdownOnIce(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    const totalStats = buildStatsSummary(sim.events, sim.crowdSamples);
+    const p1 = buildStatsSummary(sim.events, sim.crowdSamples, 1);
+    const p2 = buildStatsSummary(sim.events, sim.crowdSamples, 2);
+    const p3 = buildStatsSummary(sim.events, sim.crowdSamples, 3);
+
+    const orderDef = getOrderById(sim.orderId);
+    const orderEval = evaluateOrder(sim.orderId, {
+      homeGoals: sim.homeScore,
+      awayGoals: sim.awayScore,
+      totalFights: sim.getTotalFights(),
+      averageCrowdVolume: sim.getAverageCrowdVolume(),
+      isMatchOver: true,
+    });
+
+    const bx = CENTER_X - 166;
+    const bw = 332;
+
+    ctx.fillStyle = 'rgba(11, 20, 34, 0.86)';
+    ctx.strokeStyle = orderEval.passed
+      ? 'rgba(74, 222, 128, 0.75)'
+      : 'rgba(248, 113, 113, 0.75)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bx, 38, bw, 350, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Eyebrow & Drag Hint
+    ctx.fillStyle = '#facc15';
+    ctx.font = '700 7.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `FINAL BUZZER • SEED #${sim.rng.initialSeed}`,
+      bx + 12,
+      52
+    );
+
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + bw - 92, 44, 80, 13, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#bae6fd';
+    ctx.font = '700 6.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⇅ DRAG TO SCROLL', bx + bw - 52, 52.5);
+
+    // Main Result Title
+    ctx.fillStyle = orderEval.passed ? '#4ade80' : '#f87171';
+    ctx.font = '700 13.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      orderEval.passed
+        ? '✅ OFFICIAL ORDER COMPLETED!'
+        : '❌ OFFICIAL ORDER FAILED',
+      bx + 12,
+      69
+    );
+
+    // Order Banner (y = 75..98)
+    ctx.fillStyle = orderEval.passed
+      ? 'rgba(34, 197, 94, 0.18)'
+      : 'rgba(239, 68, 68, 0.18)';
+    ctx.strokeStyle = orderEval.passed ? '#4ade80' : '#f87171';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 75, bw - 24, 22, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '600 7.8px "Inter", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `${orderDef.title}: ${orderEval.reason}`,
+      bx + 18,
+      88.5
+    );
+
+    // Final Score Banner (y = 102..130)
+    ctx.fillStyle = 'rgba(6, 11, 20, 0.9)';
+    ctx.strokeStyle = '#334155';
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 102, bw - 24, 28, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.font = '700 11px "Chakra Petch", sans-serif';
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillText(`HOME  ${sim.homeScore}`, CENTER_X - 62, 119.5);
+    ctx.fillStyle = '#fde047';
+    ctx.font = '700 8px "Chakra Petch", sans-serif';
+    ctx.fillText(
+      sim.homeScore === sim.awayScore ? 'TIE' : 'FINAL',
+      CENTER_X,
+      119
+    );
+    ctx.fillStyle = '#f87171';
+    ctx.font = '700 11px "Chakra Petch", sans-serif';
+    ctx.fillText(`${sim.awayScore}  AWAY`, CENTER_X + 62, 119.5);
+
+    // Per-Period Summary Table (y = 135..220)
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    ctx.strokeStyle = '#334155';
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 135, bw - 24, 84, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    const cols = [
+      bx + 32,
+      bx + 82,
+      bx + 134,
+      bx + 186,
+      bx + 244,
+      bx + 298,
+    ];
+    const headers = ['PER', 'GOALS', 'SHOTS', 'SAVES', 'FIGHTS', 'CROWD'];
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 7.2px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < headers.length; i++) {
+      ctx.fillText(headers[i], cols[i], 147);
+    }
+
+    const drawTableRow = (
+      label: string,
+      s: PeriodStatsSummary,
+      y: number,
+      isBold: boolean,
+      crowdOverride?: number
+    ) => {
+      ctx.fillStyle = isBold ? '#fde047' : '#e2e8f0';
+      ctx.font = `${isBold ? '700' : '500'} 7.8px "JetBrains Mono", monospace`;
+      const crowdVal = Math.round(crowdOverride ?? s.avgCrowdVolume);
+      const vals = [
+        label,
+        `${s.homeGoals}–${s.awayGoals}`,
+        `${s.homeShots}–${s.awayShots}`,
+        `${s.homeSaves}–${s.awaySaves}`,
+        `${s.fights} (${s.penaltyMinutes}m)`,
+        `${crowdVal}%`,
+      ];
+      for (let i = 0; i < vals.length; i++) {
+        ctx.fillText(vals[i], cols[i], y);
+      }
+    };
+
+    drawTableRow('P1', p1, 162, false);
+    drawTableRow('P2', p2, 177, false);
+    drawTableRow('P3', p3, 192, false);
+    drawTableRow(
+      'TOT',
+      totalStats,
+      209,
+      true,
+      sim.getAverageCrowdVolume()
+    );
+
+    // Full-Match Organ Impact Box (y = 224..294)
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.78)';
+    ctx.strokeStyle = '#475569';
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, 224, bw - 24, 70, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🎹 FULL-MATCH ORGAN IMPACT', bx + 20, 237);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '500 7.5px "Inter", sans-serif';
+    const lines = [
+      ...totalStats.impactLines.slice(0, 3),
+      `Cue Hits: ${totalStats.cueHits} ★  •  Stale Repeats: ${totalStats.stalePlays}`,
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(`• ${lines[i]}`, bx + 20, 250 + i * 12);
+    }
+
+    // Action Buttons on the Ice (y = 300..378)
+    const btnNewSeed: IceButton = {
+      id: 'play-again-new-seed',
+      label: '🔄 PLAY AGAIN — NEW SEED (SEND ZAMBONI)',
+      rect: { x: bx + 12, y: 302, w: bw - 24, h: 34 },
+      primary: true,
+      onClick: () => {
+        this.startZamboniSweep(() => {
+          this.callbacks?.onPlayAgainNewSeed();
+        });
+      },
+    };
+
+    const halfW = (bw - 30) * 0.5;
+    const btnSameSeed: IceButton = {
+      id: 'play-again-same-seed',
+      label: `🔁 REPLAY SEED #${sim.rng.initialSeed}`,
+      rect: { x: bx + 12, y: 342, w: halfW, h: 32 },
+      primary: false,
+      onClick: () => {
+        this.startZamboniSweep(() => {
+          this.callbacks?.onPlayAgainSameSeed();
+        });
+      },
+    };
+
+    const btnChangeOrder: IceButton = {
+      id: 'change-order',
+      label: '📋 CHANGE ORDER',
+      rect: { x: bx + 18 + halfW, y: 342, w: halfW, h: 32 },
+      primary: false,
+      onClick: () => {
+        this.startZamboniSweep(() => {
+          this.callbacks?.onChangeOrder();
+        });
+      },
+    };
+
+    this.iceButtons.push(btnNewSeed, btnSameSeed, btnChangeOrder);
+    for (const b of this.iceButtons) {
+      this.drawIceButton(ctx, b);
+    }
+  }
+
+  private drawIceButton(ctx: CanvasRenderingContext2D, btn: IceButton): void {
+    const isHovered = this.hoveredButtonId === btn.id;
+    ctx.save();
+    if (btn.primary) {
+      ctx.fillStyle = isHovered ? '#fde047' : '#eab308';
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 1.5;
+    } else {
+      ctx.fillStyle = isHovered ? '#334155' : '#1e293b';
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 1.2;
+    }
+    ctx.beginPath();
+    ctx.roundRect(btn.rect.x, btn.rect.y, btn.rect.w, btn.rect.h, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = btn.primary ? '#090d14' : '#f8fafc';
+    ctx.font = `700 ${btn.primary ? '10px' : '8.5px'} "Chakra Petch", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      btn.label,
+      btn.rect.x + btn.rect.w * 0.5,
+      btn.rect.y + btn.rect.h * 0.5 + 0.5
+    );
+    ctx.restore();
+  }
+
+  private drawCanvasSparkline(
+    ctx: CanvasRenderingContext2D,
+    values: number[],
+    x: number,
+    y: number,
+    w: number,
+    h: number
+  ): void {
+    if (values.length === 0) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h * 0.35);
+    ctx.lineTo(x + w, y + h * 0.35);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (let i = 0; i < values.length; i++) {
+      const px =
+        values.length === 1 ? x + w * 0.5 : x + (i / (values.length - 1)) * w;
+      const py = y + h - (clamp(values[i], 0, 100) / 100) * h;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawIceScrollIndicator(
+    ctx: CanvasRenderingContext2D,
+    alpha: number
+  ): void {
+    const trackX = CENTER_X + 172;
+    const trackY = this.camFocusY - 65;
+    const trackH = 130;
+    const scrollNorm = clamp((this.iceScrollFocusY - 128) / (296 - 128), 0, 1);
+    const thumbH = 34;
+    const thumbY = trackY + scrollNorm * (trackH - thumbH);
+
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(trackX, trackY, 5, trackH, 3);
+    ctx.fill();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.roundRect(trackX, thumbY, 5, thumbH, 3);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Draws the wet-ice resurfacing wake behind the Zamboni and the Zamboni machine itself
+   * at `wipeY`, erasing the on-ice stats like a giant squeegee.
+   */
+  private drawZamboniAndWetWake(
+    ctx: CanvasRenderingContext2D,
+    wipeY: number
+  ): void {
+    const bandW = 352;
+    const bandX = CENTER_X - bandW * 0.5;
+
+    ctx.save();
+
+    // 1. Freshly resurfaced glistening wet ice wake below wipeY
+    const wakeH = Math.max(0, 396 - wipeY);
+    if (wakeH > 0) {
+      const wetGrad = ctx.createLinearGradient(0, wipeY, 0, wipeY + Math.min(180, wakeH));
+      wetGrad.addColorStop(0, 'rgba(56, 189, 248, 0.36)');
+      wetGrad.addColorStop(0.35, 'rgba(186, 230, 253, 0.22)');
+      wetGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+      ctx.fillStyle = wetGrad;
+      ctx.fillRect(bandX, wipeY, bandW, wakeH);
+
+      // Specular wet-ice diagonal sheen streaks
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const sy = wipeY + 12 + i * 24;
+        if (sy > 390) break;
+        ctx.beginPath();
+        ctx.moveTo(bandX + 20 + (i % 2) * 40, sy);
+        ctx.lineTo(bandX + bandW - 30 - ((i + 1) % 2) * 35, sy);
+        ctx.stroke();
+      }
+    }
+
+    // 2. Wide Conditioner Squeegee & Water Spreader Bar right at wipeY (the "big eraser" edge)
+    ctx.fillStyle = '#0ea5e9';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bandX - 6, wipeY - 6, bandW + 12, 12, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // Brass trim on conditioner bar
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(bandX + 4, wipeY - 2, bandW - 8, 4);
+
+    // Water mist spray droplets along the squeegee bar
+    ctx.fillStyle = '#e0f2fe';
+    for (let i = 0; i < 14; i++) {
+      const mx = bandX + 12 + (i * (bandW - 24)) / 13;
+      const my = wipeY + 7 + Math.sin(this.animTime * 25 + i) * 3;
+      ctx.beginPath();
+      ctx.arc(mx, my, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Main Zamboni Tractor Body centered at (CENTER_X, wipeY - 34)
+    const zx = CENTER_X - 42;
+    const zy = wipeY - 66;
+    const zw = 84;
+    const zh = 62;
+
+    // Headlight beams shining ahead onto the uncleaned stats
+    const beamGrad = ctx.createLinearGradient(0, zy, 0, zy - 48);
+    beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
+    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(zx + 14, zy);
+    ctx.lineTo(zx - 4, zy - 48);
+    ctx.lineTo(zx + 32, zy - 48);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(zx + zw - 14, zy);
+    ctx.lineTo(zx + zw - 32, zy - 48);
+    ctx.lineTo(zx + zw + 4, zy - 48);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tires
+    ctx.fillStyle = '#090d14';
+    ctx.fillRect(zx - 4, zy + 8, 5, 16);
+    ctx.fillRect(zx + zw - 1, zy + 8, 5, 16);
+    ctx.fillRect(zx - 4, zy + zh - 22, 5, 16);
+    ctx.fillRect(zx + zw - 1, zy + zh - 22, 5, 16);
+
+    // Zamboni chassis (White & Stadium Blue)
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(zx, zy, zw, zh, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    // Front snow tank (Stadium Blue)
+    ctx.fillStyle = '#1d4ed8';
+    ctx.beginPath();
+    ctx.roundRect(zx + 5, zy + 5, zw - 10, 34, 5);
+    ctx.fill();
+
+    // Gold racing stripe & ZAMBONI label
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(zx + 5, zy + 20, zw - 10, 10);
+    ctx.fillStyle = '#090d14';
+    ctx.font = '700 8px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ZAMBONI', CENTER_X, zy + 25.5);
+
+    // Driver cab & steering wheel at rear of Zamboni
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.roundRect(zx + 14, zy + 42, zw - 28, 16, 4);
+    ctx.fill();
+
+    // Driver helmet
+    ctx.fillStyle = '#eab308';
+    ctx.strokeStyle = '#090d14';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(CENTER_X, zy + 50, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -163,10 +1264,20 @@ export class RinkRenderer {
     ctx.clip();
 
     // Active song subtle ice tint
-    if (sim.activeSong) {
+    if (sim.activeSong && !this.isIceSummaryActive) {
       const songColor = SONGS[sim.activeSong.songId].color;
       ctx.fillStyle = songColor + '16';
       ctx.fillRect(0, 0, RINK_WIDTH, RINK_HEIGHT);
+    }
+
+    // Subtle skate-blade ice texture lines so vertical scrolling of the ice is visually tactile
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+    ctx.lineWidth = 1;
+    for (let y = 30; y < RINK_HEIGHT; y += 32) {
+      ctx.beginPath();
+      ctx.moveTo(310, y);
+      ctx.lineTo(690, y + 6);
+      ctx.stroke();
     }
 
     // Goal lines (red, thin)
@@ -251,6 +1362,7 @@ export class RinkRenderer {
     ctx: CanvasRenderingContext2D,
     sim: MatchSimulation
   ): void {
+    if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
     ctx.save();
     // Top center penalty boxes (Home left of center, Away right of center)
     const boxes: { x: number; label: string; color: string }[] = [
@@ -462,7 +1574,8 @@ export class RinkRenderer {
   private drawPlayer(
     ctx: CanvasRenderingContext2D,
     p: PlayerEntity,
-    sim: MatchSimulation
+    sim: MatchSimulation,
+    drawBars: boolean = true
   ): void {
     ctx.save();
     const r = p.role === 'goalie' ? sim.cfg.skaterRadius + 2 : sim.cfg.skaterRadius;
@@ -515,7 +1628,7 @@ export class RinkRenderer {
     }
 
     // 4. Puck carrier indicator ring
-    if (sim.puck.carrierId === p.id) {
+    if (sim.puck.carrierId === p.id && !this.isIceSummaryActive) {
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 3;
       ctx.setLineDash([5, 3]);
@@ -565,7 +1678,7 @@ export class RinkRenderer {
     }
 
     // 6. Overhead Stat Bars (FOC / STA / AGG) when enabled (default ON)
-    if (this.showStatBars && p.mode !== 'PENALTY_BOX') {
+    if (drawBars && this.showStatBars && p.mode !== 'PENALTY_BOX') {
       this.drawOverheadStatBars(ctx, p, r, sim);
     }
 
