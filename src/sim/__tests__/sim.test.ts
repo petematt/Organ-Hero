@@ -53,13 +53,24 @@ describe('SeededRNG & rollAgainst', () => {
 describe('Simulation Formulas & Mood Drift', () => {
   const cfg = DEFAULT_CONFIG;
 
-  it('clamps goal_chance between 0.05 and 0.90', () => {
-    // High block chance > shooter accuracy -> clamped to 0.05
-    expect(computeGoalChance(0.1, 0.8, cfg)).toBeCloseTo(0.05);
-    // High accuracy - 0 block -> clamped to 0.90
-    expect(computeGoalChance(0.99, 0.0, cfg)).toBeCloseTo(0.90);
+  it('clamps goal_chance between minGoalChance and maxGoalChance and makes Charge! buffs dramatically boost goal chance', () => {
+    // High block chance > shooter accuracy -> clamped to minGoalChance (0.02)
+    expect(computeGoalChance(0.1, 0.8, cfg)).toBeCloseTo(cfg.minGoalChance);
+    // High accuracy - 0 block -> clamped to maxGoalChance (0.90)
+    expect(computeGoalChance(0.99, 0.0, cfg)).toBeCloseTo(cfg.maxGoalChance);
     // Normal range
     expect(computeGoalChance(0.65, 0.35, cfg)).toBeCloseTo(0.30);
+
+    // Unbuffed Sniper (0.55 focus) vs Away Goalie (0.70 focus, 0.85 stamina) -> clamped at 2%
+    const unbuffedAcc = computeShooterAccuracy(0.55, cfg);
+    const goalieBlock = computeGoalieBlockChance(0.70, 0.85, cfg);
+    const unbuffedGoalChance = computeGoalChance(unbuffedAcc, goalieBlock, cfg);
+    expect(unbuffedGoalChance).toBeCloseTo(cfg.minGoalChance);
+
+    // Charge! Cue Hit Sniper (1.00 focus) vs same Goalie -> >8x higher goal chance
+    const buffedAcc = computeShooterAccuracy(1.0, cfg);
+    const buffedGoalChance = computeGoalChance(buffedAcc, goalieBlock, cfg);
+    expect(buffedGoalChance).toBeGreaterThan(unbuffedGoalChance * 8);
   });
 
   it('prevents zero skate_speed when stamina or aggression hits 0', () => {
@@ -261,15 +272,15 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.puck.shotStartPos).not.toBeNull();
     expect(sim.homeScore).toBe(0);
 
-    // Step in small increments: while puck is at the outer crease (x < 735), goal must NOT be registered yet
+    // Step in small increments: while puck is at the outer crease (x < 953), goal must NOT be registered yet
     let sawInCreaseBeforeGoal = false;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 90; i++) {
       sim.step(1 / 120);
-      if (sim.puck.pos.x > 700 && sim.puck.pos.x < 742 && sim.homeScore === 0) {
+      if (sim.puck.pos.x > 900 && sim.puck.pos.x < 953 && sim.homeScore === 0) {
         sawInCreaseBeforeGoal = true;
       }
       if (sim.homeScore === 1) {
-        expect(sim.puck.pos.x).toBeGreaterThanOrEqual(742);
+        expect(sim.puck.pos.x).toBeGreaterThanOrEqual(953);
         break;
       }
     }

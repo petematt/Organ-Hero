@@ -88,14 +88,14 @@ export interface GameConfig {
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
-  G_goalieBlock: 0.75,
+  G_goalieBlock: 0.92,
   S_skateSpeed: 220,
   R_redirectLatency: 1.4,
-  A_shooterAccuracy: 0.85,
+  A_shooterAccuracy: 0.72,
   F_fightChance: 0.65,
   T_stealChance: 0.55,
 
-  minGoalChance: 0.05,
+  minGoalChance: 0.02,
   maxGoalChance: 0.90,
   minStaminaSpeedFactor: 0.55,
 
@@ -121,8 +121,8 @@ export const DEFAULT_CONFIG: GameConfig = {
 
   strikerStaminaDrainPerSec: 0.0018,
   strikerCollisionStaminaDrain: 0.008,
-  goalieStaminaDrainPerSec: 0.0012,
-  goalieSaveStaminaDrain: 0.03,
+  goalieStaminaDrainPerSec: 0.0006,
+  goalieSaveStaminaDrain: 0.015,
   penaltyBoxStaminaRecoveryPerSec: 0.015,
   brawlLoserStaminaHit: 0.08,
 
@@ -132,16 +132,16 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodPushedAggression: 0.05,
   moodGoalScorerFocus: 0.10,
   moodGoalTeamAggression: 0.05,
-  moodConcedeGoalieFocus: -0.15,
+  moodConcedeGoalieFocus: -0.10,
   moodConcedeTeamAggression: 0.10,
   moodSaveGoalieFocus: 0.10,
   moodLeaveBoxAggression: -0.10,
 
-  chargeFocusBonus: 0.20,
+  chargeFocusBonus: 0.28,
   chargeAggressionBonus: 0.20,
-  holdGoalieFocusBonus: 0.25,
-  holdGoalieStaminaInstant: 0.10,
-  holdStrikerFocusBonus: 0.20,
+  holdGoalieFocusBonus: 0.30,
+  holdGoalieStaminaInstant: 0.15,
+  holdStrikerFocusBonus: 0.22,
   holdStrikerAggressionDelta: -0.20,
   grudgeAggressionBonus: 0.30,
   grudgeFocusDelta: -0.20,
@@ -161,7 +161,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 9,
       team: 'home',
       role: 'striker',
-      focus: 0.70,
+      focus: 0.55,
       aggression: 0.40,
     },
     {
@@ -170,7 +170,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 24,
       team: 'home',
       role: 'striker',
-      focus: 0.45,
+      focus: 0.38,
       aggression: 0.65,
     },
     {
@@ -179,7 +179,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 1,
       team: 'home',
       role: 'goalie',
-      focus: 0.65,
+      focus: 0.72,
       aggression: 0.20,
     },
     {
@@ -188,7 +188,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 13,
       team: 'away',
       role: 'striker',
-      focus: 0.40,
+      focus: 0.34,
       aggression: 0.75,
     },
     {
@@ -197,7 +197,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 77,
       team: 'away',
       role: 'striker',
-      focus: 0.65,
+      focus: 0.52,
       aggression: 0.45,
     },
     {
@@ -206,13 +206,13 @@ export const DEFAULT_CONFIG: GameConfig = {
       number: 30,
       team: 'away',
       role: 'goalie',
-      focus: 0.60,
+      focus: 0.70,
       aggression: 0.20,
     },
   ],
 };
 
-const STORAGE_KEY = 'organ_hero_config_v2';
+const STORAGE_KEY = 'organ_hero_config_v3';
 
 export function cloneConfig(cfg: GameConfig = DEFAULT_CONFIG): GameConfig {
   return JSON.parse(JSON.stringify(cfg));
