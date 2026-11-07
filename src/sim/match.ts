@@ -569,6 +569,7 @@ export class MatchSimulation {
         const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
         p.pos = clamped.pos;
         p.vel = clamped.vel;
+        this.enforceCreaseAndGoalieZones(p);
         p.stateTimer -= dtSec;
         if (p.stateTimer <= 0) {
           p.mode = 'DEFENDING';
@@ -604,6 +605,10 @@ export class MatchSimulation {
         const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
         p.pos = clamped.pos;
         p.vel = clamped.vel;
+
+        if (this.enforceCreaseAndGoalieZones(p)) {
+          continue;
+        }
 
         // Check Breakaway cue
         this.checkBreakawayCue(p);
@@ -650,14 +655,115 @@ export class MatchSimulation {
       p.pos = clamped.pos;
       p.vel = clamped.vel;
 
-      // Check loose puck pickup
+      // Enforce crease exclusion & opposing goalie stun BEFORE loose puck pickup
+      if (this.enforceCreaseAndGoalieZones(p)) {
+        continue;
+      }
+
+      // Check loose puck pickup (stunned players never trigger collisions with the puck)
       if (
+        (p.mode as string) !== 'STUNNED' &&
         this.puck.carrierId === null &&
         dist(p.pos, this.puck.pos) <= this.cfg.skaterRadius + this.cfg.puckRadius + 2
       ) {
         this.gainPossession(p);
       }
     }
+  }
+
+  /**
+   * Keeps all skaters out of both goal creases (only the goalie is allowed in the crease).
+   * If a skater gets too close to the opposing crease or touches the opposing goalie,
+   * they are knocked back outside the crease and become STUNNED.
+   * Returns true if the player is now STUNNED.
+   */
+  private enforceCreaseAndGoalieZones(p: PlayerEntity): boolean {
+    if (p.role === 'goalie') return false;
+
+    const minCreaseDist = this.cfg.creaseRadius + this.cfg.skaterRadius;
+    const minGoalieDist = this.cfg.skaterRadius * 2 + 2;
+    const goalTeams: Team[] = ['home', 'away'];
+
+    for (const goalTeam of goalTeams) {
+      const creaseCenter: Vec2 = {
+        x: goalTeam === 'home' ? HOME_GOAL_X : AWAY_GOAL_X,
+        y: CENTER_Y,
+      };
+      const goalie = this.players.find(
+        (pl) => pl.role === 'goalie' && pl.team === goalTeam
+      );
+
+      const dCrease = dist(p.pos, creaseCenter);
+      const dGoalie = goalie ? dist(p.pos, goalie.pos) : Infinity;
+
+      if (dCrease < minCreaseDist || dGoalie < minGoalieDist) {
+        // Compute outward normal from crease center toward the ice in front of the goal
+        const rawDx = p.pos.x - creaseCenter.x;
+        const frontDx =
+          goalTeam === 'home' ? Math.max(6, rawDx) : Math.min(-6, rawDx);
+        const rawDy = p.pos.y - creaseCenter.y;
+        const norm = normalize({ x: frontDx, y: rawDy });
+
+        if (goalTeam !== p.team) {
+          // Opposing crease / opposing goalie contact -> knock back and STUN!
+          p.pos = {
+            x: creaseCenter.x + norm.x * (minCreaseDist + 3),
+            y: clamp(
+              creaseCenter.y + norm.y * (minCreaseDist + 3),
+              this.cfg.skaterRadius,
+              RINK_HEIGHT - this.cfg.skaterRadius
+            ),
+          };
+
+          if (this.puck.carrierId === p.id) {
+            this.puck.carrierId = null;
+            this.currentPossessor = null;
+            this.puck.pos = {
+              x: creaseCenter.x + norm.x * (minCreaseDist + 8),
+              y: clamp(
+                creaseCenter.y + norm.y * (minCreaseDist + 8),
+                this.cfg.puckRadius,
+                RINK_HEIGHT - this.cfg.puckRadius
+              ),
+            };
+            this.puck.vel = {
+              x: norm.x * 160,
+              y: norm.y * 160,
+            };
+          }
+
+          if (p.mode !== 'STUNNED') {
+            p.mode = 'STUNNED';
+            p.stateTimer = Math.max(
+              1.2,
+              computeRedirectLatency(p.focus, p.aggression, this.cfg)
+            );
+            p.possessionTimer = 0;
+            p.attackPath = null;
+            p.vel = { x: norm.x * 95, y: norm.y * 95 };
+            this.spawnCallout('CREASE STUN!', p.pos, '#fb923c', 1.6);
+          }
+          return true;
+        } else {
+          // Own team's crease -> only the goalie is allowed inside; slide skater outside the arc
+          p.pos = {
+            x: creaseCenter.x + norm.x * minCreaseDist,
+            y: clamp(
+              creaseCenter.y + norm.y * minCreaseDist,
+              this.cfg.skaterRadius,
+              RINK_HEIGHT - this.cfg.skaterRadius
+            ),
+          };
+          const dot = p.vel.x * norm.x + p.vel.y * norm.y;
+          if (dot < 0) {
+            p.vel.x -= dot * norm.x;
+            p.vel.y -= dot * norm.y;
+          }
+        }
+      }
+    }
+
+    return p.mode === 'STUNNED';
   }
 
   private checkBreakawayCue(carrier: PlayerEntity): void {
@@ -685,6 +791,14 @@ export class MatchSimulation {
   }
 
   public gainPossession(striker: PlayerEntity): void {
+    // Stunned, fighting, or penalized players never trigger collisions with the puck
+    if (
+      striker.mode === 'STUNNED' ||
+      striker.mode === 'FIGHTING' ||
+      striker.mode === 'PENALTY_BOX'
+    ) {
+      return;
+    }
     // Do not allow defenders to casually intercept an unstoppable scoring snipe in flight
     if (this.puck.isScoringShot && this.puck.inFlightShotFrom !== null) {
       return;
@@ -789,7 +903,8 @@ export class MatchSimulation {
       (p) =>
         p.role === 'striker' &&
         p.mode !== 'PENALTY_BOX' &&
-        p.mode !== 'FIGHTING'
+        p.mode !== 'FIGHTING' &&
+        p.mode !== 'STUNNED'
     );
 
     const minDist = this.cfg.skaterRadius * 2;
@@ -1021,6 +1136,41 @@ export class MatchSimulation {
       this.puck.vel = bounced.vel;
       if (bounced.bounced) {
         this.puck.inFlightShotFrom = null;
+      }
+
+      // If a loose puck drifts into either goalie-only crease, the goalie pokes it out
+      const goalTeams: Team[] = ['home', 'away'];
+      for (const goalTeam of goalTeams) {
+        const creaseCenter: Vec2 = {
+          x: goalTeam === 'home' ? HOME_GOAL_X : AWAY_GOAL_X,
+          y: CENTER_Y,
+        };
+        if (dist(this.puck.pos, creaseCenter) <= this.cfg.creaseRadius) {
+          const rawDx = this.puck.pos.x - creaseCenter.x;
+          const frontDx =
+            goalTeam === 'home' ? Math.max(6, rawDx) : Math.min(-6, rawDx);
+          const norm = normalize({
+            x: frontDx,
+            y: this.puck.pos.y - creaseCenter.y,
+          });
+          this.puck.pos = {
+            x: creaseCenter.x + norm.x * (this.cfg.creaseRadius + this.cfg.puckRadius + 2),
+            y: clamp(
+              creaseCenter.y + norm.y * (this.cfg.creaseRadius + this.cfg.puckRadius + 2),
+              this.cfg.puckRadius,
+              RINK_HEIGHT - this.cfg.puckRadius
+            ),
+          };
+          const incomingSpeed = Math.hypot(this.puck.vel.x, this.puck.vel.y);
+          this.puck.vel = computeReboundVelocity(
+            goalTeam,
+            this.puck.pos.y,
+            Math.max(240, incomingSpeed),
+            this.cfg,
+            this.rng
+          );
+          this.puck.inFlightShotFrom = null;
+        }
       }
     }
 

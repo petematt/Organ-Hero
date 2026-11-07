@@ -288,6 +288,49 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.homeScore).toBe(1);
     expect(sim.phase).toBe('GOAL_CELEBRATION');
   });
+
+  it('keeps skaters out of creases, stuns players who get too close to the opposing goalie, and prevents stunned players from picking up the puck', () => {
+    const sim = new MatchSimulation(cloneConfig(), 919);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+
+    // Place Home striker right at the Away crease/goalie (AWAY_GOAL_X = 945)
+    homeS1.pos = { x: 928, y: CENTER_Y };
+    // Place Away striker inside their own Away crease
+    awayS1.pos = { x: 925, y: CENTER_Y - 10 };
+
+    // Place the loose puck right where homeS1 gets knocked back
+    sim.puck.carrierId = null;
+    sim.puck.pos = { x: 894, y: CENTER_Y };
+    sim.puck.vel = { x: 0, y: 0 };
+
+    sim.step(1 / 60);
+
+    // Home striker touched opposing crease/goalie -> knocked outside crease and STUNNED
+    expect(homeS1.mode).toBe('STUNNED');
+    expect(homeS1.stateTimer).toBeGreaterThan(1.0);
+    expect(Math.hypot(homeS1.pos.x - 945, homeS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
+      sim.cfg.creaseRadius + sim.cfg.skaterRadius
+    );
+
+    // Away striker in their own crease -> pushed outside crease without being stunned
+    expect(awayS1.mode).not.toBe('STUNNED');
+    expect(Math.hypot(awayS1.pos.x - 945, awayS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
+      sim.cfg.creaseRadius + sim.cfg.skaterRadius - 1e-3
+    );
+
+    // Stunned player directly on top of a loose puck must NOT pick it up or trigger gainPossession
+    sim.puck.carrierId = null;
+    sim.currentPossessor = null;
+    awayS1.mode = 'DEFENDING';
+    awayS1.pos = { x: 200, y: 100 };
+    sim.puck.pos = { ...homeS1.pos };
+    sim.gainPossession(homeS1);
+    expect(sim.puck.carrierId).toBeNull();
+    sim.step(1 / 60);
+    expect(sim.puck.carrierId).toBeNull();
+  });
 });
 
 describe('Possession Targeting, Songs & Crowd Volume', () => {
