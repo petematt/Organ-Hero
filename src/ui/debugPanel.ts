@@ -6,7 +6,10 @@ import {
 import { ALL_SONG_IDS, SONGS } from '../game/songs';
 import { SongId } from '../sim/types';
 
-type NumericConfigKey = Exclude<keyof GameConfig, 'roster' | 'equippedSongs'>;
+type NumericConfigKey = Exclude<
+  keyof GameConfig,
+  'roster' | 'equippedSongs' | 'enablePassing'
+>;
 
 interface SliderSpec {
   key: NumericConfigKey;
@@ -21,11 +24,14 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
     title: 'Core Probability & Speed Multipliers',
     items: [
       { key: 'G_goalieBlock', label: 'G (Goalie Block)', min: 0.1, max: 1.5, step: 0.05 },
+      { key: 'C_critSaveChance', label: 'C (Goalie Crit Catch)', min: 0.0, max: 1.5, step: 0.05 },
       { key: 'S_skateSpeed', label: 'S (Base Skate Speed)', min: 100, max: 400, step: 10 },
       { key: 'R_redirectLatency', label: 'R (Redirect Stun s)', min: 0.2, max: 3.0, step: 0.1 },
       { key: 'A_shooterAccuracy', label: 'A (Shooter Accuracy)', min: 0.2, max: 1.5, step: 0.05 },
       { key: 'F_fightChance', label: 'F (Fight Chance)', min: 0.0, max: 1.5, step: 0.05 },
       { key: 'T_stealChance', label: 'T (Steal Chance)', min: 0.0, max: 1.5, step: 0.05 },
+      { key: 'P_passTendency', label: 'P (Pass Tendency)', min: 0.0, max: 1.5, step: 0.05 },
+      { key: 'P_passAccuracy', label: 'P_acc (Pass Accuracy)', min: 0.1, max: 1.5, step: 0.05 },
     ],
   },
   {
@@ -36,6 +42,7 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
       { key: 'cueWindowDurationSec', label: 'Cue Window (s)', min: 2, max: 10, step: 0.5 },
       { key: 'brawlDurationSec', label: 'Brawl Duration (s)', min: 2, max: 12, step: 1 },
       { key: 'penaltyDurationSec', label: 'Penalty Box (s)', min: 10, max: 60, step: 5 },
+      { key: 'goalieHoldDurationSec', label: 'Goalie Hold (s)', min: 0.4, max: 3.0, step: 0.2 },
       { key: 'chargeFocusBonus', label: 'Charge +Focus', min: 0, max: 0.6, step: 0.05 },
       { key: 'chargeAggressionBonus', label: 'Charge +Aggression', min: 0, max: 0.6, step: 0.05 },
       { key: 'holdGoalieFocusBonus', label: 'Hold +Goalie Focus', min: 0, max: 0.6, step: 0.05 },
@@ -203,13 +210,22 @@ export class DebugPanelController {
 
     this.bodyEl.innerHTML = `
       <div class="debug-section">
-        <h3>Deterministic RNG Seed</h3>
+        <h3>Deterministic RNG Seed &amp; Mechanics</h3>
         <div class="debug-seed-row">
           <input id="input-seed-val" type="number" value="${seed}" />
           <button id="btn-restart-seed" class="hud-btn active-toggle" type="button">
             Restart w/ Seed
           </button>
         </div>
+        <label class="debug-slider-row" style="margin-top: 8px; cursor: pointer;">
+          <span class="d-label">Enable Team Passing</span>
+          <input
+            id="chk-enable-passing"
+            type="checkbox"
+            ${cfg.enablePassing ? 'checked' : ''}
+          />
+          <span class="d-val" id="dval-enablePassing">${cfg.enablePassing ? 'ON' : 'OFF'}</span>
+        </label>
       </div>
 
       <div class="debug-section">
@@ -246,6 +262,17 @@ export class DebugPanelController {
         <div id="debug-status-msg" class="debug-status-msg"></div>
       </div>
     `;
+
+    // Bind Enable Passing checkbox
+    const passChk = document.getElementById('chk-enable-passing') as HTMLInputElement | null;
+    passChk?.addEventListener('change', () => {
+      const updated = this.getConfig();
+      updated.enablePassing = passChk.checked;
+      saveConfig(updated);
+      this.onConfigChange(updated);
+      const valSpan = document.getElementById('dval-enablePassing');
+      if (valSpan) valSpan.textContent = updated.enablePassing ? 'ON' : 'OFF';
+    });
 
     // Bind Max Song Slots slider
     document.getElementById('input-max-song-slots')?.addEventListener('input', (e) => {

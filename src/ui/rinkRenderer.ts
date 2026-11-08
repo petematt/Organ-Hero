@@ -1816,12 +1816,14 @@ export class RinkRenderer {
       }
       ctx.restore();
     } else if (trail.length > 1) {
-      // Standard puck motion trail
+      // Standard or pass puck motion trail
       for (let i = 0; i < trail.length - 1; i++) {
         const alpha = ((i + 1) / trail.length) * 0.35;
         ctx.fillStyle =
           sim.puck.inFlightShotFrom !== null
             ? `rgba(245, 158, 11, ${alpha + 0.15})`
+            : sim.puck.inFlightPassFromId !== null
+            ? `rgba(56, 189, 248, ${alpha + 0.2})`
             : `rgba(15, 23, 42, ${alpha})`;
         ctx.beginPath();
         ctx.arc(
@@ -1832,6 +1834,22 @@ export class RinkRenderer {
           Math.PI * 2
         );
         ctx.fill();
+      }
+    }
+
+    // Subtle pass target guide line when an accurate pass is in flight
+    if (sim.puck.carrierId === null && sim.puck.inFlightPassToId !== null) {
+      const receiver = sim.players.find((pl) => pl.id === sim.puck.inFlightPassToId);
+      if (receiver) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(sim.puck.pos.x, sim.puck.pos.y);
+        ctx.lineTo(receiver.pos.x, receiver.pos.y);
+        ctx.stroke();
+        ctx.restore();
       }
     }
 
@@ -1969,9 +1987,9 @@ export class RinkRenderer {
       ctx.globalAlpha = 1;
     }
 
-    // 4. Puck carrier indicator ring
+    // 4. Puck carrier / Goalie glove-hold indicator ring
     if (sim.puck.carrierId === p.id && !this.isIceSummaryActive) {
-      ctx.strokeStyle = '#facc15';
+      ctx.strokeStyle = p.mode === 'HOLDING_PUCK' ? '#2dd4bf' : '#facc15';
       ctx.lineWidth = 3;
       ctx.setLineDash([5, 3]);
       ctx.beginPath();

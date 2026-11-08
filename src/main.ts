@@ -1,5 +1,5 @@
 import { OrganSynth } from './audio/organSynth';
-import { GameConfig, loadConfig } from './config';
+import { GameConfig, loadConfig, saveConfig } from './config';
 import { pickRandomOrder } from './game/orders';
 import { MatchSimulation } from './sim/match';
 import { SeededRNG } from './sim/rng';
@@ -116,6 +116,7 @@ class OrganHeroApp {
       onConfigChange: (newCfg: GameConfig) => {
         this.cfg = newCfg;
         this.sim.cfg = newCfg;
+        this.syncPassBtnState();
         this.hud.update(this.sim);
       },
       onRestartWithSeed: (seed: number) => {
@@ -131,6 +132,7 @@ class OrganHeroApp {
     }
 
     this.bindControls();
+    this.syncPassBtnState();
     this.hud.update(this.sim);
     if (urlOpts.autostart) {
       this.screens.hide();
@@ -146,6 +148,23 @@ class OrganHeroApp {
     }
 
     requestAnimationFrame((t) => this.loop(t));
+  }
+
+  private syncPassBtnState(): void {
+    const passBtn = document.getElementById('btn-pass-toggle');
+    if (passBtn) {
+      passBtn.classList.toggle('active-toggle', Boolean(this.cfg.enablePassing));
+    }
+  }
+
+  private togglePassing(): void {
+    this.cfg.enablePassing = !this.cfg.enablePassing;
+    this.sim.cfg.enablePassing = this.cfg.enablePassing;
+    saveConfig(this.cfg);
+    this.syncPassBtnState();
+    if (this.debugPanel.isOpen()) {
+      this.debugPanel.render();
+    }
   }
 
   private isFullscreenActive(): boolean {
@@ -242,6 +261,12 @@ class OrganHeroApp {
       speedBtn.classList.toggle('active-toggle', this.speedMultiplier === 2);
     });
 
+    // Team Passing toggle (default ON)
+    const passBtn = document.getElementById('btn-pass-toggle');
+    passBtn?.addEventListener('click', () => {
+      this.togglePassing();
+    });
+
     // Overhead stat bars toggle (default ON)
     const barsBtn = document.getElementById('btn-bars-toggle')!;
     barsBtn.addEventListener('click', () => {
@@ -272,7 +297,7 @@ class OrganHeroApp {
       this.debugPanel.toggle();
     });
 
-    // Keyboard shortcuts (1..N for active song slots, Space for pause, F for fullscreen, ` for debug)
+    // Keyboard shortcuts (1..N for active song slots, P for passing toggle, Space for pause, F for fullscreen, ` for debug)
     window.addEventListener('keydown', (e) => {
       if (
         document.activeElement &&
@@ -286,6 +311,9 @@ class OrganHeroApp {
         if (slotIdx < loadout.length) {
           this.triggerSong(loadout[slotIdx]);
         }
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        this.togglePassing();
       } else if (e.key === ' ') {
         e.preventDefault();
         this.togglePause();

@@ -5,9 +5,12 @@ import { resolveSongTarget } from '../../game/songs';
 import { buildStatsSummary } from '../../game/stats';
 import {
   composeEffectiveStat,
+  computeCritSaveChance,
   computeFightChance,
   computeGoalChance,
   computeGoalieBlockChance,
+  computePassAccuracy,
+  computePassTendency,
   computeRedirectLatency,
   computeShooterAccuracy,
   computeSkateSpeed,
@@ -611,3 +614,131 @@ describe('Determinism & Breakdown Attribution', () => {
   });
 });
 
+describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', () => {
+  it('computes pass tendency, pass accuracy, and critical save chance from Focus, Aggression, and Stamina', () => {
+    const cfg = DEFAULT_CONFIG;
+    // Higher focus and lower aggression increase pass tendency
+    const playmakerPass = computePassTendency(0.8, 0.2, cfg);
+    const hotheadPass = computePassTendency(0.3, 0.9, cfg);
+    expect(playmakerPass).toBeGreaterThan(hotheadPass);
+
+    // Higher focus and stamina increase pass accuracy
+    expect(computePassAccuracy(0.8, 1.0, cfg)).toBeGreaterThan(
+      computePassAccuracy(0.4, 0.3, cfg)
+    );
+
+    // Goalie crit save scales with focus and stamina
+    expect(computeCritSaveChance(0.8, 1.0, cfg)).toBeCloseTo(
+      cfg.C_critSaveChance * 0.8
+    );
+  });
+
+  it('passes to an open better-positioned teammate when enablePassing is true, and never passes when enablePassing is false', () => {
+    const cfg = cloneConfig();
+    cfg.P_passTendency = 10; // guarantee pass roll
+    cfg.P_passAccuracy = 10; // guarantee accurate pass
+    cfg.enablePassing = false;
+
+    const simDisabled = new MatchSimulation(cfg, 404);
+    simDisabled.phase = 'PLAYING';
+    const homeS1 = simDisabled.players.find((p) => p.id === 'home-s1')!;
+    const homeS2 = simDisabled.players.find((p) => p.id === 'home-s2')!;
+    // Move opponents away
+    for (const p of simDisabled.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 200, y: 380 };
+      }
+    }
+    homeS1.pos = { x: 400, y: CENTER_Y };
+    homeS2.pos = { x: 620, y: CENTER_Y - 70 }; // closer to away goal and open
+    simDisabled.gainPossession(homeS1);
+    homeS1.possessionTimer = 0.5;
+    homeS1.passCheckTimer = 0;
+
+    // With enablePassing = false, tryPassPuck must return false and emit no PASS event
+    expect(simDisabled.tryPassPuck(homeS1)).toBe(false);
+    expect(simDisabled.events.some((e) => e.type === 'PASS')).toBe(false);
+
+    // Now enable passing -> striker passes to open teammate and receiver gets focus bonus on reception
+    cfg.enablePassing = true;
+    const simEnabled = new MatchSimulation(cfg, 404);
+    simEnabled.phase = 'PLAYING';
+    const s1 = simEnabled.players.find((p) => p.id === 'home-s1')!;
+    const s2 = simEnabled.players.find((p) => p.id === 'home-s2')!;
+    for (const p of simEnabled.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 200, y: 380 };
+      }
+    }
+    s1.pos = { x: 400, y: CENTER_Y };
+    s2.pos = { x: 540, y: CENTER_Y - 50 };
+    simEnabled.gainPossession(s1);
+    s1.possessionTimer = 0.5;
+    s1.passCheckTimer = 0;
+
+    expect(simEnabled.tryPassPuck(s1)).toBe(true);
+    expect(simEnabled.events.some((e) => e.type === 'PASS')).toBe(true);
+    expect(simEnabled.puck.inFlightPassToId).toBe(s2.id);
+
+    const prevOffset = s2.moodFocusOffset;
+    // Step until s2 receives the pass
+    for (let i = 0; i < 45; i++) {
+      simEnabled.step(1 / 60);
+      if (simEnabled.puck.carrierId === s2.id) break;
+    }
+    expect(simEnabled.puck.carrierId).toBe(s2.id);
+    expect(s2.moodFocusOffset).toBeGreaterThan(prevOffset);
+  });
+
+  it('catches the puck on a critical save, forces attacking strikers to retreat, and outlets a pass to a teammate', () => {
+    const cfg = cloneConfig();
+    cfg.A_shooterAccuracy = 0;
+    cfg.G_goalieBlock = 10;
+    cfg.minGoalChance = 0; // guarantee save
+    cfg.C_critSaveChance = 10; // guarantee critical glove save
+    cfg.goalieHoldDurationSec = 1.0;
+
+    const sim = new MatchSimulation(cfg, 777);
+    sim.phase = 'PLAYING';
+
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+    const awayG = sim.players.find((p) => p.id === 'away-g')!;
+
+    // Place Home strikers deep in Away zone (near x = 780)
+    homeS1.pos = { x: 780, y: CENTER_Y - 20 };
+    homeS2.pos = { x: 760, y: CENTER_Y + 40 };
+
+    sim.gainPossession(homeS1);
+    sim.shootPuck(homeS1);
+
+    // Step until the shot reaches the Away goalie crease and triggers the critical save
+    for (let i = 0; i < 60; i++) {
+      sim.step(1 / 60);
+      if (awayG.mode === 'HOLDING_PUCK') break;
+    }
+
+    expect(awayG.mode).toBe('HOLDING_PUCK');
+    expect(sim.puck.carrierId).toBe(awayG.id);
+    expect(sim.events.some((e) => e.type === 'SAVE' && e.isCritSave === true)).toBe(true);
+
+    const s1XAtCatch = homeS1.pos.x;
+    const s2XAtCatch = homeS2.pos.x;
+
+    // Step 0.5s while goalie holds the puck -> Home strikers must retreat toward neutral ice (decreasing X)
+    for (let i = 0; i < 30; i++) {
+      sim.step(1 / 60);
+    }
+    expect(homeS1.pos.x).toBeLessThan(s1XAtCatch - 30);
+    expect(homeS2.pos.x).toBeLessThan(s2XAtCatch - 30);
+
+    // Step past the remaining hold duration -> Goalie releases outlet pass to a teammate
+    for (let i = 0; i < 40; i++) {
+      sim.step(1 / 60);
+    }
+    expect(awayG.mode).toBe('DEFENDING');
+    expect(
+      sim.events.some((e) => e.type === 'PASS' && e.playerId === awayG.id)
+    ).toBe(true);
+  });
+});

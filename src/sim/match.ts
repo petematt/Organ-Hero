@@ -11,9 +11,12 @@ import {
 } from '../game/songs';
 import {
   composeEffectiveStat,
+  computeCritSaveChance,
   computeFightChance,
   computeGoalChance,
   computeGoalieBlockChance,
+  computePassAccuracy,
+  computePassTendency,
   computeRedirectLatency,
   computeShooterAccuracy,
   computeSkateSpeed,
@@ -112,6 +115,8 @@ export class MatchSimulation {
       shotStartPos: null,
       shooterAccuracy: 0,
       shooterId: null,
+      inFlightPassToId: null,
+      inFlightPassFromId: null,
       trail: [],
     };
 
@@ -167,6 +172,7 @@ export class MatchSimulation {
         mode: 'DEFENDING',
         stateTimer: 0,
         possessionTimer: 0,
+        passCheckTimer: 0,
         fightPartnerId: null,
         isFightInstigator: false,
         collisionCooldown: 0,
@@ -183,6 +189,8 @@ export class MatchSimulation {
     this.puck.isScoringShot = false;
     this.puck.shotStartPos = null;
     this.puck.shooterId = null;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = null;
     this.puck.pos = { x: CENTER_X, y: CENTER_Y };
     this.puck.vel = { x: 0, y: 0 };
     this.puck.trail = [];
@@ -191,6 +199,7 @@ export class MatchSimulation {
     for (const p of this.players) {
       p.attackPath = null;
       p.possessionTimer = 0;
+      p.passCheckTimer = 0;
       p.fightPartnerId = null;
       p.isFightInstigator = false;
       if (p.mode === 'PENALTY_BOX') {
@@ -232,6 +241,7 @@ export class MatchSimulation {
       p.mode = 'DEFENDING';
       p.stateTimer = 0;
       p.possessionTimer = 0;
+      p.passCheckTimer = 0;
       p.fightPartnerId = null;
       p.isFightInstigator = false;
       p.collisionCooldown = 0;
@@ -542,9 +552,31 @@ export class MatchSimulation {
   }
 
   private stepPlayers(dtSec: number): void {
+    const holdingGoalie = this.players.find(
+      (pl) => pl.role === 'goalie' && pl.mode === 'HOLDING_PUCK'
+    );
+
     for (const p of this.players) {
       if (p.role === 'goalie') {
         p.stamina = clamp(p.stamina - this.cfg.goalieStaminaDrainPerSec * dtSec, 0, 1);
+
+        if (p.mode === 'HOLDING_PUCK') {
+          if (this.puck.carrierId !== p.id) {
+            p.mode = 'DEFENDING';
+            p.stateTimer = 0;
+            continue;
+          }
+          // Goalie holds the puck in the glove while opposing strikers retreat
+          const holdTargetY = CENTER_Y;
+          p.pos.y += (holdTargetY - p.pos.y) * Math.min(1, dtSec * 6);
+          p.pos.x = p.homeSpot.x;
+          p.stateTimer -= dtSec;
+          if (p.stateTimer <= 0) {
+            this.releaseGoalieOutletPass(p);
+          }
+          continue;
+        }
+
         // Visual tracking along the goal mouth
         const targetY = clamp(this.puck.pos.y, CENTER_Y - 25, CENTER_Y + 25);
         p.pos.y += (targetY - p.pos.y) * Math.min(1, dtSec * 8);
@@ -658,8 +690,20 @@ export class MatchSimulation {
         }
 
         p.possessionTimer += dtSec;
+        p.passCheckTimer -= dtSec;
         if (!p.attackPath) {
           p.attackPath = createCurvedPathToGoal(p.pos, p.team, this.rng);
+        }
+
+        // Evaluate passing to an open / better-positioned teammate if passing is enabled
+        if (
+          this.cfg.enablePassing &&
+          p.possessionTimer >= 0.25 &&
+          p.passCheckTimer <= 0
+        ) {
+          if (this.tryPassPuck(p)) {
+            continue;
+          }
         }
 
         const t = clamp(p.possessionTimer / this.cfg.maxPossessionSec, 0, 1);
@@ -697,7 +741,28 @@ export class MatchSimulation {
 
       // DEFENDING mode
       let targetPos: Vec2 = this.puck.pos;
-      if (this.puck.carrierId) {
+
+      if (holdingGoalie) {
+        if (holdingGoalie.team !== p.team) {
+          // Opposing goalie caught the puck on a Critical Save -> strikers must retreat toward neutral ice!
+          const retreatX =
+            holdingGoalie.team === 'home' ? CENTER_X + 45 : CENTER_X - 45;
+          const retreatY = p.homeSpot.y;
+          targetPos = { x: retreatX, y: retreatY };
+        } else {
+          // Friendly goalie caught the puck -> skate into open outlet wing lanes to receive the outlet pass!
+          const outletX =
+            holdingGoalie.team === 'home' ? 285 : RINK_WIDTH - 285;
+          const outletY = p.homeSpot.y < CENTER_Y ? 88 : RINK_HEIGHT - 88;
+          targetPos = { x: outletX, y: outletY };
+        }
+      } else if (this.puck.inFlightPassToId === p.id) {
+        // Incoming pass targeted at this striker: skate toward the puck to receive it cleanly
+        targetPos = {
+          x: this.puck.pos.x + this.puck.vel.x * 0.08,
+          y: this.puck.pos.y + this.puck.vel.y * 0.08,
+        };
+      } else if (this.puck.carrierId) {
         const carrier = this.players.find((pl) => pl.id === this.puck.carrierId);
         if (carrier) {
           if (carrier.team === p.team) {
@@ -715,11 +780,16 @@ export class MatchSimulation {
         }
       }
 
-      const dir = normalize({
-        x: targetPos.x - p.pos.x,
-        y: targetPos.y - p.pos.y,
-      });
-      p.vel = { x: dir.x * maxSpeed, y: dir.y * maxSpeed };
+      const toTargetDist = dist(p.pos, targetPos);
+      if (holdingGoalie && toTargetDist < 8) {
+        p.vel = { x: 0, y: 0 };
+      } else {
+        const dir = normalize({
+          x: targetPos.x - p.pos.x,
+          y: targetPos.y - p.pos.y,
+        });
+        p.vel = { x: dir.x * maxSpeed, y: dir.y * maxSpeed };
+      }
       p.pos.x += p.vel.x * dtSec;
       p.pos.y += p.vel.y * dtSec;
       const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
@@ -731,11 +801,20 @@ export class MatchSimulation {
         continue;
       }
 
-      // Check loose puck pickup (stunned players never trigger collisions with the puck)
+      // Check loose puck pickup (stunned players never trigger collisions with the puck,
+      // and a passer on cooldown does not immediately re-grab their own outgoing pass)
+      const isPasserOnCooldown =
+        this.puck.inFlightPassFromId === p.id && p.collisionCooldown > 0;
+      const pickupRadius =
+        this.cfg.skaterRadius +
+        this.cfg.puckRadius +
+        (this.puck.inFlightPassToId === p.id ? 10 : 2);
+
       if (
         (p.mode as string) !== 'STUNNED' &&
+        !isPasserOnCooldown &&
         this.puck.carrierId === null &&
-        dist(p.pos, this.puck.pos) <= this.cfg.skaterRadius + this.cfg.puckRadius + 2
+        dist(p.pos, this.puck.pos) <= pickupRadius
       ) {
         this.gainPossession(p);
       }
@@ -897,17 +976,250 @@ export class MatchSimulation {
     if (this.puck.isScoringShot && this.puck.inFlightShotFrom !== null) {
       return;
     }
+
+    const receivedCleanPass = this.puck.inFlightPassToId === striker.id;
+    if (receivedCleanPass) {
+      striker.moodFocusOffset += this.cfg.oneTimerFocusBonus;
+      striker.reactionTimer = 1.0;
+      striker.reactionColor = '#38bdf8';
+    }
+
     this.puck.carrierId = striker.id;
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;
     this.puck.shotStartPos = null;
     this.puck.shooterId = null;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = null;
     this.currentPossessor = striker.team;
     this.lastPossessor = striker.team;
 
     striker.mode = 'POSSESSING';
     striker.possessionTimer = 0;
+    striker.passCheckTimer = this.cfg.passCheckIntervalSec;
     striker.attackPath = createCurvedPathToGoal(striker.pos, striker.team, this.rng);
+  }
+
+  /**
+   * Evaluates whether a possessing striker should pass to an open teammate.
+   * Uses existing Focus and Aggression stats:
+   * - pass_tendency = P_passTendency * focus * (1 - 0.5 * aggression)
+   * - pass_accuracy = P_passAccuracy * focus * (0.5 + 0.5 * stamina)
+   */
+  public tryPassPuck(carrier: PlayerEntity): boolean {
+    if (!this.cfg.enablePassing) return false;
+
+    const teammate = this.players.find(
+      (p) =>
+        p.role === 'striker' &&
+        p.team === carrier.team &&
+        p.id !== carrier.id &&
+        p.mode === 'DEFENDING'
+    );
+    if (!teammate) return false;
+
+    const distBetween = dist(carrier.pos, teammate.pos);
+    if (distBetween < 60) return false;
+
+    const oppGoal = getOpponentGoalPos(carrier.team);
+    const carrierGoalDist = dist(carrier.pos, oppGoal);
+    const teammateGoalDist = dist(teammate.pos, oppGoal);
+
+    const activeOpponents = this.players.filter(
+      (d) =>
+        d.role === 'striker' &&
+        d.team !== carrier.team &&
+        d.mode === 'DEFENDING'
+    );
+
+    let minOppDistToCarrier = Infinity;
+    let minOppDistToTeammate = Infinity;
+    for (const opp of activeOpponents) {
+      minOppDistToCarrier = Math.min(minOppDistToCarrier, dist(opp.pos, carrier.pos));
+      minOppDistToTeammate = Math.min(minOppDistToTeammate, dist(opp.pos, teammate.pos));
+    }
+
+    const isPressured = minOppDistToCarrier < 95 && minOppDistToTeammate > 60;
+    const isTeammateBetterPositioned =
+      teammateGoalDist < carrierGoalDist - 20 && minOppDistToTeammate > 60;
+
+    if (!isPressured && !isTeammateBetterPositioned) {
+      return false;
+    }
+
+    carrier.passCheckTimer = this.cfg.passCheckIntervalSec;
+    const tendency = computePassTendency(
+      carrier.focus,
+      carrier.aggression,
+      this.cfg
+    );
+    if (!this.rng.rollAgainst(tendency)) {
+      return false;
+    }
+
+    this.passPuck(carrier, teammate, false);
+    return true;
+  }
+
+  public passPuck(
+    passer: PlayerEntity,
+    receiver: PlayerEntity,
+    isGoalieOutlet: boolean = false
+  ): void {
+    const accuracy = isGoalieOutlet
+      ? clamp(0.85 + 0.15 * passer.focus, 0, 1)
+      : computePassAccuracy(passer.focus, passer.stamina, this.cfg);
+    const isAccurate = isGoalieOutlet || this.rng.rollAgainst(accuracy);
+
+    const passDist = dist(passer.pos, receiver.pos);
+    const leadSec = clamp(passDist / Math.max(200, this.cfg.passSpeed), 0.06, 0.32);
+    const aimX = clamp(
+      receiver.pos.x + receiver.vel.x * leadSec,
+      HOME_GOAL_X + 48,
+      AWAY_GOAL_X - 48
+    );
+    const aimY = clamp(
+      receiver.pos.y + receiver.vel.y * leadSec,
+      36,
+      RINK_HEIGHT - 36
+    );
+
+    let dir = normalize({
+      x: aimX - passer.pos.x,
+      y: aimY - passer.pos.y,
+    });
+
+    if (!isAccurate) {
+      const errAngle = this.rng.sign() * this.rng.range(0.32, 0.55);
+      const cosA = Math.cos(errAngle);
+      const sinA = Math.sin(errAngle);
+      dir = {
+        x: dir.x * cosA - dir.y * sinA,
+        y: dir.x * sinA + dir.y * cosA,
+      };
+    }
+
+    const speed = isAccurate ? this.cfg.passSpeed : this.cfg.passSpeed * 0.78;
+
+    passer.mode = 'DEFENDING';
+    passer.stateTimer = 0;
+    passer.possessionTimer = 0;
+    passer.passCheckTimer = this.cfg.passCheckIntervalSec;
+    passer.attackPath = null;
+    passer.collisionCooldown = 0.45;
+
+    const launchOffset =
+      passer.role === 'goalie'
+        ? this.cfg.creaseRadius + this.cfg.puckRadius + 4
+        : this.cfg.skaterRadius + this.cfg.puckRadius + 4;
+    const launchOrigin =
+      passer.role === 'goalie'
+        ? {
+            x: passer.team === 'home' ? HOME_GOAL_X : AWAY_GOAL_X,
+            y: CENTER_Y,
+          }
+        : passer.pos;
+
+    const launchPos = {
+      x: clamp(
+        launchOrigin.x + dir.x * launchOffset,
+        this.cfg.puckRadius + 4,
+        RINK_WIDTH - this.cfg.puckRadius - 4
+      ),
+      y: clamp(
+        launchOrigin.y + dir.y * launchOffset,
+        this.cfg.puckRadius + 4,
+        RINK_HEIGHT - this.cfg.puckRadius - 4
+      ),
+    };
+
+    this.puck.carrierId = null;
+    this.currentPossessor = null;
+    this.lastPossessor = passer.team;
+    this.puck.inFlightShotFrom = null;
+    this.puck.isScoringShot = false;
+    this.puck.shotStartPos = null;
+    this.puck.shooterId = null;
+    this.puck.inFlightPassToId = isAccurate ? receiver.id : null;
+    this.puck.inFlightPassFromId = passer.id;
+    this.puck.pos = launchPos;
+    this.puck.vel = { x: dir.x * speed, y: dir.y * speed };
+    this.puck.trail = [{ ...launchPos }];
+
+    this.events.push({
+      type: 'PASS',
+      period: this.period,
+      timeRemainingSec: this.periodTimeRemainingSec,
+      team: passer.team,
+      playerId: passer.id,
+      targetPlayerId: receiver.id,
+      activeSongId: this.activeSong?.songId ?? null,
+      activeSongTarget: this.activeSong?.target ?? null,
+    });
+
+    this.spawnCallout(
+      isGoalieOutlet ? 'OUTLET PASS!' : isAccurate ? 'PASS!' : 'WILD PASS!',
+      passer.pos,
+      isAccurate ? '#38bdf8' : '#fb923c',
+      1.4
+    );
+  }
+
+  public releaseGoalieOutletPass(goalie: PlayerEntity): void {
+    goalie.mode = 'DEFENDING';
+    goalie.stateTimer = 0;
+
+    const teammates = this.players.filter(
+      (p) =>
+        p.role === 'striker' &&
+        p.team === goalie.team &&
+        p.mode !== 'PENALTY_BOX' &&
+        p.mode !== 'FIGHTING' &&
+        p.mode !== 'STUNNED'
+    );
+
+    if (teammates.length > 0) {
+      // Pick the most open friendly striker (furthest from opposing defenders)
+      const opponents = this.players.filter(
+        (d) =>
+          d.role === 'striker' &&
+          d.team !== goalie.team &&
+          d.mode !== 'PENALTY_BOX' &&
+          d.mode !== 'FIGHTING'
+      );
+      let bestTarget = teammates[0];
+      let bestClearance = -1;
+      for (const tm of teammates) {
+        let minOppDist = 9999;
+        for (const opp of opponents) {
+          minOppDist = Math.min(minOppDist, dist(tm.pos, opp.pos));
+        }
+        if (minOppDist > bestClearance) {
+          bestClearance = minOppDist;
+          bestTarget = tm;
+        }
+      }
+      this.passPuck(goalie, bestTarget, true);
+      return;
+    }
+
+    // Fallback if both teammates are in the penalty box or fighting: clear puck toward center ice
+    const dirX = goalie.team === 'home' ? 1 : -1;
+    const clearAngle = this.rng.sign() * 0.35;
+    const vx = dirX * Math.cos(clearAngle) * this.cfg.passSpeed;
+    const vy = Math.sin(clearAngle) * this.cfg.passSpeed;
+    const creaseX = goalie.team === 'home' ? HOME_GOAL_X : AWAY_GOAL_X;
+    this.puck.carrierId = null;
+    this.currentPossessor = null;
+    this.lastPossessor = goalie.team;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = goalie.id;
+    this.puck.pos = {
+      x: creaseX + dirX * (this.cfg.creaseRadius + this.cfg.puckRadius + 6),
+      y: CENTER_Y,
+    };
+    this.puck.vel = { x: vx, y: vy };
+    this.spawnCallout('GOALIE CLEAR!', goalie.pos, '#38bdf8', 1.4);
   }
 
   public shootPuck(striker: PlayerEntity): void {
@@ -962,6 +1274,8 @@ export class MatchSimulation {
     this.puck.shotStartPos = { ...launchPos };
     this.puck.shooterAccuracy = shooterAccuracy;
     this.puck.shooterId = striker.id;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = null;
     this.puck.pos = launchPos;
     this.puck.vel = { x: dir.x * speed, y: dir.y * speed };
     this.puck.trail = [{ ...launchPos }];
@@ -1165,7 +1479,16 @@ export class MatchSimulation {
   private stepPuck(dtSec: number): void {
     if (this.puck.carrierId !== null) {
       const carrier = this.players.find((p) => p.id === this.puck.carrierId);
-      if (carrier && carrier.mode === 'POSSESSING') {
+      if (carrier && carrier.role === 'goalie' && carrier.mode === 'HOLDING_PUCK') {
+        const gloveOffsetX = carrier.team === 'home' ? 12 : -12;
+        this.puck.pos = {
+          x: carrier.pos.x + gloveOffsetX,
+          y: carrier.pos.y + 4,
+        };
+        this.puck.vel = { x: 0, y: 0 };
+        this.recordPuckTrail();
+        return;
+      } else if (carrier && carrier.mode === 'POSSESSING') {
         const dir = normalize(carrier.vel);
         this.puck.pos = {
           x: clamp(carrier.pos.x + dir.x * 14, this.cfg.puckRadius, RINK_WIDTH - this.cfg.puckRadius),
@@ -1185,6 +1508,10 @@ export class MatchSimulation {
     this.puck.pos.y += this.puck.vel.y * dtSec;
     if (!this.puck.isScoringShot) {
       this.puck.vel = applyPuckFriction(this.puck.vel, dtSec, this.cfg);
+      if (Math.hypot(this.puck.vel.x, this.puck.vel.y) < 35) {
+        this.puck.inFlightPassToId = null;
+        this.puck.inFlightPassFromId = null;
+      }
     }
 
     // Check shot interception by opposing goalie or goal-line crossing into net
@@ -1205,7 +1532,7 @@ export class MatchSimulation {
             return;
           }
         } else {
-          // Saved shot is intercepted at the goalie crease and redirected at 60 degrees
+          // Saved shot is intercepted at the goalie crease
           const reachedGoalieCrease =
             dist(this.puck.pos, goalie.pos) <= this.cfg.creaseRadius ||
             (defendingTeam === 'home' && this.puck.pos.x <= HOME_GOAL_X + 14) ||
@@ -1230,6 +1557,8 @@ export class MatchSimulation {
       this.puck.vel = bounced.vel;
       if (bounced.bounced) {
         this.puck.inFlightShotFrom = null;
+        this.puck.inFlightPassToId = null;
+        this.puck.inFlightPassFromId = null;
       }
 
       // If a loose puck drifts into either goalie-only crease, the goalie pokes it out
@@ -1264,6 +1593,8 @@ export class MatchSimulation {
             this.rng
           );
           this.puck.inFlightShotFrom = null;
+          this.puck.inFlightPassToId = null;
+          this.puck.inFlightPassFromId = null;
         }
       }
     }
@@ -1318,6 +1649,8 @@ export class MatchSimulation {
 
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = null;
     this.puck.vel = { x: 0, y: 0 };
     this.puck.pos = {
       x: goalie.team === 'home' ? HOME_GOAL_X - 11 : AWAY_GOAL_X + 11,
@@ -1337,7 +1670,67 @@ export class MatchSimulation {
   }
 
   private resolveGoalieSave(goalie: PlayerEntity): void {
-    // BLOCKED / REDIRECTED AT 60 DEGREES TOWARD HORIZONTAL CENTER LINE
+    const critChance = computeCritSaveChance(
+      goalie.focus,
+      goalie.stamina,
+      this.cfg
+    );
+    const isCritSave = this.rng.rollAgainst(critChance);
+
+    this.puck.inFlightShotFrom = null;
+    this.puck.isScoringShot = false;
+    this.puck.shotStartPos = null;
+    this.puck.shooterId = null;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = null;
+
+    if (isCritSave) {
+      // CRITICAL SAVE (GLOVE CATCH & HOLD):
+      // Goalie catches and holds the puck, forcing opposing strikers to retreat
+      // before the goalie sends an outlet pass to a teammate!
+      goalie.mode = 'HOLDING_PUCK';
+      goalie.stateTimer = this.cfg.goalieHoldDurationSec;
+      goalie.stamina = clamp(
+        goalie.stamina - this.cfg.goalieSaveStaminaDrain * 0.5,
+        0,
+        1
+      );
+      goalie.moodFocusOffset += this.cfg.moodSaveGoalieFocus * 1.5;
+      goalie.reactionTimer = 1.4;
+      goalie.reactionColor = '#facc15';
+
+      this.puck.carrierId = goalie.id;
+      this.currentPossessor = goalie.team;
+      this.lastPossessor = goalie.team;
+      const gloveOffsetX = goalie.team === 'home' ? 12 : -12;
+      this.puck.pos = {
+        x: goalie.pos.x + gloveOffsetX,
+        y: goalie.pos.y + 4,
+      };
+      this.puck.vel = { x: 0, y: 0 };
+
+      this.events.push({
+        type: 'SAVE',
+        period: this.period,
+        timeRemainingSec: this.periodTimeRemainingSec,
+        team: goalie.team,
+        playerId: goalie.id,
+        isCritSave: true,
+        activeSongId: this.activeSong?.songId ?? null,
+        activeSongTarget: this.activeSong?.target ?? null,
+      });
+
+      this.spawnCallout('🧤 CRIT SAVE! (HOLD)', goalie.pos, '#facc15', 1.8);
+      this.triggerCue(
+        'BREAKAWAY',
+        'charge',
+        goalie.team,
+        `GLOVE CATCH! PLAY CHARGE (${goalie.team.toUpperCase()}) FOR COUNTER-ATTACK!`
+      );
+      return;
+    }
+
+    // STANDARD REBOUND SAVE: BLOCKED / REDIRECTED AT 60 DEGREES TOWARD HORIZONTAL CENTER LINE
     const incomingSpeed = Math.hypot(this.puck.vel.x, this.puck.vel.y);
     this.puck.vel = computeReboundVelocity(
       goalie.team,
@@ -1346,10 +1739,6 @@ export class MatchSimulation {
       this.cfg,
       this.rng
     );
-    this.puck.inFlightShotFrom = null;
-    this.puck.isScoringShot = false;
-    this.puck.shotStartPos = null;
-    this.puck.shooterId = null;
 
     goalie.stamina = clamp(
       goalie.stamina - this.cfg.goalieSaveStaminaDrain,
@@ -1364,6 +1753,7 @@ export class MatchSimulation {
       timeRemainingSec: this.periodTimeRemainingSec,
       team: goalie.team,
       playerId: goalie.id,
+      isCritSave: false,
       activeSongId: this.activeSong?.songId ?? null,
       activeSongTarget: this.activeSong?.target ?? null,
     });

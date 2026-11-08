@@ -11,6 +11,9 @@ export interface PlayerBaselineConfig {
 }
 
 export interface GameConfig {
+  // Feature toggles
+  enablePassing: boolean;
+
   // Formula constants
   G_goalieBlock: number;
   S_skateSpeed: number;
@@ -18,6 +21,9 @@ export interface GameConfig {
   A_shooterAccuracy: number;
   F_fightChance: number;
   T_stealChance: number;
+  P_passTendency: number;
+  P_passAccuracy: number;
+  C_critSaveChance: number;
 
   // Stat clamps & floors
   minGoalChance: number;
@@ -34,6 +40,8 @@ export interface GameConfig {
   moodHalfLifeSec: number;
   maxPossessionSec: number;
   faceoffCountdownRealSec: number;
+  goalieHoldDurationSec: number;
+  passCheckIntervalSec: number;
 
   // Physics constants
   minShotDistance: number;
@@ -41,6 +49,7 @@ export interface GameConfig {
   puckFrictionPerSec: number;
   boardRestitution: number;
   shotBaseSpeed: number;
+  passSpeed: number;
   reboundSpeedRatio: number;
   skaterRadius: number;
   puckRadius: number;
@@ -65,6 +74,7 @@ export interface GameConfig {
   moodConcedeTeamAggression: number;
   moodSaveGoalieFocus: number;
   moodLeaveBoxAggression: number;
+  oneTimerFocusBonus: number;
 
   // Song slot limit & loadout
   maxSongSlots: number;
@@ -101,12 +111,17 @@ export interface GameConfig {
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
+  enablePassing: true,
+
   G_goalieBlock: 0.92,
   S_skateSpeed: 220,
   R_redirectLatency: 1.4,
   A_shooterAccuracy: 0.72,
   F_fightChance: 0.65,
   T_stealChance: 0.55,
+  P_passTendency: 0.75,
+  P_passAccuracy: 0.88,
+  C_critSaveChance: 0.45,
 
   minGoalChance: 0.02,
   maxGoalChance: 0.90,
@@ -121,12 +136,15 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodHalfLifeSec: 8,
   maxPossessionSec: 4.0,
   faceoffCountdownRealSec: 1.5,
+  goalieHoldDurationSec: 1.2,
+  passCheckIntervalSec: 0.35,
 
   minShotDistance: 220,
   pushStrength: 40,
   puckFrictionPerSec: 0.6,
   boardRestitution: 0.6,
   shotBaseSpeed: 700,
+  passSpeed: 520,
   reboundSpeedRatio: 0.6,
   skaterRadius: 14,
   puckRadius: 5,
@@ -149,6 +167,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodConcedeTeamAggression: 0.10,
   moodSaveGoalieFocus: 0.10,
   moodLeaveBoxAggression: -0.10,
+  oneTimerFocusBonus: 0.12,
 
   maxSongSlots: 3,
   equippedSongs: [

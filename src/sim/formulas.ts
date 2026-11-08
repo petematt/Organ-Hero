@@ -116,3 +116,56 @@ export function computeStealChance(
     1
   );
 }
+
+/**
+ * pass_tendency = P_tendency * focus * (1 - 0.5 * aggression)
+ * High focus and lower aggression encourage team play and passing to open teammates.
+ */
+export function computePassTendency(
+  focus: number,
+  aggression: number,
+  cfg: GameConfig
+): number {
+  return clamp(
+    cfg.P_passTendency *
+      clamp(focus, 0, 1) *
+      (1 - 0.5 * clamp(aggression, 0, 1)),
+    0,
+    1
+  );
+}
+
+/**
+ * pass_accuracy = P_acc * focus * (0.5 + 0.5 * stamina)
+ */
+export function computePassAccuracy(
+  focus: number,
+  stamina: number,
+  cfg: GameConfig
+): number {
+  return clamp(
+    cfg.P_passAccuracy *
+      clamp(focus, 0, 1) *
+      (0.5 + 0.5 * clamp(stamina, 0, 1)),
+    0,
+    1
+  );
+}
+
+/**
+ * crit_save_chance = C_crit * focus * stamina
+ * Determines the probability that a saved shot is cleanly caught in the goalie's glove
+ * (forcing opposing strikers to retreat while the goalie sets up an outlet pass).
+ */
+export function computeCritSaveChance(
+  focus: number,
+  stamina: number,
+  cfg: GameConfig
+): number {
+  return clamp(
+    cfg.C_critSaveChance * clamp(focus, 0, 1) * clamp(stamina, 0, 1),
+    0,
+    1
+  );
+}
+

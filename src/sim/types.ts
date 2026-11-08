@@ -11,6 +11,7 @@ export type SongTarget = 'home' | 'away' | 'both';
 export type SkaterMode =
   | 'DEFENDING'
   | 'POSSESSING'
+  | 'HOLDING_PUCK'
   | 'STUNNED'
   | 'FIGHTING'
   | 'PENALTY_BOX';
@@ -63,8 +64,9 @@ export interface PlayerEntity {
 
   // State machine
   mode: SkaterMode;
-  stateTimer: number; // used for STUNNED, FIGHTING, PENALTY_BOX
+  stateTimer: number; // used for STUNNED, FIGHTING, PENALTY_BOX, HOLDING_PUCK
   possessionTimer: number;
+  passCheckTimer: number;
   fightPartnerId: string | null;
   isFightInstigator: boolean;
   collisionCooldown: number;
@@ -84,6 +86,8 @@ export interface PuckState {
   shotStartPos: Vec2 | null;
   shooterAccuracy: number;
   shooterId: string | null;
+  inFlightPassToId: string | null;
+  inFlightPassFromId: string | null;
   trail: Vec2[];
 }
 
@@ -118,6 +122,7 @@ export type MatchEventType =
   | 'GOAL'
   | 'SHOT'
   | 'SAVE'
+  | 'PASS'
   | 'STEAL'
   | 'FIGHT'
   | 'PENALTY'
@@ -129,6 +134,8 @@ export interface MatchEvent {
   timeRemainingSec: number;
   team?: Team;
   playerId?: string;
+  targetPlayerId?: string;
+  isCritSave?: boolean;
   activeSongId: SongId | null;
   activeSongTarget: SongTarget | null;
   songId?: SongId;
