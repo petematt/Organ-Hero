@@ -99,7 +99,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   maxGoalChance: 0.90,
   minStaminaSpeedFactor: 0.55,
 
-  periodDurationSec: 240,
+  periodDurationSec: 120,
   songActiveDurationSec: 10,
   cueWindowDurationSec: 5,
   brawlDurationSec: 6,
@@ -212,7 +212,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   ],
 };
 
-const STORAGE_KEY = 'organ_hero_config_v3';
+const STORAGE_KEY = 'organ_hero_config_v4';
 
 export function cloneConfig(cfg: GameConfig = DEFAULT_CONFIG): GameConfig {
   return JSON.parse(JSON.stringify(cfg));

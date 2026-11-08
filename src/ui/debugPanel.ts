@@ -27,6 +27,7 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
   {
     title: 'Song Modifiers & Timings (Game Sec)',
     items: [
+      { key: 'periodDurationSec', label: 'Period Length (s)', min: 30, max: 240, step: 15 },
       { key: 'songActiveDurationSec', label: 'Song Duration (s)', min: 4, max: 20, step: 1 },
       { key: 'cueWindowDurationSec', label: 'Cue Window (s)', min: 2, max: 10, step: 0.5 },
       { key: 'brawlDurationSec', label: 'Brawl Duration (s)', min: 2, max: 12, step: 1 },
