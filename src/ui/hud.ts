@@ -21,11 +21,6 @@ export class HudController {
   private hudOrderTitleEl = document.getElementById('hud-order-title')!;
   private hudOrderStatusEl = document.getElementById('hud-order-status')!;
 
-  private possBannerEl = document.getElementById('possession-banner')!;
-  private possDotEl = document.getElementById('poss-dot')!;
-  private possLabelEl = document.getElementById('poss-label')!;
-  private activeSongPillEl = document.getElementById('active-song-pill')!;
-  private activeSongTextEl = document.getElementById('active-song-text')!;
   private edgeTintEl = document.getElementById('edge-tint')!;
 
   private musicStandButtonsEl = document.querySelector(
@@ -40,7 +35,7 @@ export class HudController {
 
     this.musicStandButtonsEl.style.gridTemplateColumns = `repeat(${loadout.length}, minmax(0, 1fr))`;
     this.musicStandButtonsEl.innerHTML = loadout
-      .map((songId, idx) => {
+      .map((songId) => {
         const sDef = SONGS[songId];
         return `
           <button
@@ -51,13 +46,11 @@ export class HudController {
             style="--song-accent: ${sDef.color}"
           >
             <div class="song-btn-top">
-              <span class="song-key-hint">[${idx + 1}]</span>
               <span class="song-title">${sDef.buttonTitle}</span>
               <span id="stale-badge-${songId}" class="stale-badge hidden">STALE</span>
             </div>
             <div class="song-btn-desc">${sDef.shortDesc}</div>
             <div class="song-btn-target">
-              <span class="target-prefix">Target:</span>
               <span id="target-label-${songId}" class="target-pill target-home">HOME</span>
             </div>
             <div class="song-progress-bar">
@@ -126,44 +119,20 @@ export class HudController {
       this.hudOrderStatusEl.className = 'order-status-pill status-fail';
     }
 
-    // Compact Possession Indicator on the Organ Console
-    if (sim.currentPossessor !== null) {
-      const teamUpper = sim.currentPossessor.toUpperCase();
-      this.possBannerEl.className = `possession-banner poss-solid poss-${sim.currentPossessor}`;
-      this.possDotEl.textContent = '●';
-      this.possLabelEl.textContent = `${teamUpper} POSS`;
-    } else if (sim.lastPossessor !== null) {
-      const teamUpper = sim.lastPossessor.toUpperCase();
-      this.possBannerEl.className = `possession-banner poss-loose poss-${sim.lastPossessor}`;
-      this.possDotEl.textContent = '◌';
-      this.possLabelEl.textContent = `${teamUpper} LAST`;
-    } else {
-      this.possBannerEl.className = 'possession-banner poss-none';
-      this.possDotEl.textContent = '●';
-      this.possLabelEl.textContent = 'HOME DROP';
-    }
-
-    // Active song pill & screen-edge tint
+    // Screen-edge tint while a song is active
     if (sim.activeSong) {
       const sDef = SONGS[sim.activeSong.songId];
-      const rem = (sim.activeSong.remainingSec * 0.5).toFixed(1);
       const validNow = isSongValidOnIce(sim.activeSong.songId, sim.players);
-      const lockLabel = validNow
-        ? sim.activeSong.target.toUpperCase()
-        : 'NO PP';
-      this.activeSongPillEl.classList.remove('hidden');
-      this.activeSongTextEl.textContent = `♪ ${sDef.shortTitle} → ${lockLabel} (${rem}s)`;
       this.edgeTintEl.style.boxShadow = validNow
         ? `inset 0 0 36px ${sDef.color}55`
         : 'none';
     } else {
-      this.activeSongPillEl.classList.add('hidden');
       this.edgeTintEl.style.boxShadow = 'none';
     }
 
     const pp = getPowerPlayState(sim.players);
 
-    // Update Song Button live / locked target labels, cue glows, stale badges, and progress bars
+    // Update Song Button live / locked target pills, cue glows, stale badges, and progress bars
     for (const id of loadout) {
       const btn = document.getElementById(
         `btn-song-${id}`
@@ -192,34 +161,28 @@ export class HudController {
         targetLabelEl.textContent = 'NO POWER PLAY';
         targetLabelEl.className = 'target-pill target-inactive';
       } else if (id === 'grudge_toccata') {
-        targetLabelEl.textContent = isActive ? '🔒 BOTH' : 'BOTH TEAMS';
+        targetLabelEl.textContent = 'BOTH TEAMS';
         targetLabelEl.className = `target-pill target-both${
           isActive ? ' is-locked' : ''
         }`;
       } else if (id === 'power_play_polka') {
-        targetLabelEl.textContent = isActive
-          ? `🔒 ${effectiveTarget.toUpperCase()} (PP)`
-          : `${effectiveTarget.toUpperCase()} (PP)`;
+        targetLabelEl.textContent = `${effectiveTarget.toUpperCase()} (PP)`;
         targetLabelEl.className = `target-pill target-${effectiveTarget}${
           isActive ? ' is-locked' : ''
         }`;
       } else if (id === 'kill_the_clock') {
-        targetLabelEl.textContent = isActive
-          ? `🔒 ${effectiveTarget.toUpperCase()} (PK)`
-          : `${effectiveTarget.toUpperCase()} (PK)`;
+        targetLabelEl.textContent = `${effectiveTarget.toUpperCase()} (PK)`;
         targetLabelEl.className = `target-pill target-${effectiveTarget}${
           isActive ? ' is-locked' : ''
         }`;
       } else if (id === 'madeyalook') {
-        targetLabelEl.textContent = isActive
-          ? `🔒 ${effectiveTarget.toUpperCase()} G`
-          : `${effectiveTarget.toUpperCase()} (Goalie)`;
+        targetLabelEl.textContent = `${effectiveTarget.toUpperCase()} (Goalie)`;
         targetLabelEl.className = `target-pill target-${effectiveTarget}${
           isActive ? ' is-locked' : ''
         }`;
       } else if (id === 'charge') {
         targetLabelEl.textContent = isActive
-          ? `🔒 ${effectiveTarget.toUpperCase()}`
+          ? `${effectiveTarget.toUpperCase()}`
           : `${effectiveTarget.toUpperCase()} (${
               sim.currentPossessor ? 'Poss' : 'Last'
             })`;
@@ -228,7 +191,7 @@ export class HudController {
         }`;
       } else {
         targetLabelEl.textContent = isActive
-          ? `🔒 ${effectiveTarget.toUpperCase()}`
+          ? `${effectiveTarget.toUpperCase()}`
           : `${effectiveTarget.toUpperCase()} (Def)`;
         targetLabelEl.className = `target-pill target-${effectiveTarget}${
           isActive ? ' is-locked' : ''
@@ -250,4 +213,5 @@ export class HudController {
     }
   }
 }
+
 
