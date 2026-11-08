@@ -1,5 +1,10 @@
 import { evaluateOrder, getOrderById } from '../game/orders';
-import { resolveSongTarget, SONGS } from '../game/songs';
+import {
+  getPowerPlayState,
+  isSongValidOnIce,
+  resolveSongTarget,
+  SONGS,
+} from '../game/songs';
 import { MatchSimulation } from '../sim/match';
 import { SongId } from '../sim/types';
 
@@ -23,29 +28,51 @@ export class HudController {
   private activeSongTextEl = document.getElementById('active-song-text')!;
   private edgeTintEl = document.getElementById('edge-tint')!;
 
-  private targetLabelChargeEl = document.getElementById('target-label-charge')!;
-  private targetLabelHoldEl = document.getElementById('target-label-hold')!;
-  private targetLabelGrudgeEl = document.getElementById('target-label-grudge')!;
+  private musicStandButtonsEl = document.querySelector(
+    '.music-stand-buttons'
+  ) as HTMLElement;
+  private renderedLoadoutKey: string = '';
 
-  private songBtns: Record<SongId, HTMLButtonElement> = {
-    charge: document.getElementById('btn-song-charge') as HTMLButtonElement,
-    hold_the_line: document.getElementById('btn-song-hold') as HTMLButtonElement,
-    grudge_toccata: document.getElementById('btn-song-grudge') as HTMLButtonElement,
-  };
+  private ensureSongButtons(loadout: SongId[]): void {
+    const key = loadout.join(',');
+    if (key === this.renderedLoadoutKey) return;
+    this.renderedLoadoutKey = key;
 
-  private staleBadges: Record<SongId, HTMLElement> = {
-    charge: document.getElementById('stale-badge-charge')!,
-    hold_the_line: document.getElementById('stale-badge-hold_the_line')!,
-    grudge_toccata: document.getElementById('stale-badge-grudge_toccata')!,
-  };
-
-  private progressFills: Record<SongId, HTMLElement> = {
-    charge: document.getElementById('progress-charge')!,
-    hold_the_line: document.getElementById('progress-hold_the_line')!,
-    grudge_toccata: document.getElementById('progress-grudge_toccata')!,
-  };
+    this.musicStandButtonsEl.style.gridTemplateColumns = `repeat(${loadout.length}, minmax(0, 1fr))`;
+    this.musicStandButtonsEl.innerHTML = loadout
+      .map((songId, idx) => {
+        const sDef = SONGS[songId];
+        return `
+          <button
+            id="btn-song-${songId}"
+            class="song-btn song-${songId}"
+            type="button"
+            data-song="${songId}"
+            style="--song-accent: ${sDef.color}"
+          >
+            <div class="song-btn-top">
+              <span class="song-key-hint">[${idx + 1}]</span>
+              <span class="song-title">${sDef.buttonTitle}</span>
+              <span id="stale-badge-${songId}" class="stale-badge hidden">STALE</span>
+            </div>
+            <div class="song-btn-desc">${sDef.shortDesc}</div>
+            <div class="song-btn-target">
+              <span class="target-prefix">Target:</span>
+              <span id="target-label-${songId}" class="target-pill target-home">HOME</span>
+            </div>
+            <div class="song-progress-bar">
+              <div id="progress-${songId}" class="song-progress-fill"></div>
+            </div>
+          </button>
+        `;
+      })
+      .join('');
+  }
 
   public update(sim: MatchSimulation): void {
+    const loadout = sim.getActiveSongLoadout();
+    this.ensureSongButtons(loadout);
+
     this.scoreHomeEl.textContent = String(sim.homeScore);
     this.scoreAwayEl.textContent = String(sim.awayScore);
     this.periodLabelEl.textContent = `P${sim.period}`;
@@ -120,78 +147,107 @@ export class HudController {
     if (sim.activeSong) {
       const sDef = SONGS[sim.activeSong.songId];
       const rem = (sim.activeSong.remainingSec * 0.5).toFixed(1);
-      const lockLabel = sim.activeSong.target.toUpperCase();
+      const validNow = isSongValidOnIce(sim.activeSong.songId, sim.players);
+      const lockLabel = validNow
+        ? sim.activeSong.target.toUpperCase()
+        : 'NO PP';
       this.activeSongPillEl.classList.remove('hidden');
       this.activeSongTextEl.textContent = `♪ ${sDef.shortTitle} → ${lockLabel} (${rem}s)`;
-      this.edgeTintEl.style.boxShadow = `inset 0 0 36px ${sDef.color}55`;
+      this.edgeTintEl.style.boxShadow = validNow
+        ? `inset 0 0 36px ${sDef.color}55`
+        : 'none';
     } else {
       this.activeSongPillEl.classList.add('hidden');
       this.edgeTintEl.style.boxShadow = 'none';
     }
 
+    const pp = getPowerPlayState(sim.players);
+
     // Update Song Button live / locked target labels, cue glows, stale badges, and progress bars
-    const liveChargeTarget = resolveSongTarget(
-      'charge',
-      sim.currentPossessor,
-      sim.lastPossessor
-    );
-    const liveHoldTarget = resolveSongTarget(
-      'hold_the_line',
-      sim.currentPossessor,
-      sim.lastPossessor
-    );
+    for (const id of loadout) {
+      const btn = document.getElementById(
+        `btn-song-${id}`
+      ) as HTMLButtonElement | null;
+      const targetLabelEl = document.getElementById(`target-label-${id}`);
+      const staleBadge = document.getElementById(`stale-badge-${id}`);
+      const progFill = document.getElementById(`progress-${id}`);
+      if (!btn || !targetLabelEl || !staleBadge || !progFill) continue;
 
-    const chargeLocked = sim.activeSong?.songId === 'charge';
-    const chargeTarget =
-      chargeLocked && sim.activeSong ? sim.activeSong.target : liveChargeTarget;
-    this.targetLabelChargeEl.textContent = chargeLocked
-      ? `🔒 ${chargeTarget.toUpperCase()}`
-      : `${chargeTarget.toUpperCase()} (${
-          sim.currentPossessor ? 'Poss' : 'Last'
-        })`;
-    this.targetLabelChargeEl.className = `target-pill target-${chargeTarget}${
-      chargeLocked ? ' is-locked' : ''
-    }`;
-
-    const holdLocked = sim.activeSong?.songId === 'hold_the_line';
-    const holdTarget =
-      holdLocked && sim.activeSong ? sim.activeSong.target : liveHoldTarget;
-    this.targetLabelHoldEl.textContent = holdLocked
-      ? `🔒 ${holdTarget.toUpperCase()}`
-      : `${holdTarget.toUpperCase()} (Def)`;
-    this.targetLabelHoldEl.className = `target-pill target-${holdTarget}${
-      holdLocked ? ' is-locked' : ''
-    }`;
-
-    const grudgeLocked = sim.activeSong?.songId === 'grudge_toccata';
-    this.targetLabelGrudgeEl.textContent = grudgeLocked
-      ? '🔒 BOTH'
-      : 'BOTH TEAMS';
-    this.targetLabelGrudgeEl.className = `target-pill target-both${
-      grudgeLocked ? ' is-locked' : ''
-    }`;
-
-    const songIds: SongId[] = ['charge', 'hold_the_line', 'grudge_toccata'];
-    for (const id of songIds) {
-      const btn = this.songBtns[id];
-      const staleBadge = this.staleBadges[id];
-      const progFill = this.progressFills[id];
-
+      const sDef = SONGS[id];
+      const validOnIce = isSongValidOnIce(id, sim.players);
       const isActive = sim.activeSong?.songId === id;
-      const isCueMatch = sim.activeCue?.matchingSong === id;
+      const isCueMatch = validOnIce && sim.activeCue?.matchingSong === id;
       const isStale = sim.lastPlayedSongId === id;
+
+      const liveTarget = resolveSongTarget(
+        id,
+        sim.currentPossessor,
+        sim.lastPossessor,
+        sim.players
+      );
+      const effectiveTarget =
+        isActive && sim.activeSong ? sim.activeSong.target : liveTarget;
+
+      if (sDef.requiresPowerPlay && !pp.isPowerPlay) {
+        targetLabelEl.textContent = 'NO POWER PLAY';
+        targetLabelEl.className = 'target-pill target-inactive';
+      } else if (id === 'grudge_toccata') {
+        targetLabelEl.textContent = isActive ? '🔒 BOTH' : 'BOTH TEAMS';
+        targetLabelEl.className = `target-pill target-both${
+          isActive ? ' is-locked' : ''
+        }`;
+      } else if (id === 'power_play_polka') {
+        targetLabelEl.textContent = isActive
+          ? `🔒 ${effectiveTarget.toUpperCase()} (PP)`
+          : `${effectiveTarget.toUpperCase()} (PP)`;
+        targetLabelEl.className = `target-pill target-${effectiveTarget}${
+          isActive ? ' is-locked' : ''
+        }`;
+      } else if (id === 'kill_the_clock') {
+        targetLabelEl.textContent = isActive
+          ? `🔒 ${effectiveTarget.toUpperCase()} (PK)`
+          : `${effectiveTarget.toUpperCase()} (PK)`;
+        targetLabelEl.className = `target-pill target-${effectiveTarget}${
+          isActive ? ' is-locked' : ''
+        }`;
+      } else if (id === 'madeyalook') {
+        targetLabelEl.textContent = isActive
+          ? `🔒 ${effectiveTarget.toUpperCase()} G`
+          : `${effectiveTarget.toUpperCase()} (Goalie)`;
+        targetLabelEl.className = `target-pill target-${effectiveTarget}${
+          isActive ? ' is-locked' : ''
+        }`;
+      } else if (id === 'charge') {
+        targetLabelEl.textContent = isActive
+          ? `🔒 ${effectiveTarget.toUpperCase()}`
+          : `${effectiveTarget.toUpperCase()} (${
+              sim.currentPossessor ? 'Poss' : 'Last'
+            })`;
+        targetLabelEl.className = `target-pill target-${effectiveTarget}${
+          isActive ? ' is-locked' : ''
+        }`;
+      } else {
+        targetLabelEl.textContent = isActive
+          ? `🔒 ${effectiveTarget.toUpperCase()}`
+          : `${effectiveTarget.toUpperCase()} (Def)`;
+        targetLabelEl.className = `target-pill target-${effectiveTarget}${
+          isActive ? ' is-locked' : ''
+        }`;
+      }
 
       btn.classList.toggle('is-active', isActive);
       btn.classList.toggle('is-cue-glow', isCueMatch);
+      btn.classList.toggle('is-pp-disabled', Boolean(sDef.requiresPowerPlay && !pp.isPowerPlay));
       staleBadge.classList.toggle('hidden', !isStale);
 
       if (isActive && sim.activeSong) {
         const pct =
           (sim.activeSong.remainingSec / sim.activeSong.durationSec) * 100;
-        progFill.style.width = `${ Math.max(0, Math.min(100, pct)) }%`;
+        progFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
       } else {
         progFill.style.width = '0%';
       }
     }
   }
 }
+

@@ -1,3 +1,5 @@
+import { SongId } from './sim/types';
+
 export interface PlayerBaselineConfig {
   id: string;
   name: string;
@@ -64,6 +66,10 @@ export interface GameConfig {
   moodSaveGoalieFocus: number;
   moodLeaveBoxAggression: number;
 
+  // Song slot limit & loadout
+  maxSongSlots: number;
+  equippedSongs: SongId[];
+
   // Song modifiers
   chargeFocusBonus: number;
   chargeAggressionBonus: number;
@@ -73,6 +79,13 @@ export interface GameConfig {
   holdStrikerAggressionDelta: number;
   grudgeAggressionBonus: number;
   grudgeFocusDelta: number;
+  polkaFocusBonus: number;
+  polkaAggressionBonus: number;
+  killClockGoalieFocusBonus: number;
+  killClockGoalieStaminaInstant: number;
+  killClockStrikerFocusBonus: number;
+  killClockStrikerAggressionDelta: number;
+  madeyalookGoalieFocusDelta: number;
 
   // Crowd Volume parameters
   initialCrowdVolume: number;
@@ -137,6 +150,16 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodSaveGoalieFocus: 0.10,
   moodLeaveBoxAggression: -0.10,
 
+  maxSongSlots: 3,
+  equippedSongs: [
+    'charge',
+    'hold_the_line',
+    'grudge_toccata',
+    'power_play_polka',
+    'kill_the_clock',
+    'madeyalook',
+  ],
+
   chargeFocusBonus: 0.28,
   chargeAggressionBonus: 0.20,
   holdGoalieFocusBonus: 0.30,
@@ -145,6 +168,13 @@ export const DEFAULT_CONFIG: GameConfig = {
   holdStrikerAggressionDelta: -0.20,
   grudgeAggressionBonus: 0.30,
   grudgeFocusDelta: -0.20,
+  polkaFocusBonus: 0.35,
+  polkaAggressionBonus: 0.25,
+  killClockGoalieFocusBonus: 0.35,
+  killClockGoalieStaminaInstant: 0.20,
+  killClockStrikerFocusBonus: 0.30,
+  killClockStrikerAggressionDelta: -0.15,
+  madeyalookGoalieFocusDelta: -0.35,
 
   initialCrowdVolume: 50,
   songBaseCrowdBoost: 5,
@@ -212,7 +242,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   ],
 };
 
-const STORAGE_KEY = 'organ_hero_config_v4';
+const STORAGE_KEY = 'organ_hero_config_v5';
 
 export function cloneConfig(cfg: GameConfig = DEFAULT_CONFIG): GameConfig {
   return JSON.parse(JSON.stringify(cfg));
@@ -227,6 +257,9 @@ export function loadConfig(): GameConfig {
     return {
       ...cloneConfig(),
       ...parsed,
+      equippedSongs: Array.isArray(parsed.equippedSongs)
+        ? parsed.equippedSongs
+        : cloneConfig().equippedSongs,
       roster: Array.isArray(parsed.roster) ? parsed.roster : cloneConfig().roster,
     };
   } catch {

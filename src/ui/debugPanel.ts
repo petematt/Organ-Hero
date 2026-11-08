@@ -3,9 +3,13 @@ import {
   resetConfigStorage,
   saveConfig,
 } from '../config';
+import { ALL_SONG_IDS, SONGS } from '../game/songs';
+import { SongId } from '../sim/types';
+
+type NumericConfigKey = Exclude<keyof GameConfig, 'roster' | 'equippedSongs'>;
 
 interface SliderSpec {
-  key: Exclude<keyof GameConfig, 'roster'>;
+  key: NumericConfigKey;
   label: string;
   min: number;
   max: number;
@@ -36,6 +40,11 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
       { key: 'chargeAggressionBonus', label: 'Charge +Aggression', min: 0, max: 0.6, step: 0.05 },
       { key: 'holdGoalieFocusBonus', label: 'Hold +Goalie Focus', min: 0, max: 0.6, step: 0.05 },
       { key: 'grudgeAggressionBonus', label: 'Grudge +Aggression', min: 0, max: 0.6, step: 0.05 },
+      { key: 'polkaFocusBonus', label: 'Polka +Focus (PP)', min: 0, max: 0.6, step: 0.05 },
+      { key: 'polkaAggressionBonus', label: 'Polka +Agg (PP)', min: 0, max: 0.6, step: 0.05 },
+      { key: 'killClockGoalieFocusBonus', label: 'Kill Clock +Goalie Foc', min: 0, max: 0.6, step: 0.05 },
+      { key: 'killClockStrikerFocusBonus', label: 'Kill Clock +Striker Foc', min: 0, max: 0.6, step: 0.05 },
+      { key: 'madeyalookGoalieFocusDelta', label: 'Madeyalook Goalie ΔFoc', min: -0.6, max: 0, step: 0.05 },
     ],
   },
   {
@@ -85,9 +94,44 @@ export class DebugPanelController {
     }
   }
 
+  private normalizeEquippedSongs(cfg: GameConfig): SongId[] {
+    const list: SongId[] = [];
+    for (const id of cfg.equippedSongs ?? []) {
+      if (SONGS[id] && !list.includes(id)) {
+        list.push(id);
+      }
+    }
+    for (const id of ALL_SONG_IDS) {
+      if (!list.includes(id)) {
+        list.push(id);
+      }
+    }
+    return list;
+  }
+
   public render(): void {
     const cfg = this.getConfig();
     const seed = this.getCurrentSeed();
+    const maxSlots = Math.max(1, Math.min(6, Math.round(cfg.maxSongSlots ?? 3)));
+    const equipped = this.normalizeEquippedSongs(cfg);
+
+    const slotSelectsHtml = Array.from({ length: maxSlots }, (_, slotIdx) => {
+      const currentSongId = equipped[slotIdx] ?? ALL_SONG_IDS[slotIdx];
+      const optionsHtml = ALL_SONG_IDS.map(
+        (id) =>
+          `<option value="${id}" ${
+            id === currentSongId ? 'selected' : ''
+          }>${SONGS[id].shortTitle}${SONGS[id].requiresPowerPlay ? ' (PP)' : ''}</option>`
+      ).join('');
+      return `
+        <label class="debug-slider-row">
+          <span class="d-label">Slot [${slotIdx + 1}]</span>
+          <select class="debug-song-select" data-slot-idx="${slotIdx}">
+            ${optionsHtml}
+          </select>
+        </label>
+      `;
+    }).join('');
 
     const groupsHtml = SLIDER_GROUPS.map(
       (g) => `
@@ -168,6 +212,23 @@ export class DebugPanelController {
         </div>
       </div>
 
+      <div class="debug-section">
+        <h3>Song Loadout &amp; Slot Limit</h3>
+        <label class="debug-slider-row">
+          <span class="d-label">Max Song Slots</span>
+          <input
+            id="input-max-song-slots"
+            type="range"
+            min="1"
+            max="6"
+            step="1"
+            value="${maxSlots}"
+          />
+          <span class="d-val" id="dval-maxSongSlots">${maxSlots}</span>
+        </label>
+        ${slotSelectsHtml}
+      </div>
+
       ${groupsHtml}
 
       <div class="debug-section">
@@ -186,11 +247,46 @@ export class DebugPanelController {
       </div>
     `;
 
+    // Bind Max Song Slots slider
+    document.getElementById('input-max-song-slots')?.addEventListener('input', (e) => {
+      const target = e.target as HTMLInputElement;
+      const num = parseInt(target.value, 10);
+      if (!Number.isNaN(num)) {
+        const updated = this.getConfig();
+        updated.maxSongSlots = Math.max(1, Math.min(6, num));
+        updated.equippedSongs = this.normalizeEquippedSongs(updated);
+        saveConfig(updated);
+        this.onConfigChange(updated);
+        this.render();
+      }
+    });
+
+    // Bind per-slot song selection dropdowns (swapping duplicates cleanly)
+    this.bodyEl.querySelectorAll('select[data-slot-idx]').forEach((sel) => {
+      sel.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        const slotIdx = parseInt(target.dataset.slotIdx || '0', 10);
+        const chosenSong = target.value as SongId;
+        const updated = this.getConfig();
+        const nextEquipped = this.normalizeEquippedSongs(updated);
+        const existingIdx = nextEquipped.indexOf(chosenSong);
+        if (existingIdx !== -1 && existingIdx !== slotIdx) {
+          const prevSong = nextEquipped[slotIdx];
+          nextEquipped[existingIdx] = prevSong;
+        }
+        nextEquipped[slotIdx] = chosenSong;
+        updated.equippedSongs = nextEquipped;
+        saveConfig(updated);
+        this.onConfigChange(updated);
+        this.render();
+      });
+    });
+
     // Bind scalar sliders
     this.bodyEl.querySelectorAll('input[data-config-key]').forEach((input) => {
       input.addEventListener('input', (e) => {
         const target = e.target as HTMLInputElement;
-        const key = target.dataset.configKey as Exclude<keyof GameConfig, 'roster'>;
+        const key = target.dataset.configKey as NumericConfigKey;
         const num = parseFloat(target.value);
         if (!Number.isNaN(num)) {
           const updated = this.getConfig();
@@ -263,3 +359,4 @@ export class DebugPanelController {
     if (el) el.textContent = msg;
   }
 }
+

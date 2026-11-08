@@ -515,4 +515,99 @@ describe('Determinism & Breakdown Attribution', () => {
     expect(summary.savesAndStealsDuringHold).toBe(1);
     expect(summary.fightsDuringGrudge).toBe(1);
   });
+
+  it('limits active song loadout to maxSongSlots (default 3) and supports configuring slots & songs', () => {
+    const cfg = cloneConfig();
+    expect(cfg.maxSongSlots).toBe(3);
+
+    const sim = new MatchSimulation(cfg, 42);
+    expect(sim.getActiveSongLoadout()).toEqual([
+      'charge',
+      'hold_the_line',
+      'grudge_toccata',
+    ]);
+
+    sim.cfg.maxSongSlots = 6;
+    expect(sim.getActiveSongLoadout()).toEqual([
+      'charge',
+      'hold_the_line',
+      'grudge_toccata',
+      'power_play_polka',
+      'kill_the_clock',
+      'madeyalook',
+    ]);
+
+    sim.cfg.maxSongSlots = 3;
+    sim.cfg.equippedSongs = ['power_play_polka', 'kill_the_clock', 'madeyalook'];
+    expect(sim.getActiveSongLoadout()).toEqual([
+      'power_play_polka',
+      'kill_the_clock',
+      'madeyalook',
+    ]);
+  });
+
+  it('enforces that Power Play Polka and Kill the Clock effects are only valid during power plays', () => {
+    const sim = new MatchSimulation(cloneConfig(), 55);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+    const awayG = sim.players.find((p) => p.id === 'away-g')!;
+
+    // 1. Even strength (no one in PENALTY_BOX): Power Play Polka and Kill the Clock have NO effect
+    const baseHomeFocus = homeS1.baseFocus;
+    const baseAwayGoalieFocus = awayG.baseFocus;
+
+    const evenPlay = sim.playSong('power_play_polka');
+    expect(evenPlay.multiplier).toBe(0);
+    expect(homeS1.focus).toBeCloseTo(baseHomeFocus, 5);
+
+    const evenKill = sim.playSong('kill_the_clock');
+    expect(evenKill.multiplier).toBe(0);
+    expect(awayG.focus).toBeCloseTo(baseAwayGoalieFocus, 5);
+
+    // 2. Put Away striker in PENALTY_BOX -> Home is on Power Play, Away is on Penalty Kill
+    awayS1.mode = 'PENALTY_BOX';
+    awayS1.stateTimer = 30;
+
+    const ppPlay = sim.playSong('power_play_polka');
+    expect(ppPlay.target).toBe('home');
+    expect(ppPlay.multiplier).toBeGreaterThan(0);
+    expect(homeS1.focus).toBeCloseTo(baseHomeFocus + sim.cfg.polkaFocusBonus, 5);
+
+    // If penalty ends mid-song, power play effect immediately stops
+    awayS1.mode = 'DEFENDING';
+    sim.step(1 / 60);
+    expect(homeS1.focus).toBeCloseTo(baseHomeFocus, 5);
+
+    // 3. Re-enable Away penalty -> test Kill the Clock buffs Away (PK) goalie & remaining striker
+    awayS1.mode = 'PENALTY_BOX';
+    awayG.stamina = 0.6;
+    const pkPlay = sim.playSong('kill_the_clock');
+    expect(pkPlay.target).toBe('away');
+    expect(pkPlay.multiplier).toBeGreaterThan(0);
+    expect(awayG.focus).toBeCloseTo(
+      Math.min(1, baseAwayGoalieFocus + sim.cfg.killClockGoalieFocusBonus),
+      5
+    );
+    expect(awayG.stamina).toBeCloseTo(0.6 + sim.cfg.killClockGoalieStaminaInstant, 5);
+  });
+
+  it('debuffs the defending goalie focus when Madeyalook is played', () => {
+    const sim = new MatchSimulation(cloneConfig(), 66);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayG = sim.players.find((p) => p.id === 'away-g')!;
+
+    sim.gainPossession(homeS1);
+    const baseGoalieFocus = awayG.baseFocus;
+
+    const active = sim.playSong('madeyalook');
+    expect(active.target).toBe('away');
+    expect(awayG.focus).toBeCloseTo(
+      baseGoalieFocus + sim.cfg.madeyalookGoalieFocusDelta,
+      5
+    );
+    expect(awayG.focus).toBeLessThan(baseGoalieFocus);
+  });
 });
+

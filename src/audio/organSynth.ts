@@ -113,7 +113,7 @@ export class OrganSynth {
         { freq: 392.0, durationSec: 0.18, delaySec: 0.94, chord: [587.33] }, // G4
         { freq: 293.66, durationSec: 0.48, delaySec: 1.16, chord: [440.0, 587.33] }, // D4 resolve
       ];
-    } else {
+    } else if (songId === 'grudge_toccata') {
       // Grudge Toccata: Bach-style D minor dramatic chromatic motif
       sequence = [
         { freq: 587.33, durationSec: 0.11, delaySec: 0.0 }, // D5
@@ -125,6 +125,38 @@ export class OrganSynth {
         { freq: 392.0, durationSec: 0.13, delaySec: 0.97 }, // G4
         { freq: 369.99, durationSec: 0.16, delaySec: 1.10 }, // F#4
         { freq: 392.0, durationSec: 0.50, delaySec: 1.27, chord: [293.66, 466.16, 587.33] }, // Gm/D minor slam
+      ];
+    } else if (songId === 'power_play_polka') {
+      // Power Play Polka: Upbeat stadium oom-pah polka in F major
+      sequence = [
+        { freq: 174.61, durationSec: 0.13, delaySec: 0.0, chord: [349.23] }, // F3 oom
+        { freq: 523.25, durationSec: 0.12, delaySec: 0.15, chord: [349.23, 440.0] }, // C5 pah
+        { freq: 261.63, durationSec: 0.13, delaySec: 0.30, chord: [349.23] }, // C4 oom
+        { freq: 587.33, durationSec: 0.12, delaySec: 0.45, chord: [349.23, 466.16] }, // D5 pah
+        { freq: 174.61, durationSec: 0.13, delaySec: 0.60, chord: [349.23] }, // F3 oom
+        { freq: 659.25, durationSec: 0.12, delaySec: 0.75, chord: [392.0, 523.25] }, // E5 pah
+        { freq: 698.46, durationSec: 0.45, delaySec: 0.92, chord: [349.23, 440.0, 523.25] }, // F5 polka triumph!
+      ];
+    } else if (songId === 'kill_the_clock') {
+      // Kill the Clock: Ticking clockwork staccato organ ostinato in A minor
+      sequence = [
+        { freq: 440.0, durationSec: 0.11, delaySec: 0.0, chord: [220.0] }, // A4 tick
+        { freq: 329.63, durationSec: 0.11, delaySec: 0.18 }, // E4 tock
+        { freq: 440.0, durationSec: 0.11, delaySec: 0.36, chord: [220.0] }, // A4 tick
+        { freq: 329.63, durationSec: 0.11, delaySec: 0.54 }, // E4 tock
+        { freq: 466.16, durationSec: 0.11, delaySec: 0.72, chord: [233.08] }, // Bb4 tick
+        { freq: 329.63, durationSec: 0.11, delaySec: 0.90 }, // E4 tock
+        { freq: 440.0, durationSec: 0.42, delaySec: 1.08, chord: [220.0, 329.63, 523.25] }, // Am lockdown chord
+      ];
+    } else {
+      // Madeyalook: Taunting "Nyah-nyah-nyah-nyah-nyah-nyah!" goalie distraction motif
+      sequence = [
+        { freq: 783.99, durationSec: 0.16, delaySec: 0.0, chord: [392.0] }, // G5 "Made"
+        { freq: 659.25, durationSec: 0.16, delaySec: 0.18, chord: [329.63] }, // E5 "ya"
+        { freq: 880.0, durationSec: 0.24, delaySec: 0.36, chord: [440.0, 523.25] }, // A5 "look!"
+        { freq: 783.99, durationSec: 0.15, delaySec: 0.64, chord: [392.0] }, // G5
+        { freq: 659.25, durationSec: 0.15, delaySec: 0.81, chord: [329.63] }, // E5
+        { freq: 523.25, durationSec: 0.48, delaySec: 0.98, chord: [261.63, 329.63, 392.0] }, // C5 raspberry resolve
       ];
     }
 

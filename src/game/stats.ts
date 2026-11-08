@@ -19,8 +19,11 @@ export interface PeriodStatsSummary {
 
   // Song impact attribution
   goalsDuringCharge: number;
+  goalsDuringPolka: number;
+  goalsDuringMadeyalook: number;
   totalGoals: number;
   savesAndStealsDuringHold: number;
+  savesAndStealsDuringKillClock: number;
   fightsDuringGrudge: number;
   impactLines: string[];
 }
@@ -52,12 +55,18 @@ export function buildStatsSummary(
     charge: 0,
     hold_the_line: 0,
     grudge_toccata: 0,
+    power_play_polka: 0,
+    kill_the_clock: 0,
+    madeyalook: 0,
   };
   let cueHits = 0;
   let stalePlays = 0;
 
   let goalsDuringCharge = 0;
+  let goalsDuringPolka = 0;
+  let goalsDuringMadeyalook = 0;
   let savesAndStealsDuringHold = 0;
+  let savesAndStealsDuringKillClock = 0;
   let fightsDuringGrudge = 0;
 
   for (const ev of filteredEvents) {
@@ -72,6 +81,20 @@ export function buildStatsSummary(
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
           goalsDuringCharge++;
+        } else if (
+          ev.activeSongId === 'power_play_polka' &&
+          ev.team &&
+          ev.activeSongTarget &&
+          doesSongAffectTeam(ev.activeSongTarget, ev.team)
+        ) {
+          goalsDuringPolka++;
+        } else if (
+          ev.activeSongId === 'madeyalook' &&
+          ev.team &&
+          ev.activeSongTarget &&
+          !doesSongAffectTeam(ev.activeSongTarget, ev.team)
+        ) {
+          goalsDuringMadeyalook++;
         }
         break;
       case 'SHOT':
@@ -88,6 +111,13 @@ export function buildStatsSummary(
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
           savesAndStealsDuringHold++;
+        } else if (
+          ev.activeSongId === 'kill_the_clock' &&
+          ev.team &&
+          ev.activeSongTarget &&
+          doesSongAffectTeam(ev.activeSongTarget, ev.team)
+        ) {
+          savesAndStealsDuringKillClock++;
         }
         break;
       case 'STEAL':
@@ -98,6 +128,13 @@ export function buildStatsSummary(
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
           savesAndStealsDuringHold++;
+        } else if (
+          ev.activeSongId === 'kill_the_clock' &&
+          ev.team &&
+          ev.activeSongTarget &&
+          doesSongAffectTeam(ev.activeSongTarget, ev.team)
+        ) {
+          savesAndStealsDuringKillClock++;
         }
         break;
       case 'FIGHT':
@@ -110,7 +147,7 @@ export function buildStatsSummary(
         penaltyMinutes += 2; // 2 minor-penalty minutes per penalty box trip (30s sim clock)
         break;
       case 'SONG_PLAYED':
-        if (ev.songId) {
+        if (ev.songId && songsPlayed[ev.songId] !== undefined) {
           songsPlayed[ev.songId]++;
         }
         if (ev.cueHit) cueHits++;
@@ -127,21 +164,35 @@ export function buildStatsSummary(
       : 50;
 
   const impactLines: string[] = [];
+  const totalOrganGoals = goalsDuringCharge + goalsDuringPolka + goalsDuringMadeyalook;
   if (totalGoals > 0) {
-    impactLines.push(
-      `${goalsDuringCharge} of ${totalGoals} goal(s) were scored under your Charge! Fanfare.`
-    );
+    if (goalsDuringPolka > 0 || goalsDuringMadeyalook > 0) {
+      impactLines.push(
+        `${totalOrganGoals} of ${totalGoals} goal(s) scored under Organ buffs (Charge: ${goalsDuringCharge}, Polka: ${goalsDuringPolka}, Madeyalook: ${goalsDuringMadeyalook}).`
+      );
+    } else {
+      impactLines.push(
+        `${goalsDuringCharge} of ${totalGoals} goal(s) were scored under your Charge! Fanfare.`
+      );
+    }
   } else {
-    impactLines.push(`No goals scored yet — play Charge! on breakaways to boost accuracy.`);
+    impactLines.push(`No goals scored yet — play Charge!, Polka, or Madeyalook to boost scoring.`);
   }
 
-  if (savesAndStealsDuringHold > 0) {
-    impactLines.push(
-      `Hold the Line directly boosted ${savesAndStealsDuringHold} defensive save(s) & steal(s).`
-    );
+  const totalOrganDef = savesAndStealsDuringHold + savesAndStealsDuringKillClock;
+  if (totalOrganDef > 0) {
+    if (savesAndStealsDuringKillClock > 0) {
+      impactLines.push(
+        `Organ defense boosted ${totalOrganDef} save(s) & steal(s) (Hold: ${savesAndStealsDuringHold}, Kill Clock: ${savesAndStealsDuringKillClock}).`
+      );
+    } else {
+      impactLines.push(
+        `Hold the Line directly boosted ${savesAndStealsDuringHold} defensive save(s) & steal(s).`
+      );
+    }
   } else {
     impactLines.push(
-      `Hold the Line contributed 0 boosted saves/steals — tap it when shots or rebounds fly.`
+      `Hold the Line / Kill the Clock contributed 0 boosted saves/steals — tap when shots fly.`
     );
   }
 
@@ -171,9 +222,13 @@ export function buildStatsSummary(
     avgCrowdVolume,
     crowdSparkline: sparkline,
     goalsDuringCharge,
+    goalsDuringPolka,
+    goalsDuringMadeyalook,
     totalGoals,
     savesAndStealsDuringHold,
+    savesAndStealsDuringKillClock,
     fightsDuringGrudge,
     impactLines,
   };
 }
+

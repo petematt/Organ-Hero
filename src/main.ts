@@ -116,6 +116,7 @@ class OrganHeroApp {
       onConfigChange: (newCfg: GameConfig) => {
         this.cfg = newCfg;
         this.sim.cfg = newCfg;
+        this.hud.update(this.sim);
       },
       onRestartWithSeed: (seed: number) => {
         this.currentSeed = seed;
@@ -220,20 +221,18 @@ class OrganHeroApp {
   }
 
   private bindControls(): void {
-    // Song buttons via Pointer Events
-    const songMap: { id: string; song: SongId }[] = [
-      { id: 'btn-song-charge', song: 'charge' },
-      { id: 'btn-song-hold', song: 'hold_the_line' },
-      { id: 'btn-song-grudge', song: 'grudge_toccata' },
-    ];
-
-    for (const item of songMap) {
-      const btn = document.getElementById(item.id);
-      btn?.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        this.triggerSong(item.song);
-      });
-    }
+    // Song buttons via Pointer Event delegation on .music-stand-buttons
+    const musicStandEl = document.querySelector('.music-stand-buttons');
+    musicStandEl?.addEventListener('pointerdown', (e) => {
+      const target = e.target as HTMLElement | null;
+      const btn = target?.closest<HTMLButtonElement>('[data-song]');
+      if (!btn) return;
+      e.preventDefault();
+      const songId = btn.dataset.song as SongId | undefined;
+      if (songId) {
+        this.triggerSong(songId);
+      }
+    });
 
     // Speed toggle (1x / 2x, default 2x)
     const speedBtn = document.getElementById('btn-speed-toggle')!;
@@ -273,20 +272,20 @@ class OrganHeroApp {
       this.debugPanel.toggle();
     });
 
-    // Keyboard shortcuts (1/2/3 for songs, Space for pause, F for fullscreen, ` for debug)
+    // Keyboard shortcuts (1..N for active song slots, Space for pause, F for fullscreen, ` for debug)
     window.addEventListener('keydown', (e) => {
       if (
         document.activeElement &&
-        ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)
       ) {
         return;
       }
-      if (e.key === '1') {
-        this.triggerSong('charge');
-      } else if (e.key === '2') {
-        this.triggerSong('hold_the_line');
-      } else if (e.key === '3') {
-        this.triggerSong('grudge_toccata');
+      const slotIdx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key);
+      if (slotIdx !== -1) {
+        const loadout = this.sim.getActiveSongLoadout();
+        if (slotIdx < loadout.length) {
+          this.triggerSong(loadout[slotIdx]);
+        }
       } else if (e.key === ' ') {
         e.preventDefault();
         this.togglePause();

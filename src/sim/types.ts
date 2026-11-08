@@ -1,5 +1,11 @@
 export type Team = 'home' | 'away';
-export type SongId = 'charge' | 'hold_the_line' | 'grudge_toccata';
+export type SongId =
+  | 'charge'
+  | 'hold_the_line'
+  | 'grudge_toccata'
+  | 'power_play_polka'
+  | 'kill_the_clock'
+  | 'madeyalook';
 export type SongTarget = 'home' | 'away' | 'both';
 
 export type SkaterMode =
@@ -9,7 +15,13 @@ export type SkaterMode =
   | 'FIGHTING'
   | 'PENALTY_BOX';
 
-export type CueType = 'BREAKAWAY' | 'SHOT_OR_REBOUND' | 'TEMPER_FLARING';
+export type CueType =
+  | 'BREAKAWAY'
+  | 'SHOT_OR_REBOUND'
+  | 'TEMPER_FLARING'
+  | 'POWER_PLAY'
+  | 'PENALTY_KILL'
+  | 'GOALIE_TAUNT';
 
 export interface Vec2 {
   x: number;

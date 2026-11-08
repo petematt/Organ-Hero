@@ -1,7 +1,10 @@
 import { cloneConfig, GameConfig } from '../config';
 import {
+  ALL_SONG_IDS,
   doesSongAffectTeam,
+  getPowerPlayState,
   getSongStatModifiers,
+  isSongValidOnIce,
   oppositeTeam,
   resolveSongTarget,
   SONGS,
@@ -248,6 +251,28 @@ export class MatchSimulation {
     });
   }
 
+  public getActiveSongLoadout(): SongId[] {
+    const limit = clamp(Math.round(this.cfg.maxSongSlots ?? 3), 1, 6);
+    const raw =
+      Array.isArray(this.cfg.equippedSongs) && this.cfg.equippedSongs.length > 0
+        ? this.cfg.equippedSongs
+        : ALL_SONG_IDS;
+    const result: SongId[] = [];
+    for (const id of raw) {
+      if (SONGS[id] && !result.includes(id)) {
+        result.push(id);
+      }
+      if (result.length >= limit) break;
+    }
+    for (const fallback of ALL_SONG_IDS) {
+      if (result.length >= limit) break;
+      if (!result.includes(fallback)) {
+        result.push(fallback);
+      }
+    }
+    return result;
+  }
+
   public triggerCue(
     type: CueType,
     matchingSong: SongId,
@@ -264,16 +289,24 @@ export class MatchSimulation {
   }
 
   /**
-   * Player taps one of the 3 Organ Song buttons.
+   * Player taps one of the Organ Song buttons.
    */
   public playSong(songId: SongId): ActiveSongState {
-    const target = resolveSongTarget(songId, this.currentPossessor, this.lastPossessor);
+    const target = resolveSongTarget(
+      songId,
+      this.currentPossessor,
+      this.lastPossessor,
+      this.players
+    );
+    const validOnIce = isSongValidOnIce(songId, this.players);
 
     const cueHit =
-      this.activeCue !== null && this.activeCue.matchingSong === songId;
+      validOnIce &&
+      this.activeCue !== null &&
+      this.activeCue.matchingSong === songId;
     const stale = this.lastPlayedSongId === songId;
 
-    let multiplier = 1.0;
+    let multiplier = validOnIce ? 1.0 : 0.0;
     if (cueHit) multiplier *= 2.0;
     if (stale) multiplier *= 0.5;
 
@@ -290,7 +323,14 @@ export class MatchSimulation {
     this.lastPlayedSongId = songId;
     this.silenceTimerSec = 0;
 
-    if (cueHit) {
+    if (!validOnIce) {
+      this.spawnCallout(
+        'NO POWER PLAY! (NO EFFECT)',
+        { x: CENTER_X, y: 70 },
+        '#94a3b8',
+        2.4
+      );
+    } else if (cueHit) {
       this.activeCue = null;
       this.adjustCrowdVolume(this.cfg.cueHitCrowdBoost);
       this.spawnCallout('★ CUE HIT! 2x EFFECT! ★', { x: CENTER_X, y: 70 }, '#facc15', 2.6);
@@ -303,17 +343,28 @@ export class MatchSimulation {
 
     const songColor = SONGS[songId].color;
 
-    // Instant stamina boost on Hold the Line for defending goalie + visual reaction on affected players
-    for (const p of this.players) {
-      if (doesSongAffectTeam(target, p.team)) {
-        p.reactionTimer = 1.8;
-        p.reactionColor = songColor;
-        if (songId === 'hold_the_line' && p.role === 'goalie') {
-          p.stamina = clamp(
-            p.stamina + this.cfg.holdGoalieStaminaInstant * multiplier,
-            0,
-            1
-          );
+    // Instant stamina boost & visual reaction on affected players when song effect is valid
+    if (validOnIce) {
+      for (const p of this.players) {
+        if (doesSongAffectTeam(target, p.team)) {
+          if (songId === 'madeyalook' && p.role !== 'goalie') {
+            continue;
+          }
+          p.reactionTimer = 1.8;
+          p.reactionColor = songColor;
+          if (songId === 'hold_the_line' && p.role === 'goalie') {
+            p.stamina = clamp(
+              p.stamina + this.cfg.holdGoalieStaminaInstant * multiplier,
+              0,
+              1
+            );
+          } else if (songId === 'kill_the_clock' && p.role === 'goalie') {
+            p.stamina = clamp(
+              p.stamina + this.cfg.killClockGoalieStaminaInstant * multiplier,
+              0,
+              1
+            );
+          }
         }
       }
     }
@@ -474,7 +525,8 @@ export class MatchSimulation {
           this.activeSong.multiplier,
           p.team,
           p.role,
-          this.cfg
+          this.cfg,
+          this.players
         );
         songFocus = mods.focusDelta;
         songAgg = mods.aggressionDelta;
@@ -549,6 +601,25 @@ export class MatchSimulation {
               '#fb923c',
               2.5
             );
+            const pp = getPowerPlayState(this.players);
+            if (pp.isPowerPlay) {
+              const loadout = this.getActiveSongLoadout();
+              if (loadout.includes('power_play_polka') && pp.powerPlayTeam) {
+                this.triggerCue(
+                  'POWER_PLAY',
+                  'power_play_polka',
+                  pp.powerPlayTeam,
+                  `POWER PLAY (${pp.powerPlayTeam.toUpperCase()})! PLAY POWER PLAY POLKA!`
+                );
+              } else if (loadout.includes('kill_the_clock') && pp.penaltyKillTeam) {
+                this.triggerCue(
+                  'PENALTY_KILL',
+                  'kill_the_clock',
+                  pp.penaltyKillTeam,
+                  `SHORTHANDED (${pp.penaltyKillTeam.toUpperCase()})! PLAY KILL THE CLOCK!`
+                );
+              }
+            }
           } else {
             p.stamina = clamp(p.stamina - this.cfg.brawlLoserStaminaHit, 0, 1);
             p.mode = 'STUNNED';
@@ -781,12 +852,35 @@ export class MatchSimulation {
         (carrier.team === 'home' ? d.pos.x > carrier.pos.x : d.pos.x < carrier.pos.x)
     );
     if (defendersAhead.length === 0) {
-      this.triggerCue(
-        'BREAKAWAY',
-        'charge',
-        carrier.team,
-        `BREAKAWAY (${carrier.team.toUpperCase()})! PLAY CHARGE!`
-      );
+      const loadout = this.getActiveSongLoadout();
+      const pp = getPowerPlayState(this.players);
+      if (
+        pp.isPowerPlay &&
+        pp.powerPlayTeam === carrier.team &&
+        loadout.includes('power_play_polka')
+      ) {
+        this.triggerCue(
+          'POWER_PLAY',
+          'power_play_polka',
+          carrier.team,
+          `POWER PLAY BREAKAWAY (${carrier.team.toUpperCase()})! PLAY POWER PLAY POLKA!`
+        );
+      } else if (loadout.includes('charge')) {
+        this.triggerCue(
+          'BREAKAWAY',
+          'charge',
+          carrier.team,
+          `BREAKAWAY (${carrier.team.toUpperCase()})! PLAY CHARGE!`
+        );
+      } else if (loadout.includes('madeyalook')) {
+        const defTeam = oppositeTeam(carrier.team);
+        this.triggerCue(
+          'GOALIE_TAUNT',
+          'madeyalook',
+          defTeam,
+          `BREAKAWAY! TAUNT ${defTeam.toUpperCase()} GOALIE — PLAY MADEYALOOK!`
+        );
+      }
     }
   }
 
