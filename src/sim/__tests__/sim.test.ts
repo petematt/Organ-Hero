@@ -64,16 +64,16 @@ describe('Simulation Formulas & Mood Drift', () => {
     // Normal range
     expect(computeGoalChance(0.65, 0.35, cfg)).toBeCloseTo(0.30);
 
-    // Unbuffed Sniper (0.55 focus) vs Away Goalie (0.70 focus, 0.85 stamina) -> clamped at 2%
+    // Unbuffed Sniper (0.55 focus) vs Away Goalie (0.70 focus, 0.85 stamina) -> clamped at 5%
     const unbuffedAcc = computeShooterAccuracy(0.55, cfg);
     const goalieBlock = computeGoalieBlockChance(0.70, 0.85, cfg);
     const unbuffedGoalChance = computeGoalChance(unbuffedAcc, goalieBlock, cfg);
     expect(unbuffedGoalChance).toBeCloseTo(cfg.minGoalChance);
 
-    // Charge! Cue Hit Sniper (1.00 focus) vs same Goalie -> >8x higher goal chance
+    // Charge! Cue Hit Sniper (1.00 focus) vs same Goalie -> >7x higher goal chance (~35.6%)
     const buffedAcc = computeShooterAccuracy(1.0, cfg);
     const buffedGoalChance = computeGoalChance(buffedAcc, goalieBlock, cfg);
-    expect(buffedGoalChance).toBeGreaterThan(unbuffedGoalChance * 8);
+    expect(buffedGoalChance).toBeGreaterThan(unbuffedGoalChance * 7);
   });
 
   it('prevents zero skate_speed when stamina or aggression hits 0', () => {
@@ -688,6 +688,7 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
     }
     expect(simEnabled.puck.carrierId).toBe(s2.id);
     expect(s2.moodFocusOffset).toBeGreaterThan(prevOffset);
+    expect(s2.possessionTimer).toBeGreaterThanOrEqual(cfg.maxPossessionSec * 0.45);
   });
 
   it('catches the puck on a critical save, forces attacking strikers to retreat, and outlets a pass to a teammate', () => {
@@ -709,6 +710,7 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
     homeS1.pos = { x: 780, y: CENTER_Y - 20 };
     homeS2.pos = { x: 760, y: CENTER_Y + 40 };
 
+    const initialGoalieStamina = awayG.stamina;
     sim.gainPossession(homeS1);
     sim.shootPuck(homeS1);
 
@@ -720,6 +722,7 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
 
     expect(awayG.mode).toBe('HOLDING_PUCK');
     expect(sim.puck.carrierId).toBe(awayG.id);
+    expect(awayG.stamina).toBeLessThanOrEqual(initialGoalieStamina - cfg.goalieSaveStaminaDrain + 1e-6);
     expect(sim.events.some((e) => e.type === 'SAVE' && e.isCritSave === true)).toBe(true);
 
     const s1XAtCatch = homeS1.pos.x;

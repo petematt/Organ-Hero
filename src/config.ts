@@ -113,17 +113,17 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   enablePassing: true,
 
-  G_goalieBlock: 0.92,
+  G_goalieBlock: 0.78,
   S_skateSpeed: 220,
   R_redirectLatency: 1.4,
-  A_shooterAccuracy: 0.72,
+  A_shooterAccuracy: 0.82,
   F_fightChance: 0.65,
   T_stealChance: 0.55,
-  P_passTendency: 0.75,
+  P_passTendency: 0.45,
   P_passAccuracy: 0.88,
-  C_critSaveChance: 0.45,
+  C_critSaveChance: 0.25,
 
-  minGoalChance: 0.02,
+  minGoalChance: 0.05,
   maxGoalChance: 0.90,
   minStaminaSpeedFactor: 0.55,
 
@@ -136,8 +136,8 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodHalfLifeSec: 8,
   maxPossessionSec: 4.0,
   faceoffCountdownRealSec: 1.5,
-  goalieHoldDurationSec: 1.2,
-  passCheckIntervalSec: 0.35,
+  goalieHoldDurationSec: 1.0,
+  passCheckIntervalSec: 0.75,
 
   minShotDistance: 220,
   pushStrength: 40,
@@ -153,7 +153,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   strikerStaminaDrainPerSec: 0.0018,
   strikerCollisionStaminaDrain: 0.008,
   goalieStaminaDrainPerSec: 0.0006,
-  goalieSaveStaminaDrain: 0.015,
+  goalieSaveStaminaDrain: 0.025,
   penaltyBoxStaminaRecoveryPerSec: 0.015,
   brawlLoserStaminaHit: 0.08,
 
@@ -165,9 +165,9 @@ export const DEFAULT_CONFIG: GameConfig = {
   moodGoalTeamAggression: 0.05,
   moodConcedeGoalieFocus: -0.10,
   moodConcedeTeamAggression: 0.10,
-  moodSaveGoalieFocus: 0.10,
+  moodSaveGoalieFocus: 0.04,
   moodLeaveBoxAggression: -0.10,
-  oneTimerFocusBonus: 0.12,
+  oneTimerFocusBonus: 0.22,
 
   maxSongSlots: 3,
   equippedSongs: [
@@ -261,7 +261,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   ],
 };
 
-const STORAGE_KEY = 'organ_hero_config_v5';
+const STORAGE_KEY = 'organ_hero_config_v6';
 
 export function cloneConfig(cfg: GameConfig = DEFAULT_CONFIG): GameConfig {
   return JSON.parse(JSON.stringify(cfg));

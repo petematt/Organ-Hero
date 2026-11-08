@@ -995,7 +995,7 @@ export class MatchSimulation {
     this.lastPossessor = striker.team;
 
     striker.mode = 'POSSESSING';
-    striker.possessionTimer = 0;
+    striker.possessionTimer = receivedCleanPass ? this.cfg.maxPossessionSec * 0.45 : 0;
     striker.passCheckTimer = this.cfg.passCheckIntervalSec;
     striker.attackPath = createCurvedPathToGoal(striker.pos, striker.team, this.rng);
   }
@@ -1691,11 +1691,11 @@ export class MatchSimulation {
       goalie.mode = 'HOLDING_PUCK';
       goalie.stateTimer = this.cfg.goalieHoldDurationSec;
       goalie.stamina = clamp(
-        goalie.stamina - this.cfg.goalieSaveStaminaDrain * 0.5,
+        goalie.stamina - this.cfg.goalieSaveStaminaDrain,
         0,
         1
       );
-      goalie.moodFocusOffset += this.cfg.moodSaveGoalieFocus * 1.5;
+      goalie.moodFocusOffset += this.cfg.moodSaveGoalieFocus;
       goalie.reactionTimer = 1.4;
       goalie.reactionColor = '#facc15';
 
