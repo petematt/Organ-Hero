@@ -1,6 +1,8 @@
 import { OrganSynth } from './audio/organSynth';
+import { CampaignManager } from './campaign/campaignState';
+import { buildRosterForMatch } from './campaign/teams';
 import { GameConfig, loadConfig, saveConfig } from './config';
-import { pickRandomOrder } from './game/orders';
+import { evaluateOrder, pickRandomOrder } from './game/orders';
 import { MatchSimulation } from './sim/match';
 import { SeededRNG } from './sim/rng';
 import { OrderId, SongId } from './sim/types';
@@ -38,6 +40,8 @@ class OrganHeroApp {
   private screens: ScreenModalManager;
   private debugPanel: DebugPanelController;
   private synth: OrganSynth;
+  private campaign: CampaignManager;
+  private currentMatchRecorded: boolean = false;
 
   private speedMultiplier: 1 | 2 = 2; // Default 2x per user spec
   private isPaused: boolean = true;
@@ -47,11 +51,21 @@ class OrganHeroApp {
 
   constructor() {
     this.cfg = loadConfig();
+    this.campaign = new CampaignManager();
     const urlOpts = parseUrlParams();
     this.currentSeed =
       urlOpts.seed ?? Math.floor(1000 + Math.random() * 9000);
 
-    const initialOrder = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
+    const campMatch = this.campaign.getCurrentMatch();
+    if (campMatch) {
+      this.cfg.roster = buildRosterForMatch(campMatch.homeTeam, campMatch.awayTeam);
+      this.cfg.maxSongSlots = this.campaign.getState().maxSongSlots;
+      this.cfg.equippedSongs = [...this.campaign.getState().equippedSongs];
+    }
+
+    const initialOrder = campMatch
+      ? campMatch.assignedOrderId
+      : pickRandomOrder(new SeededRNG(this.currentSeed)).id;
     this.sim = new MatchSimulation(this.cfg, this.currentSeed, initialOrder);
     this.synth = new OrganSynth();
     this.bindAudioHooks();
@@ -68,12 +82,21 @@ class OrganHeroApp {
       },
       onPlayAgainNewSeed: () => {
         this.currentSeed = Math.floor(1000 + Math.random() * 9000);
-        const assigned = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
+        const nextCampMatch = this.campaign.getCurrentMatch();
+        const assigned = nextCampMatch
+          ? nextCampMatch.assignedOrderId
+          : pickRandomOrder(new SeededRNG(this.currentSeed)).id;
         this.startNewMatch(this.currentSeed, assigned);
       },
       onChangeOrder: () => {
         this.isPaused = true;
-        this.screens.showOrderClipboard(this.sim.orderId, this.currentSeed);
+        const cm = this.campaign.getCurrentMatch();
+        this.screens.showOrderClipboard(
+          this.sim.orderId,
+          this.currentSeed,
+          cm,
+          this.campaign.getOfficialReputationPct()
+        );
       },
     });
     this.hud = new HudController();
@@ -82,8 +105,16 @@ class OrganHeroApp {
       onTakeSeat: () => {
         this.synth.unlock();
         void this.enterFullscreenIfPossible();
-        const assigned = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
-        this.screens.showOrderClipboard(assigned, this.currentSeed);
+        const cm = this.campaign.getCurrentMatch();
+        const assigned = cm
+          ? cm.assignedOrderId
+          : pickRandomOrder(new SeededRNG(this.currentSeed)).id;
+        this.screens.showOrderClipboard(
+          assigned,
+          this.currentSeed,
+          cm,
+          this.campaign.getOfficialReputationPct()
+        );
       },
       onStartMatchWithOrder: (orderId: OrderId) => {
         void this.enterFullscreenIfPossible();
@@ -98,12 +129,26 @@ class OrganHeroApp {
       },
       onPlayAgainNewSeed: () => {
         this.currentSeed = Math.floor(1000 + Math.random() * 9000);
-        const assigned = pickRandomOrder(new SeededRNG(this.currentSeed)).id;
-        this.screens.showOrderClipboard(assigned, this.currentSeed);
+        const cm = this.campaign.getCurrentMatch();
+        const assigned = cm
+          ? cm.assignedOrderId
+          : pickRandomOrder(new SeededRNG(this.currentSeed)).id;
+        this.screens.showOrderClipboard(
+          assigned,
+          this.currentSeed,
+          cm,
+          this.campaign.getOfficialReputationPct()
+        );
       },
       onChangeOrder: () => {
         this.isPaused = true;
-        this.screens.showOrderClipboard(this.sim.orderId, this.currentSeed);
+        const cm = this.campaign.getCurrentMatch();
+        this.screens.showOrderClipboard(
+          this.sim.orderId,
+          this.currentSeed,
+          cm,
+          this.campaign.getOfficialReputationPct()
+        );
       },
       onResumeFromPause: () => {
         this.isPaused = false;
@@ -222,14 +267,27 @@ class OrganHeroApp {
     this.sim.audioHooks = {
       onWhistle: () => this.synth.playWhistle(),
       onGoalHorn: () => this.synth.playGoalHorn(),
-      onSongPlay: (songId, cueHit, stale) =>
-        this.synth.playSong(songId, cueHit, stale),
+      onSongPlay: (songId, cueHit, stale) => {
+        this.synth.playSong(songId, cueHit, stale);
+        if (cueHit) {
+          this.campaign.recordCueHit(songId);
+        }
+      },
     };
   }
 
   private startNewMatch(seed: number, orderId: OrderId): void {
     this.currentSeed = seed;
+    this.currentMatchRecorded = false;
     this.renderer.resetIceSummaryImmediate();
+
+    const campMatch = this.campaign.getCurrentMatch();
+    if (campMatch) {
+      this.cfg.roster = buildRosterForMatch(campMatch.homeTeam, campMatch.awayTeam);
+      this.cfg.maxSongSlots = this.campaign.getState().maxSongSlots;
+      this.cfg.equippedSongs = [...this.campaign.getState().equippedSongs];
+    }
+
     this.sim = new MatchSimulation(this.cfg, seed, orderId);
     this.bindAudioHooks();
     this.hasStartedMatch = true;
@@ -389,6 +447,37 @@ class OrganHeroApp {
         if (prevPhase !== this.sim.phase) {
           if (this.sim.phase === 'PERIOD_END' || this.sim.phase === 'MATCH_OVER') {
             this.isPaused = true;
+            if (this.sim.phase === 'MATCH_OVER' && !this.currentMatchRecorded) {
+              this.currentMatchRecorded = true;
+              const campMatch = this.campaign.getCurrentMatch();
+              if (campMatch) {
+                const evalRes = evaluateOrder(this.sim.orderId, {
+                  homeGoals: this.sim.homeScore,
+                  awayGoals: this.sim.awayScore,
+                  totalFights: this.sim.events.filter(
+                    (e) => e.type === 'FIGHT'
+                  ).length,
+                  averageCrowdVolume:
+                    this.sim.crowdSamples.reduce((a, b) => a + b.volume, 0) /
+                    (this.sim.crowdSamples.length || 1),
+                  isMatchOver: true,
+                });
+                const baseSalary = evalRes.passed
+                  ? Math.round(campMatch.baseSalary * campMatch.payoutMultiplier)
+                  : 0;
+                this.campaign.recordMatchEnd({
+                  homeScore: this.sim.homeScore,
+                  awayScore: this.sim.awayScore,
+                  officialOrderId: this.sim.orderId,
+                  officialOrderPassed: evalRes.passed,
+                  baseSalaryEarned: baseSalary,
+                  tipsOffered: 0,
+                  tipsPassed: 0,
+                  tipEarnings: 0,
+                  totalEarnings: baseSalary,
+                });
+              }
+            }
             this.renderer.beginIceSummary(this.sim);
             break;
           }

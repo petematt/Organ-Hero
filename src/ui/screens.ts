@@ -7,6 +7,8 @@ import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { MatchSimulation } from '../sim/match';
 import { OrderId } from '../sim/types';
 
+import { MatchScheduleEntry } from '../campaign/schedule';
+
 export interface ScreenCallbacks {
   onTakeSeat: () => void;
   onStartMatchWithOrder: (orderId: OrderId) => void;
@@ -78,9 +80,14 @@ export class ScreenModalManager {
   }
 
   /**
-   * 2. Pre-Match Official Orders Clipboard with Random Order + Test Picker.
+   * 2. Pre-Match Official Orders Clipboard with Campaign Match Context.
    */
-  public showOrderClipboard(assignedOrderId: OrderId, seed: number): void {
+  public showOrderClipboard(
+    assignedOrderId: OrderId,
+    seed: number,
+    campaignMatch?: MatchScheduleEntry | null,
+    officialRepPct?: number
+  ): void {
     this.backdropEl.classList.remove('hidden');
     let selectedId: OrderId = assignedOrderId;
 
@@ -106,12 +113,41 @@ export class ScreenModalManager {
         `
       ).join('');
 
+      const campaignHeaderHtml = campaignMatch
+        ? `
+          <div class="campaign-match-banner" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
+              <span>MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
+              <span style="color: ${officialRepPct !== undefined && officialRepPct < 75 ? '#fb7185' : '#4ade80'}">JOB SECURITY: ${officialRepPct ?? 100}%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+              <div style="font-size: 16px; font-weight: 800; color: #f8fafc;">
+                <span style="color: #38bdf8">${campaignMatch.homeTeam.shortName}</span>
+                <span style="color: #64748b; font-size: 13px; margin: 0 4px;">vs</span>
+                <span style="color: ${campaignMatch.awayTeam.primaryColor}">${campaignMatch.awayTeam.name}</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 800; color: #facc15;">
+                SALARY: $${Math.round(campaignMatch.baseSalary * campaignMatch.payoutMultiplier)}
+              </div>
+            </div>
+            ${
+              campaignMatch.hasOpposingOrganist && campaignMatch.opposingOrganist
+                ? `<div style="margin-top: 6px; font-size: 11px; color: #fb7185; background: rgba(244,63,94,0.12); padding: 4px 8px; border-radius: 4px; border-left: 3px solid #f43f5e;">
+                    ⚠️ OPPOSING ORGANIST: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
+                   </div>`
+                : ''
+            }
+          </div>
+        `
+        : '';
+
       this.contentEl.innerHTML = `
         <div class="modal-inner clipboard-modal">
           <div class="modal-eyebrow">PRE-MATCH MANAGEMENT DIRECTIVE • SEED #${seed}</div>
           <h2 class="modal-title">📋 OFFICIAL ORDERS</h2>
+          ${campaignHeaderHtml}
           <div class="active-order-spotlight">
-            <div class="spotlight-label">SELECTED DIRECTIVE:</div>
+            <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
             <div class="spotlight-title">${currentOrder.title}</div>
             <div class="spotlight-desc">${currentOrder.description}</div>
           </div>
