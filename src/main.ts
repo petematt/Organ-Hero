@@ -153,12 +153,14 @@ class OrganHeroApp {
         );
       },
       onStartMatchWithOrder: (orderId: OrderId) => {
+        this.synth.unlock();
         void this.enterFullscreenIfPossible();
         this.startNewMatch(this.currentSeed, orderId);
       },
       onContinueNextPeriod: () => {
         this.sim.startNextPeriod();
         this.isPaused = false;
+        this.synth.setCrowdVolume(this.sim.crowdVolume, false);
       },
       onPlayAgainSameSeed: () => {
         this.startNewMatch(this.currentSeed, this.sim.orderId);
@@ -178,6 +180,7 @@ class OrganHeroApp {
       },
       onChangeOrder: () => {
         this.isPaused = true;
+        this.synth.setCrowdVolume(this.sim.crowdVolume, true);
         const cm = this.campaign.getCurrentMatch();
         this.screens.showOrderClipboard(
           this.sim.orderId,
@@ -188,12 +191,17 @@ class OrganHeroApp {
       },
       onResumeFromPause: () => {
         this.isPaused = false;
+        this.synth.setCrowdVolume(this.sim.crowdVolume, false);
       },
     });
 
     this.debugPanel = new DebugPanelController({
       getConfig: () => this.cfg,
       getCurrentSeed: () => this.currentSeed,
+      getShowStatBars: () => this.renderer.showStatBars,
+      onToggleStatBars: (val: boolean) => {
+        this.renderer.showStatBars = val;
+      },
       onConfigChange: (newCfg: GameConfig) => {
         this.cfg = newCfg;
         this.sim.cfg = newCfg;
@@ -359,19 +367,6 @@ class OrganHeroApp {
       speedBtn.classList.toggle('active-toggle', this.speedMultiplier === 2);
     });
 
-    // Team Passing toggle (default ON)
-    const passBtn = document.getElementById('btn-pass-toggle');
-    passBtn?.addEventListener('click', () => {
-      this.togglePassing();
-    });
-
-    // Overhead stat bars toggle (default ON)
-    const barsBtn = document.getElementById('btn-bars-toggle')!;
-    barsBtn.addEventListener('click', () => {
-      this.renderer.showStatBars = !this.renderer.showStatBars;
-      barsBtn.classList.toggle('active-toggle', this.renderer.showStatBars);
-    });
-
     // Fullscreen toggle button
     const fsBtn = document.getElementById('btn-fullscreen');
     fsBtn?.addEventListener('click', () => {
@@ -461,8 +456,9 @@ class OrganHeroApp {
 
     const nextPaused = forcePause !== undefined ? forcePause : !this.isPaused;
     this.isPaused = nextPaused;
+    this.synth.setCrowdVolume(this.sim.crowdVolume, this.isPaused);
     if (this.isPaused) {
-      this.screens.showPauseModal(this.sim);
+      this.screens.showPauseModal(this.sim, this.campaign.getActiveTips());
     } else {
       this.screens.hide();
     }
@@ -477,6 +473,10 @@ class OrganHeroApp {
     this.lastFrameTimeMs = nowMs;
 
     const portraitBlocked = this.isPortraitBlocked();
+
+    if (this.hasStartedMatch) {
+      this.synth.setCrowdVolume(this.sim.crowdVolume, this.isPaused);
+    }
 
     if (!this.isPaused && this.hasStartedMatch && !portraitBlocked) {
       const fixedStep = 1 / 60;
@@ -498,7 +498,8 @@ class OrganHeroApp {
                 this.sim.period as 1 | 2,
                 this.campaign.getState().unofficialRepLevel,
                 this.sim.orderId,
-                this.currentSeed
+                this.currentSeed,
+                this.campaign.getOfferedTipEvaluatorIds()
               );
               if (offers.length > 0) {
                 this.campaign.addTipOffers(offers);

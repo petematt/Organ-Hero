@@ -231,7 +231,8 @@ export function generateIntermissionTips(
   period: 1 | 2,
   streetCredLevel: number,
   officialOrderId: string,
-  seed: number
+  seed: number,
+  excludeEvaluatorIds: string[] = []
 ): TipOffer[] {
   // Candidate pool of tips
   const candidates: Array<{
@@ -323,19 +324,29 @@ export function generateIntermissionTips(
     },
   ];
 
-  // Pick 1 or 2 tips deterministically based on seed + period
-  const count = streetCredLevel >= 3 ? 2 : 1;
-  const picked: TipOffer[] = [];
-  const offset = (seed + period * 7) % candidates.length;
+  // Exclude propositions that were already offered or accepted in this game
+  const available = candidates.filter(
+    (c) => !excludeEvaluatorIds.includes(c.evaluatorId)
+  );
+  const pool = available.length > 0 ? available : candidates;
 
-  for (let i = 0; i < count; i++) {
-    const idx = (offset + i * 3) % candidates.length;
-    const item = candidates[idx];
+  // Pick 1 or 2 tips deterministically based on seed + period
+  const count = Math.min(streetCredLevel >= 3 ? 2 : 1, pool.length);
+  const picked: TipOffer[] = [];
+  const pickedEvaluatorIds = new Set<string>();
+  const offset = (seed + period * 7) % pool.length;
+
+  for (let step = 0; step < pool.length && picked.length < count; step++) {
+    const idx = (offset + step * 3) % pool.length;
+    const item = pool[idx];
+    if (pickedEvaluatorIds.has(item.evaluatorId)) continue;
+    pickedEvaluatorIds.add(item.evaluatorId);
+
     const payoutMultiplier = 1.0 + (streetCredLevel - 1) * 0.15;
     const conflicts = item.conflictsWith.includes(officialOrderId);
 
     picked.push({
-      id: `tip_${period}_${i}_${seed}`,
+      id: `tip_${period}_${picked.length}_${seed}`,
       senderName: item.senderName,
       senderTitle: item.senderTitle,
       flavorText: item.flavorText,

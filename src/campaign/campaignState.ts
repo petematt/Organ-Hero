@@ -128,13 +128,23 @@ export class CampaignManager {
 
   // Active match tips
   private currentActiveTips: TipOffer[] = [];
+  private offeredTipEvaluatorIds: string[] = [];
 
   public getActiveTips(): TipOffer[] {
     return this.currentActiveTips;
   }
 
+  public getOfferedTipEvaluatorIds(): string[] {
+    return this.offeredTipEvaluatorIds;
+  }
+
   public addTipOffers(offers: TipOffer[]): void {
     this.currentActiveTips.push(...offers);
+    for (const o of offers) {
+      if (!this.offeredTipEvaluatorIds.includes(o.evaluatorId)) {
+        this.offeredTipEvaluatorIds.push(o.evaluatorId);
+      }
+    }
   }
 
   public acceptTip(tipId: string): void {
@@ -163,6 +173,7 @@ export class CampaignManager {
 
   public clearActiveTips(): void {
     this.currentActiveTips = [];
+    this.offeredTipEvaluatorIds = [];
   }
 
   public getCompletedTipsCountAndEarnings(): { count: number; earnings: number } {

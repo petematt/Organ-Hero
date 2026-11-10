@@ -11,6 +11,9 @@ export class OrganSynth {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private unlocked: boolean = false;
+  private crowdGain: GainNode | null = null;
+  private crowdFilter: BiquadFilterNode | null = null;
+  private crowdRunning: boolean = false;
 
   public unlock(): void {
     try {
@@ -24,6 +27,7 @@ export class OrganSynth {
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.value = 0.28;
         this.masterGain.connect(this.ctx.destination);
+        this.initCrowdAmbiance(this.ctx);
       }
       if (this.ctx.state === 'suspended') {
         void this.ctx.resume();
@@ -31,6 +35,90 @@ export class OrganSynth {
       this.unlocked = true;
     } catch {
       // AudioContext blocked or unsupported
+    }
+  }
+
+  private initCrowdAmbiance(ctx: AudioContext): void {
+    if (this.crowdRunning) return;
+    try {
+      const buffer = this.createCrowdBuffer(ctx);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      this.crowdFilter = ctx.createBiquadFilter();
+      this.crowdFilter.type = 'lowpass';
+      this.crowdFilter.frequency.value = 550;
+      this.crowdFilter.Q.value = 0.7;
+
+      // Slow organic acoustic drift
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.2;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 60;
+      lfo.connect(lfoGain);
+      lfoGain.connect(this.crowdFilter.frequency);
+      lfo.start();
+
+      this.crowdGain = ctx.createGain();
+      this.crowdGain.gain.value = 0.04;
+
+      source.connect(this.crowdFilter);
+      this.crowdFilter.connect(this.crowdGain);
+      if (this.masterGain) {
+        this.crowdGain.connect(this.masterGain);
+      } else {
+        this.crowdGain.connect(ctx.destination);
+      }
+
+      source.start();
+      this.crowdRunning = true;
+    } catch {
+      // Audio buffer / source creation blocked or unsupported
+    }
+  }
+
+  private createCrowdBuffer(ctx: AudioContext): AudioBuffer {
+    const sampleRate = ctx.sampleRate || 44100;
+    const bufferLength = sampleRate * 4; // 4 seconds looping stereo buffer
+    const buffer = ctx.createBuffer(2, bufferLength, sampleRate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+        b6 = white * 0.115926;
+        data[i] = pink * 0.08;
+      }
+    }
+    return buffer;
+  }
+
+  public setCrowdVolume(crowdVolume: number, isPaused: boolean = false): void {
+    if (!this.unlocked) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    if (!this.crowdRunning) {
+      this.initCrowdAmbiance(ctx);
+    }
+
+    const norm = Math.max(0, Math.min(1, (crowdVolume ?? 50) / 100));
+    const targetGain = isPaused ? 0.012 : 0.025 + norm * 0.09;
+    const targetFreq = isPaused ? 320 : 380 + norm * 550;
+
+    const now = ctx.currentTime;
+    if (this.crowdGain) {
+      this.crowdGain.gain.setTargetAtTime(targetGain, now, 0.15);
+    }
+    if (this.crowdFilter) {
+      this.crowdFilter.frequency.setTargetAtTime(targetFreq, now, 0.2);
     }
   }
 

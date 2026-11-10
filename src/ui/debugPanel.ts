@@ -73,16 +73,23 @@ export class DebugPanelController {
   private onRestartWithSeed: (seed: number) => void;
   private getCurrentSeed: () => number;
 
+  private getShowStatBars?: () => boolean;
+  private onToggleStatBars?: (show: boolean) => void;
+
   constructor(opts: {
     getConfig: () => GameConfig;
     getCurrentSeed: () => number;
     onConfigChange: (newCfg: GameConfig) => void;
     onRestartWithSeed: (seed: number) => void;
+    getShowStatBars?: () => boolean;
+    onToggleStatBars?: (show: boolean) => void;
   }) {
     this.getConfig = opts.getConfig;
     this.getCurrentSeed = opts.getCurrentSeed;
     this.onConfigChange = opts.onConfigChange;
     this.onRestartWithSeed = opts.onRestartWithSeed;
+    this.getShowStatBars = opts.getShowStatBars;
+    this.onToggleStatBars = opts.onToggleStatBars;
 
     document.getElementById('btn-close-debug')?.addEventListener('click', () => {
       this.toggle(false);
@@ -226,6 +233,15 @@ export class DebugPanelController {
           />
           <span class="d-val" id="dval-enablePassing">${cfg.enablePassing ? 'ON' : 'OFF'}</span>
         </label>
+        <label class="debug-slider-row" style="margin-top: 8px; cursor: pointer;">
+          <span class="d-label">Show Overhead Stat Bars</span>
+          <input
+            id="chk-show-bars"
+            type="checkbox"
+            ${this.getShowStatBars ? (this.getShowStatBars() ? 'checked' : '') : 'checked'}
+          />
+          <span class="d-val" id="dval-showBars">${this.getShowStatBars ? (this.getShowStatBars() ? 'ON' : 'OFF') : 'ON'}</span>
+        </label>
       </div>
 
       <div class="debug-section">
@@ -272,6 +288,15 @@ export class DebugPanelController {
       this.onConfigChange(updated);
       const valSpan = document.getElementById('dval-enablePassing');
       if (valSpan) valSpan.textContent = updated.enablePassing ? 'ON' : 'OFF';
+    });
+
+    // Bind Show Overhead Stat Bars checkbox
+    const barsChk = document.getElementById('chk-show-bars') as HTMLInputElement | null;
+    barsChk?.addEventListener('change', () => {
+      const isChecked = barsChk.checked;
+      this.onToggleStatBars?.(isChecked);
+      const valSpan = document.getElementById('dval-showBars');
+      if (valSpan) valSpan.textContent = isChecked ? 'ON' : 'OFF';
     });
 
     // Bind Max Song Slots slider

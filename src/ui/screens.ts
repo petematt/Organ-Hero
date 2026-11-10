@@ -477,16 +477,78 @@ export class ScreenModalManager {
   /**
    * 5. Pause Overlay showing current Seed and quick actions.
    */
-  public showPauseModal(sim: MatchSimulation): void {
+  public showPauseModal(
+    sim: MatchSimulation,
+    activeTips: TipOffer[] = []
+  ): void {
     this.backdropEl.classList.remove('hidden');
     const orderDef = getOrderById(sim.orderId);
+    const orderEval = evaluateOrder(sim.orderId, {
+      homeGoals: sim.homeScore,
+      awayGoals: sim.awayScore,
+      totalFights: sim.getTotalFights(),
+      averageCrowdVolume: sim.getAverageCrowdVolume(),
+      isMatchOver: sim.phase === 'MATCH_OVER',
+    });
+    const orderStatusPill =
+      orderEval.liveStatus === 'ON_TRACK'
+        ? '<span class="order-status-pill status-track">ON TRACK</span>'
+        : '<span class="order-status-pill status-fail">FAILED</span>';
+
+    const acceptedTips = activeTips.filter(
+      (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
+    );
+    const tipsHtml =
+      acceptedTips.length === 0
+        ? '<div style="font-size: 12px; color: #94a3b8; font-style: italic; padding: 6px 0;">No under-the-table tips accepted this match.</div>'
+        : acceptedTips
+            .map((tip) => {
+              const pillClass =
+                tip.status === 'PASSED'
+                  ? 'status-track'
+                  : tip.status === 'FAILED'
+                  ? 'status-fail'
+                  : 'status-track';
+              return `
+                <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(148, 163, 184, 0.2); border-left: 3px solid #facc15; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                    <strong style="color: #f8fafc; font-size: 13px;">${tip.senderName} (${tip.senderTitle})</strong>
+                    <span style="font-size: 11px; font-weight: 800; color: #facc15;">+$${tip.bribePayout}</span>
+                  </div>
+                  <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 4px;">${tip.conditionDescription}</div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                    <span style="color: #94a3b8;">${tip.liveProgressText || 'In progress...'}</span>
+                    <span class="order-status-pill ${pillClass}">${tip.status}</span>
+                  </div>
+                </div>
+              `;
+            })
+            .join('');
+
     this.contentEl.innerHTML = `
-      <div class="modal-inner pause-modal">
-        <div class="modal-eyebrow">MATCH PAUSED • SEED #${sim.rng.initialSeed}</div>
-        <h2 class="modal-title">ORGANIST PERCH PAUSED</h2>
-        <p class="modal-lead">
-          Active Directive: <strong>${orderDef.title}</strong> — ${orderDef.description}
-        </p>
+      <div class="modal-inner pause-modal" style="max-width: 580px; text-align: left;">
+        <div class="modal-eyebrow">MATCH PAUSED • SEED #${sim.rng.initialSeed} • PERIOD ${sim.period}</div>
+        <h2 class="modal-title" style="margin-bottom: 12px;">ORGANIST PERCH PAUSED</h2>
+
+        <!-- Official Directive Section -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Official Arena Directive</div>
+            ${orderStatusPill}
+          </div>
+          <div style="font-size: 14px; font-weight: 900; color: #f8fafc;">${orderDef.title}</div>
+          <div style="font-size: 12px; color: #cbd5e1; margin: 3px 0 6px 0;">${orderDef.description}</div>
+          <div style="font-size: 11px; color: #38bdf8; font-weight: 700;">Progress: ${orderEval.reason}</div>
+        </div>
+
+        <!-- Under-the-Table Propositions Section -->
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; font-weight: 800; color: #facc15; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">
+            Under-The-Table Bribes &amp; Tips (${acceptedTips.length} Active)
+          </div>
+          ${tipsHtml}
+        </div>
+
         <div class="modal-actions multi-actions">
           <button id="btn-resume-match" class="primary-cta-btn" type="button">
             ▶ Resume Match

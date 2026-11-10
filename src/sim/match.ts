@@ -306,6 +306,9 @@ export class MatchSimulation {
     recommendedTarget: 'home' | 'away' | 'both',
     bannerText: string
   ): void {
+    if (!this.getActiveSongLoadout().includes(matchingSong)) {
+      return;
+    }
     this.activeCue = {
       type,
       matchingSong,

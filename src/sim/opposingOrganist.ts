@@ -49,15 +49,19 @@ export class OpposingOrganistController {
     );
 
     // Provide a counter-cue window for the player to jam the rival!
-    const counterSong: SongId =
+    const loadout = sim.getActiveSongLoadout();
+    const preferredCounter: SongId =
       songId === 'hold_the_line'
         ? 'charge'
         : songId === 'charge'
         ? 'hold_the_line'
         : 'grudge_toccata';
 
-    const loadout = sim.getActiveSongLoadout();
-    if (loadout.includes(counterSong)) {
+    const counterSong: SongId | undefined = loadout.includes(preferredCounter)
+      ? preferredCounter
+      : loadout[0];
+
+    if (counterSong) {
       sim.triggerCue(
         'RIVAL_ORGANIST_ATTACK',
         counterSong,

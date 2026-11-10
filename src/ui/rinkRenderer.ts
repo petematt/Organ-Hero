@@ -1619,16 +1619,6 @@ export class RinkRenderer {
       ctx.fillRect(0, 0, RINK_WIDTH, RINK_HEIGHT);
     }
 
-    // Subtle skate-blade ice texture lines so vertical scrolling of the ice is visually tactile
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
-    ctx.lineWidth = 1;
-    for (let y = 30; y < RINK_HEIGHT; y += 32) {
-      ctx.beginPath();
-      ctx.moveTo(310, y);
-      ctx.lineTo(690, y + 6);
-      ctx.stroke();
-    }
-
     // Goal lines (red, thin)
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.55)';
     ctx.lineWidth = 3;
