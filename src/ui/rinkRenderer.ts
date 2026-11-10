@@ -1648,11 +1648,11 @@ export class RinkRenderer {
     ctx.save();
     this.roundedRinkPath(ctx);
 
-    // Crisp stadium ice gradient
+    // Stadium ice gradient: slightly more blue and darker tone for authentic scratch contrast
     const iceGrad = ctx.createLinearGradient(0, 0, 0, RINK_HEIGHT);
-    iceGrad.addColorStop(0, '#e6f1f8');
-    iceGrad.addColorStop(0.5, '#f2f8fc');
-    iceGrad.addColorStop(1, '#dcebf5');
+    iceGrad.addColorStop(0, '#c3dced');
+    iceGrad.addColorStop(0.5, '#d3e7f6');
+    iceGrad.addColorStop(1, '#bcd6ea');
     ctx.fillStyle = iceGrad;
     ctx.fill();
     ctx.clip();
@@ -1815,8 +1815,8 @@ export class RinkRenderer {
       const ex = sx - Math.cos(heading + jitter) * len;
       const ey = sy - Math.sin(heading + jitter) * len;
 
-      this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-      this.iceWearCtx.lineWidth = 1.0 + Math.random() * 0.6;
+      this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      this.iceWearCtx.lineWidth = 1.1 + Math.random() * 0.7;
       this.iceWearCtx.beginPath();
       this.iceWearCtx.moveTo(sx, sy);
       this.iceWearCtx.lineTo(ex, ey);
@@ -1840,8 +1840,8 @@ export class RinkRenderer {
         const ry = 45 + Math.random() * (RINK_HEIGHT - 90);
         const angle = Math.random() * Math.PI * 2;
         const rlen = 6 + Math.random() * 16;
-        this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-        this.iceWearCtx.lineWidth = 0.9;
+        this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
+        this.iceWearCtx.lineWidth = 0.95;
         this.iceWearCtx.beginPath();
         this.iceWearCtx.moveTo(rx, ry);
         this.iceWearCtx.lineTo(rx + Math.cos(angle) * rlen, ry + Math.sin(angle) * rlen);
@@ -1884,16 +1884,16 @@ export class RinkRenderer {
 
     for (const c of corners) {
       // Soft powdery snow gradient banked against the inside curve of the corner boards
-      const grad = ctx.createRadialGradient(c.cx, c.cy, 48, c.cx, c.cy, r);
-      grad.addColorStop(0, 'rgba(224, 242, 254, 0)');
-      grad.addColorStop(0.45, `rgba(224, 242, 254, ${(0.28 * snowAlpha).toFixed(3)})`);
-      grad.addColorStop(0.75, `rgba(240, 248, 255, ${(0.58 * snowAlpha).toFixed(3)})`);
-      grad.addColorStop(1, `rgba(255, 255, 255, ${(0.82 * snowAlpha).toFixed(3)})`);
+      const grad = ctx.createRadialGradient(c.cx, c.cy, 38, c.cx, c.cy, r);
+      grad.addColorStop(0, 'rgba(215, 235, 252, 0)');
+      grad.addColorStop(0.35, `rgba(224, 242, 254, ${(0.35 * snowAlpha).toFixed(3)})`);
+      grad.addColorStop(0.7, `rgba(240, 248, 255, ${(0.68 * snowAlpha).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(255, 255, 255, ${(0.88 * snowAlpha).toFixed(3)})`);
 
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, r, c.startAngle, c.endAngle);
-      ctx.arc(c.cx, c.cy, 48, c.endAngle, c.startAngle, true);
+      ctx.arc(c.cx, c.cy, 38, c.endAngle, c.startAngle, true);
       ctx.closePath();
       ctx.fill();
     }
@@ -1902,7 +1902,7 @@ export class RinkRenderer {
     for (const flake of this.cornerSnowFlakes) {
       const alpha = flake.alpha * snowAlpha;
       if (alpha <= 0.02) continue;
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(2)})`;
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1.0, alpha * 1.15).toFixed(2)})`;
       ctx.beginPath();
       ctx.arc(flake.x, flake.y, flake.r * (0.65 + snowAlpha * 0.35), 0, Math.PI * 2);
       ctx.fill();

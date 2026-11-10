@@ -61,7 +61,7 @@ export class OrganSynth {
       lfo.start();
 
       this.crowdGain = ctx.createGain();
-      this.crowdGain.gain.value = 0.08;
+      this.crowdGain.gain.value = 0.18;
 
       source.connect(this.crowdFilter);
       this.crowdFilter.connect(this.crowdGain);
@@ -95,7 +95,7 @@ export class OrganSynth {
         b5 = -0.7616 * b5 - white * 0.0168980;
         const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
         b6 = white * 0.115926;
-        data[i] = pink * 0.14;
+        data[i] = pink * 0.22;
       }
     }
     return buffer;
@@ -110,9 +110,9 @@ export class OrganSynth {
     }
 
     const norm = Math.max(0, Math.min(1, (crowdVolume ?? 50) / 100));
-    // 2x louder crowd ambiance with warm acoustic curve
-    const targetGain = isPaused ? 0.024 : 0.05 + norm * 0.18;
-    const targetFreq = isPaused ? 340 : 400 + norm * 580;
+    // Additional 2x louder crowd ambiance with warm, resonant arena roar
+    const targetGain = isPaused ? 0.05 : 0.11 + norm * 0.36;
+    const targetFreq = isPaused ? 380 : 450 + norm * 680;
 
     const now = ctx.currentTime;
     if (this.crowdGain) {
