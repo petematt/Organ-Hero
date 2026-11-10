@@ -4,6 +4,7 @@ import {
   OFFICIAL_ORDERS,
 } from '../game/orders';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
+import { SONGS } from '../game/songs';
 import { MatchSimulation } from '../sim/match';
 import { OrderId } from '../sim/types';
 
@@ -712,6 +713,124 @@ export class ScreenModalManager {
     };
 
     render();
+  }
+
+  public showSeasonEndSummaryModal(
+    mgr: CampaignManager,
+    onRestartSeason: () => void
+  ): void {
+    const state = mgr.getState();
+    const isSuccess = state.isSeasonCompleted && !state.isDisqualified;
+    const history = state.matchHistory;
+
+    let wins = 0;
+    let losses = 0;
+    let ties = 0;
+    for (const h of history) {
+      if (h.homeScore > h.awayScore) wins++;
+      else if (h.homeScore < h.awayScore) losses++;
+      else ties++;
+    }
+
+    const masteredCount = state.unlockedSongs.filter(
+      (s) => mgr.getSongMasteryLevel(s) === 'MASTERED'
+    ).length;
+
+    const songsHtml = state.unlockedSongs
+      .map((sid) => {
+        const sDef = SONGS[sid];
+        const lvl = mgr.getSongMasteryLevel(sid);
+        const badgeColor =
+          lvl === 'MASTERED' ? '#facc15' : lvl === 'FAMILIAR' ? '#38bdf8' : '#94a3b8';
+        return `
+          <div style="background: rgba(15,23,42,0.6); padding: 8px 12px; border-radius: 6px; border-left: 3px solid ${sDef.color}; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div>
+              <strong style="color: #f8fafc; font-size: 13px;">${sDef.title}</strong>
+              <div style="font-size: 11px; color: #94a3b8;">${sDef.shortDesc}</div>
+            </div>
+            <span style="font-size: 11px; font-weight: 800; color: ${badgeColor}; padding: 2px 6px; border: 1px solid ${badgeColor}; border-radius: 4px;">
+              ${lvl === 'MASTERED' ? '★ MASTERED' : lvl}
+            </span>
+          </div>
+        `;
+      })
+      .join('');
+
+    this.contentEl.innerHTML = `
+      <div class="modal-inner" style="max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 24px; text-align: left;">
+        <div style="text-align: center; margin-bottom: 18px;">
+          <div style="font-size: 40px; line-height: 1; margin-bottom: 8px;">
+            ${isSuccess ? '🏆' : '❌'}
+          </div>
+          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em; text-transform: uppercase;">
+            ${isSuccess ? '1988 MUNICIPAL ARENA • CAMPAIGN FINALE' : 'SEASON DISQUALIFICATION'}
+          </div>
+          <h2 style="font-size: 24px; font-weight: 900; color: ${isSuccess ? '#facc15' : '#f87171'}; margin: 4px 0 8px 0; text-transform: uppercase;">
+            ${isSuccess ? 'Hall of Fame Organist' : 'Relegated & Dismissed'}
+          </h2>
+          <p style="font-size: 13px; color: #cbd5e1; max-width: 520px; margin: 0 auto; line-height: 1.4;">
+            ${
+              isSuccess
+                ? 'From a humble cramped loft in Preseason to the thunderous climax of the Memorial Cup Final, your organ gave the Harmonizers their soul!'
+                : (state.disqualificationReason || 'Official reputation fell below qualification standards.')
+            }
+          </p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px;">
+          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Career Matches</div>
+            <div style="font-size: 18px; font-weight: 900; color: #f8fafc;">
+              ${history.length} <span style="font-size: 13px; color: #94a3b8;">/ 17 (${wins}W - ${losses}L - ${ties}T)</span>
+            </div>
+          </div>
+
+          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Official Directives</div>
+            <div style="font-size: 18px; font-weight: 900; color: ${mgr.getOfficialReputationPct() >= 75 ? '#34d399' : '#f87171'};">
+              ${mgr.getOfficialReputationPct()}% <span style="font-size: 13px; color: #94a3b8;">(${state.officialOrdersCompleted}/${state.officialOrdersTotal} Passed)</span>
+            </div>
+          </div>
+
+          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Street Cred & Tips</div>
+            <div style="font-size: 18px; font-weight: 900; color: #38bdf8;">
+              Lvl ${state.unofficialRepLevel}/5 <span style="font-size: 13px; color: #94a3b8;">(${state.totalTipsCompleted} tips, +$${state.totalTipEarnings.toLocaleString()})</span>
+            </div>
+          </div>
+
+          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Career Bankroll & Stand</div>
+            <div style="font-size: 18px; font-weight: 900; color: #facc15;">
+              $${state.bankroll.toLocaleString()} <span style="font-size: 13px; color: #94a3b8;">(${state.maxSongSlots}/6 slots)</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div style="font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between;">
+            <span>Song Repertoire (${state.unlockedSongs.length} Unlocked)</span>
+            <span style="color: #facc15;">${masteredCount} Mastered</span>
+          </div>
+          <div style="max-height: 180px; overflow-y: auto;">
+            ${songsHtml}
+          </div>
+        </div>
+
+        <div style="text-align: center;">
+          <button id="btn-restart-season" class="primary-cta-btn" type="button" style="padding: 12px 28px; font-size: 14px; font-weight: 900;">
+            🎹 START NEW CAMPAIGN SEASON
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-restart-season')?.addEventListener('click', () => {
+      this.hide();
+      onRestartSeason();
+    });
+
+    this.backdropEl.classList.remove('hidden');
   }
 }
 

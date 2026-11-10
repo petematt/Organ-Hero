@@ -105,6 +105,16 @@ class OrganHeroApp {
       },
       onOpenShop: () => {
         this.isPaused = true;
+        const st = this.campaign.getState();
+        if (st.isDisqualified || st.isSeasonCompleted) {
+          this.screens.showSeasonEndSummaryModal(this.campaign, () => {
+            this.campaign.resetCampaign();
+            this.startNewMatch(Math.floor(1000 + Math.random() * 9000), 'home_wins');
+            this.screens.showStartSeatScreen();
+          });
+          return;
+        }
+
         this.screens.showOrganLoftShop(this.campaign, () => {
           const nextCampMatch = this.campaign.getCurrentMatch();
           if (nextCampMatch) {
@@ -115,6 +125,12 @@ class OrganHeroApp {
               nextCampMatch,
               this.campaign.getOfficialReputationPct()
             );
+          } else {
+            this.screens.showSeasonEndSummaryModal(this.campaign, () => {
+              this.campaign.resetCampaign();
+              this.startNewMatch(Math.floor(1000 + Math.random() * 9000), 'home_wins');
+              this.screens.showStartSeatScreen();
+            });
           }
         });
       },

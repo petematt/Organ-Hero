@@ -483,3 +483,91 @@ describe('Phase 2D: Expanded Song Repertoire, Mastery Meter & Opposing Organist'
   });
 });
 
+describe('Phase 2E: Post-Season Climax, Qualification Gates & Season End', () => {
+  it('disqualifies the player after Match 13 if official reputation is below 75%', () => {
+    const mgr = new CampaignManager();
+    // Fast-forward to match 13 (index 12)
+    mgr.getState().currentMatchIndex = 12; // Match 13
+    mgr.getState().officialOrdersTotal = 12;
+    mgr.getState().officialOrdersCompleted = 6; // 50% reputation
+
+    const res = mgr.recordMatchEnd({
+      homeScore: 3,
+      awayScore: 2,
+      officialOrderId: 'home_wins',
+      officialOrderPassed: true, // brings to 7/13 = 53.8%
+      baseSalaryEarned: 500,
+      tipsOffered: 1,
+      tipsPassed: 1,
+      tipEarnings: 400,
+      totalEarnings: 900,
+    });
+
+    expect(res.disqualified).toBe(true);
+    expect(res.seasonEnded).toBe(true);
+    expect(res.playoffQualified).toBe(false);
+    expect(mgr.getState().isDisqualified).toBe(true);
+    expect(mgr.getState().disqualificationReason).toContain('Official Reputation was only');
+  });
+
+  it('qualifies the player for Playoffs after Match 13 if official reputation is >= 75%', () => {
+    const mgr = new CampaignManager();
+    mgr.getState().currentMatchIndex = 12; // Match 13
+    mgr.getState().officialOrdersTotal = 12;
+    mgr.getState().officialOrdersCompleted = 10; // >80% reputation
+
+    const res = mgr.recordMatchEnd({
+      homeScore: 4,
+      awayScore: 1,
+      officialOrderId: 'home_wins',
+      officialOrderPassed: true, // 11/13 = 84.6%
+      baseSalaryEarned: 500,
+      tipsOffered: 1,
+      tipsPassed: 1,
+      tipEarnings: 400,
+      totalEarnings: 900,
+    });
+
+    expect(res.disqualified).toBe(false);
+    expect(res.playoffQualified).toBe(true);
+    expect(res.nextMatch?.tier).toBe('PLAYOFF');
+  });
+
+  it('marks season completed after Match 17 with Memorial Cup climax', () => {
+    const mgr = new CampaignManager();
+    mgr.getState().currentMatchIndex = 16; // Match 17
+    mgr.getState().officialOrdersTotal = 16;
+    mgr.getState().officialOrdersCompleted = 15;
+
+    const res = mgr.recordMatchEnd({
+      homeScore: 5,
+      awayScore: 3,
+      officialOrderId: 'home_wins',
+      officialOrderPassed: true,
+      baseSalaryEarned: 1500,
+      tipsOffered: 2,
+      tipsPassed: 2,
+      tipEarnings: 1200,
+      totalEarnings: 2700,
+    });
+
+    expect(res.seasonEnded).toBe(true);
+    expect(mgr.getState().isSeasonCompleted).toBe(true);
+    expect(mgr.getState().isDisqualified).toBe(false);
+  });
+
+  it('resets the campaign cleanly for a new season', () => {
+    const mgr = new CampaignManager();
+    mgr.getState().currentMatchIndex = 16;
+    mgr.getState().isSeasonCompleted = true;
+    mgr.getState().bankroll = 15000;
+
+    mgr.resetCampaign();
+    expect(mgr.getState().currentMatchIndex).toBe(0);
+    expect(mgr.getState().isSeasonCompleted).toBe(false);
+    expect(mgr.getState().maxSongSlots).toBe(2);
+    expect(mgr.getState().bankroll).toBe(0);
+  });
+});
+
+
