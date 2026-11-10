@@ -239,10 +239,10 @@ export class MatchSimulation {
   }
 
   private getPenaltyBoxPos(team: Team, playerId: string): Vec2 {
-    const slotOffset = playerId.endsWith('2') ? 18 : -18;
+    const slotOffset = playerId.endsWith('2') ? 20 : -20;
     return {
       x: team === 'home' ? CENTER_X - 75 + slotOffset : CENTER_X + 75 + slotOffset,
-      y: 20,
+      y: 28,
     };
   }
 
@@ -1645,9 +1645,16 @@ export class MatchSimulation {
     this.audioHooks.onFightImpact?.();
     const mid = {
       x: (instigator.pos.x + victim.pos.x) * 0.5,
-      y: (instigator.pos.y + victim.pos.y) * 0.5,
+      y: (instigator.pos.y + victim.pos.y) * 0.5 - 28,
     };
-    this.spawnCallout('🥊 BRAWL! 🥊', mid, '#f43f5e', 3.0);
+    const brawlColor = instigator.team === 'home' ? '#38bdf8' : '#f43f5e';
+    const instigatorTeamName = instigator.team === 'home' ? 'HOME' : 'AWAY';
+    this.spawnCallout(
+      `🥊 BRAWL! (${instigatorTeamName} PENALTY) 🥊`,
+      mid,
+      brawlColor,
+      3.0
+    );
   }
 
   private stepPuck(dtSec: number): void {

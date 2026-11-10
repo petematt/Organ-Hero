@@ -13,7 +13,7 @@ import {
   RINK_WIDTH,
 } from '../sim/physics';
 import { clamp } from '../sim/rng';
-import { PlayerEntity, Vec2 } from '../sim/types';
+import { PlayerEntity, Team, Vec2 } from '../sim/types';
 
 export interface IceSummaryCallbacks {
   onContinueNextPeriod: () => void;
@@ -476,12 +476,13 @@ export class RinkRenderer {
 
     // Draw players (during intermission, they skate off toward the bottom bench doors and exit!)
     this.drawAllPlayers(ctx, sim);
+    this.drawPenaltyBoxTimers(ctx, sim);
 
     if (!this.isIceSummaryActive) {
+      this.drawPhaseBanner(ctx, sim);
       this.drawBrawlClouds(ctx, sim);
       this.drawGoalImpact(ctx, sim);
       this.drawCallouts(ctx, sim);
-      this.drawPhaseBanner(ctx, sim);
     }
 
     ctx.restore();
@@ -1917,37 +1918,93 @@ export class RinkRenderer {
   ): void {
     if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
     ctx.save();
-    // Top center penalty boxes (Home left of center, Away right of center)
-    const boxes: { x: number; label: string; color: string }[] = [
-      { x: CENTER_X - 115, label: 'HOME PENALTY BOX', color: '#1d4ed8' },
-      { x: CENTER_X + 35, label: 'AWAY PENALTY BOX', color: '#b91c1c' },
+    // Top center penalty boxes: Home centered at 425 (377..473), Away centered at 575 (527..623)
+    const boxes: { team: Team; x: number; label: string; primaryColor: string; trimColor: string }[] = [
+      { team: 'home', x: CENTER_X - 75 - 48, label: 'HOME PENALTY', primaryColor: '#1d4ed8', trimColor: '#60a5fa' },
+      { team: 'away', x: CENTER_X + 75 - 48, label: 'AWAY PENALTY', primaryColor: '#b91c1c', trimColor: '#fca5a5' },
     ];
 
     for (const b of boxes) {
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = 2;
-      ctx.fillRect(b.x, 4, 80, 32);
-      ctx.strokeRect(b.x, 4, 80, 32);
+      const activeInBox = sim.players.filter((p) => p.team === b.team && p.mode === 'PENALTY_BOX');
+      const hasPenalty = activeInBox.length > 0;
 
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '700 8px "Chakra Petch", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(b.label, b.x + 40, 13);
-    }
+      // Dark tinted glass box
+      ctx.fillStyle = hasPenalty ? 'rgba(15, 23, 42, 0.94)' : 'rgba(15, 23, 42, 0.78)';
+      ctx.beginPath();
+      ctx.roundRect(b.x, 2, 96, 54, 6);
+      ctx.fill();
 
-    // Draw countdown timers for any player in PENALTY_BOX
-    for (const p of sim.players) {
-      if (p.mode === 'PENALTY_BOX') {
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = '700 10px "JetBrains Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-          `${Math.ceil(p.stateTimer)}s`,
-          p.pos.x,
-          p.pos.y + 18
-        );
+      // Outer alert border (glows brightly when a penalty is active!)
+      ctx.strokeStyle = hasPenalty ? (b.team === 'home' ? '#38bdf8' : '#ef4444') : b.primaryColor;
+      ctx.lineWidth = hasPenalty ? 2.5 : 1.5;
+      if (hasPenalty) {
+        ctx.shadowColor = b.team === 'home' ? 'rgba(56, 189, 248, 0.55)' : 'rgba(239, 68, 68, 0.55)';
+        ctx.shadowBlur = 6;
+      } else {
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
       }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Top title banner header
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.90)';
+      ctx.beginPath();
+      ctx.roundRect(b.x + 1, 3, 94, 13, [5, 5, 0, 0]);
+      ctx.fill();
+
+      ctx.fillStyle = hasPenalty ? '#ffffff' : b.trimColor;
+      ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label, b.x + 48, 12);
+
+      // If empty, draw subtle dashed bench seat indicator
+      if (!hasPenalty) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
+        ctx.font = '600 8.5px "Chakra Petch", sans-serif';
+        ctx.fillText('BENCH CLEAR', b.x + 48, 36);
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawPenaltyBoxTimers(
+    ctx: CanvasRenderingContext2D,
+    sim: MatchSimulation
+  ): void {
+    if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
+    const penalized = sim.players.filter((p) => p.mode === 'PENALTY_BOX');
+    if (penalized.length === 0) return;
+
+    ctx.save();
+    for (const p of penalized) {
+      const remainingSec = Math.max(0, Math.ceil(p.stateTimer));
+      const text = `${remainingSec}s`;
+
+      const pillW = 42;
+      const pillH = 15;
+      const pillX = p.pos.x - pillW * 0.5;
+      const pillY = 40; // Positioned cleanly underneath the seated player (y=28, radius=12)
+
+      // High-contrast obsidian pill with bright glowing amber border
+      ctx.fillStyle = '#020617';
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillW, pillH, 4);
+      ctx.fill();
+
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.8;
+      ctx.shadowColor = 'rgba(245, 158, 11, 0.75)';
+      ctx.shadowBlur = 6;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Digital neon clock readout
+      ctx.fillStyle = '#fef08a';
+      ctx.font = '800 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, p.pos.x, pillY + pillH * 0.5 + 0.5);
     }
     ctx.restore();
   }
@@ -2366,23 +2423,33 @@ export class RinkRenderer {
       const mx = (f.pos.x + partner.pos.x) * 0.5;
       const my = (f.pos.y + partner.pos.y) * 0.5;
 
+      const instigator = f.isFightInstigator ? f : partner.isFightInstigator ? partner : f;
+      const isHome = instigator.team === 'home';
+      const teamLabel = isHome ? 'HOME' : 'AWAY';
+      const brawlColor = isHome ? '#38bdf8' : '#f43f5e';
+      const dustColor = isHome ? 'rgba(56, 189, 248, 0.78)' : 'rgba(251, 113, 133, 0.78)';
+
       ctx.save();
       // Cartoon brawl dust cloud puffs
       for (let i = 0; i < 6; i++) {
         const ang = this.animTime * 6 + (i * Math.PI) / 3;
         const px = mx + Math.cos(ang) * 14;
         const py = my + Math.sin(ang) * 10;
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(241, 245, 249, 0.88)' : 'rgba(251, 113, 133, 0.78)';
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(241, 245, 249, 0.90)' : dustColor;
         ctx.beginPath();
         ctx.arc(px, py, 14 + (i % 3) * 4, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      ctx.fillStyle = '#be123c';
-      ctx.font = '700 13px "Chakra Petch", sans-serif';
+      const brawlText = `💥 BRAWL! (${teamLabel} PENALTY) 💥`;
+      ctx.font = '800 13px "Chakra Petch", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('💥 BRAWL! 💥', mx, my);
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.lineWidth = 3.5;
+      ctx.strokeText(brawlText, mx, my);
+      ctx.fillStyle = brawlColor;
+      ctx.fillText(brawlText, mx, my);
       ctx.restore();
     }
   }

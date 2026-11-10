@@ -19,6 +19,8 @@ function parseUrlParams(): {
   autostart: boolean;
   screen: string | null;
   steps: number | null;
+  penalty: boolean;
+  brawl: boolean;
 } {
   const params = new URLSearchParams(window.location.search);
   const seedRaw = params.get('seed');
@@ -27,6 +29,8 @@ function parseUrlParams(): {
   const parsedSteps = stepsRaw !== null ? parseInt(stepsRaw, 10) : NaN;
   const debug = params.get('debug') === '1';
   const autostart = params.get('autostart') === '1';
+  const penalty = params.get('penalty') === '1';
+  const brawl = params.get('brawl') === '1';
   const screen = params.get('screen');
   return {
     seed: Number.isNaN(parsedSeed) ? null : parsedSeed,
@@ -34,6 +38,8 @@ function parseUrlParams(): {
     autostart,
     screen,
     steps: Number.isNaN(parsedSteps) ? null : parsedSteps,
+    penalty,
+    brawl,
   };
 }
 
@@ -240,6 +246,36 @@ class OrganHeroApp {
       this.screens.showOrderClipboard(initialOrder, this.currentSeed);
     } else {
       this.screens.showStartSeatScreen();
+    }
+
+    if (urlOpts.penalty) {
+      this.screens.hide();
+      this.hasStartedMatch = true;
+      this.isPaused = false;
+      const pHome = this.sim.players.find((p) => p.team === 'home');
+      if (pHome) {
+        pHome.mode = 'PENALTY_BOX';
+        pHome.stateTimer = 22.4;
+        pHome.pos = { x: 500 - 75 - 20, y: 28 };
+      }
+      const pAway = this.sim.players.find((p) => p.team === 'away');
+      if (pAway) {
+        pAway.mode = 'PENALTY_BOX';
+        pAway.stateTimer = 14.8;
+        pAway.pos = { x: 500 + 75 - 20, y: 28 };
+      }
+    }
+
+    if (urlOpts.brawl) {
+      this.screens.hide();
+      this.hasStartedMatch = true;
+      this.isPaused = false;
+      this.sim.phase = 'PLAYING';
+      const pHome = this.sim.players.find((p) => p.team === 'home' && p.role === 'striker');
+      const pAway = this.sim.players.find((p) => p.team === 'away' && p.role === 'striker');
+      if (pHome && pAway) {
+        this.sim.startFight(pHome, pAway);
+      }
     }
 
     requestAnimationFrame((t) => this.loop(t));
@@ -583,5 +619,5 @@ class OrganHeroApp {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  new OrganHeroApp();
+  (window as unknown as { app: OrganHeroApp }).app = new OrganHeroApp();
 });
