@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CampaignManager } from '../../campaign/campaignState';
 import { buildCampaignSchedule } from '../../campaign/schedule';
 import { buildRosterForMatch, HOME_TEAM, RIVAL_TEAMS } from '../../campaign/teams';
+import { purchaseSong, purchaseStandUpgrade } from '../../campaign/shop';
 import { evaluateTip, generateIntermissionTips, TipOffer } from '../../campaign/tips';
 import { MatchEvent } from '../../sim/types';
 
@@ -21,10 +22,11 @@ class LocalStorageMock {
   }
 }
 
+beforeEach(() => {
+  (globalThis as unknown as { localStorage: LocalStorageMock }).localStorage = new LocalStorageMock();
+});
+
 describe('Phase 2A: Campaign Core Architecture', () => {
-  beforeEach(() => {
-    (globalThis as unknown as { localStorage: LocalStorageMock }).localStorage = new LocalStorageMock();
-  });
 
   it('initializes a fresh campaign state with 2-slot stand and starting songs', () => {
     const mgr = new CampaignManager();
@@ -322,5 +324,48 @@ describe('Phase 2B: Intermission Tips & Evaluators', () => {
     expect(tipsLvl1.length).toBeGreaterThanOrEqual(1);
     expect(tipsLvl4.length).toBe(2); // High roller unlocked 2 offers
     expect(tipsLvl4[0].bribePayout).toBeGreaterThan(tipsLvl1[0].bribePayout);
+  });
+});
+
+describe('Phase 2C: The Organ Loft Shop & Music Stand Upgrades', () => {
+  it('manages stand upgrades from 2 to 3 slots and deducts bankroll', () => {
+    const mgr = new CampaignManager();
+    expect(mgr.getState().maxSongSlots).toBe(2);
+
+    // Give bankroll
+    mgr.getState().bankroll = 1000;
+
+    const res = purchaseStandUpgrade(mgr);
+    expect(res.success).toBe(true);
+    expect(mgr.getState().maxSongSlots).toBe(3);
+    expect(mgr.getState().bankroll).toBe(1000 - 450);
+
+    // Try upgrading to 4 slots with remaining $550 (needs $1000)
+    const res2 = purchaseStandUpgrade(mgr);
+    expect(res2.success).toBe(false);
+    expect(mgr.getState().maxSongSlots).toBe(3);
+  });
+
+  it('allows purchasing sheet music and equipping unlocked songs within slot limits', () => {
+    const mgr = new CampaignManager();
+    mgr.getState().bankroll = 1000;
+
+    expect(mgr.getState().unlockedSongs).not.toContain('grudge_toccata');
+
+    const buyRes = purchaseSong(mgr, 'grudge_toccata');
+    expect(buyRes.success).toBe(true);
+    expect(mgr.getState().unlockedSongs).toContain('grudge_toccata');
+    expect(mgr.getState().bankroll).toBe(1000 - 350);
+
+    // Currently stand has 2 slots, equipped with charge and hold_the_line
+    expect(mgr.getState().maxSongSlots).toBe(2);
+
+    // Equip grudge_toccata and charge
+    mgr.setEquippedSongs(['grudge_toccata', 'charge']);
+    expect(mgr.getState().equippedSongs).toEqual(['grudge_toccata', 'charge']);
+
+    // Attempting to equip 3 songs when maxSongSlots is 2 clamps to 2
+    mgr.setEquippedSongs(['grudge_toccata', 'charge', 'hold_the_line']);
+    expect(mgr.getState().equippedSongs.length).toBe(2);
   });
 });

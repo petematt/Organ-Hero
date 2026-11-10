@@ -7,7 +7,14 @@ import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { MatchSimulation } from '../sim/match';
 import { OrderId } from '../sim/types';
 
+import { CampaignManager } from '../campaign/campaignState';
 import { MatchScheduleEntry } from '../campaign/schedule';
+import {
+  getNextStandUpgrade,
+  purchaseSong,
+  purchaseStandUpgrade,
+  SONG_SHOP_CATALOG,
+} from '../campaign/shop';
 import { TipOffer } from '../campaign/tips';
 
 export interface ScreenCallbacks {
@@ -501,4 +508,210 @@ export class ScreenModalManager {
         this.callbacks.onChangeOrder();
       });
   }
+
+  /**
+   * 6. Organ Loft Workshop & Console Upgrade Shop.
+   */
+  public showOrganLoftShop(
+    mgr: CampaignManager,
+    onProceedNextMatch: () => void
+  ): void {
+    this.backdropEl.classList.remove('hidden');
+
+    const render = () => {
+      const state = mgr.getState();
+      const currentSlots = state.maxSongSlots;
+      const nextUpgrade = getNextStandUpgrade(currentSlots);
+      const nextMatch = mgr.getCurrentMatch();
+      const officialRep = mgr.getOfficialReputationPct();
+
+      const nextUpgradeHtml = nextUpgrade
+        ? `
+          <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #475569; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 13px; font-weight: 800; color: #f8fafc;">${nextUpgrade.name} (${nextUpgrade.slots} Slots)</div>
+              <div style="font-size: 11px; color: #94a3b8;">${nextUpgrade.desc}</div>
+            </div>
+            <button
+              id="btn-buy-stand"
+              type="button"
+              class="primary-cta-btn"
+              style="padding: 6px 14px; font-size: 12px; white-space: nowrap; ${state.bankroll < nextUpgrade.cost ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+              ${state.bankroll < nextUpgrade.cost ? 'disabled' : ''}
+            >
+              UPGRADE ($${nextUpgrade.cost})
+            </button>
+          </div>
+        `
+        : `
+          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; color: #34d399; font-weight: 700; font-size: 12px; text-align: center;">
+            ★ GRAND CATHEDRAL CONSOLE: MAXIMUM CAPACITY REACHED (6 SLOTS) ★
+          </div>
+        `;
+
+      // Song catalog for purchase
+      const buyableSongs = SONG_SHOP_CATALOG.filter(
+        (s) => !state.unlockedSongs.includes(s.id)
+      );
+
+      const songsToBuyHtml =
+        buyableSongs.length > 0
+          ? buyableSongs
+              .map(
+                (s) => `
+                <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="font-size: 12px; font-weight: 800; color: #f8fafc;">${s.title}</div>
+                    <div style="font-size: 11px; color: #94a3b8;">${s.desc}</div>
+                  </div>
+                  <button
+                    class="btn-buy-song secondary-cta-btn"
+                    data-song-id="${s.id}"
+                    type="button"
+                    style="padding: 4px 10px; font-size: 11px; white-space: nowrap; ${state.bankroll < s.cost ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+                    ${state.bankroll < s.cost ? 'disabled' : ''}
+                  >
+                    BUY ($${s.cost})
+                  </button>
+                </div>
+              `
+              )
+              .join('')
+          : '<div style="font-size: 11px; color: #94a3b8; font-style: italic;">All sheet music acquired!</div>';
+
+      // Loadout checkboxes for unlocked songs
+      const repertoireHtml = state.unlockedSongs
+        .map((sid) => {
+          const isEquipped = state.equippedSongs.includes(sid);
+          return `
+            <label style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid ${isEquipped ? '#38bdf8' : '#334155'}; border-radius: 6px; padding: 6px 10px; cursor: pointer;">
+              <input type="checkbox" class="equip-checkbox" data-song-id="${sid}" ${isEquipped ? 'checked' : ''} />
+              <span style="font-size: 12px; font-weight: 700; color: ${isEquipped ? '#38bdf8' : '#cbd5e1'};">${sid.toUpperCase()}</span>
+            </label>
+          `;
+        })
+        .join('');
+
+      // Scouting info for next match
+      const scoutHtml = nextMatch
+        ? `
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;">
+            <div style="font-size: 10px; font-weight: 800; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
+              NEXT MATCH ${nextMatch.matchNumber} OF 17 • ${nextMatch.tierLabel}
+            </div>
+            <div style="font-size: 15px; font-weight: 800; color: #f8fafc; margin-top: 2px;">
+              VS. <span style="color: ${nextMatch.awayTeam.primaryColor}">${nextMatch.awayTeam.name}</span>
+            </div>
+            <div style="font-size: 11px; color: #cbd5e1; margin-top: 4px; line-height: 1.4;">
+              <div><strong>STRENGTH:</strong> ${nextMatch.awayTeam.scoutReport.strength}</div>
+              <div><strong>WEAKNESS:</strong> ${nextMatch.awayTeam.scoutReport.weakness}</div>
+              <div style="color: #facc15;"><strong>ORGANIST TIP:</strong> ${nextMatch.awayTeam.scoutReport.organistTip}</div>
+            </div>
+          </div>
+        `
+        : '<div style="font-size: 13px; color: #4ade80;">Season matches complete!</div>';
+
+      this.contentEl.innerHTML = `
+        <div class="modal-card shop-modal" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
+            <div>
+              <div class="modal-eyebrow">POST-MATCH HEADQUARTERS</div>
+              <h2 class="modal-title" style="margin: 0; font-size: 18px;">🎹 ORGAN LOFT WORKSHOP</h2>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 18px; font-weight: 900; color: #facc15;">$${state.bankroll}</div>
+              <div style="font-size: 10px; font-weight: 700; color: ${officialRep < 75 ? '#fb7185' : '#4ade80'};">
+                JOB SECURITY: ${officialRep}% • STREET CRED: LVL ${state.unofficialRepLevel}
+              </div>
+            </div>
+          </div>
+
+          ${scoutHtml}
+
+          <div style="margin-bottom: 14px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">
+              Console Music Stand Capacity (${currentSlots} Active Slots)
+            </div>
+            ${nextUpgradeHtml}
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">
+                Active Console Loadout (${state.equippedSongs.length} / ${state.maxSongSlots} Equipped)
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+              ${repertoireHtml}
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">
+              Sheet Music Library (Buy New Anthems)
+            </div>
+            ${songsToBuyHtml}
+          </div>
+
+          <div class="modal-actions">
+            <button id="btn-proceed-match" class="primary-cta-btn" type="button" style="padding: 10px 20px; font-size: 13px; font-weight: 800;">
+              🏒 ${nextMatch ? `PROCEED TO MATCH ${nextMatch.matchNumber}` : 'VIEW SEASON SUMMARY'}
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Bind stand upgrade
+      document.getElementById('btn-buy-stand')?.addEventListener('click', () => {
+        const res = purchaseStandUpgrade(mgr);
+        if (res.success) render();
+      });
+
+      // Bind buy song buttons
+      this.contentEl.querySelectorAll('.btn-buy-song').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const sid = (btn as HTMLElement).dataset.songId as any;
+          if (sid) {
+            const res = purchaseSong(mgr, sid);
+            if (res.success) render();
+          }
+        });
+      });
+
+      // Bind equip checkboxes
+      this.contentEl.querySelectorAll('.equip-checkbox').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const sid = (cb as HTMLElement).dataset.songId as any;
+          const isChecked = (cb as HTMLInputElement).checked;
+          const cur = [...mgr.getState().equippedSongs];
+          if (isChecked && !cur.includes(sid)) {
+            if (cur.length < mgr.getState().maxSongSlots) {
+              cur.push(sid);
+              mgr.setEquippedSongs(cur);
+            } else {
+              (cb as HTMLInputElement).checked = false;
+            }
+          } else if (!isChecked && cur.includes(sid)) {
+            if (cur.length > 1) {
+              // Ensure at least 1 song is equipped
+              const filtered = cur.filter((s) => s !== sid);
+              mgr.setEquippedSongs(filtered);
+            } else {
+              (cb as HTMLInputElement).checked = true;
+            }
+          }
+          render();
+        });
+      });
+
+      // Bind proceed
+      document.getElementById('btn-proceed-match')?.addEventListener('click', () => {
+        this.hide();
+        onProceedNextMatch();
+      });
+    };
+
+    render();
+  }
 }
+

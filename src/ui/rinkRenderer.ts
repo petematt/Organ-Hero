@@ -20,6 +20,7 @@ export interface IceSummaryCallbacks {
   onPlayAgainNewSeed: () => void;
   onPlayAgainSameSeed: () => void;
   onChangeOrder: () => void;
+  onOpenShop?: () => void;
 }
 
 interface IceButton {
@@ -1028,12 +1029,18 @@ export class RinkRenderer {
     // Action Buttons on the Ice (y = 300..378)
     const btnNewSeed: IceButton = {
       id: 'play-again-new-seed',
-      label: '🔄 PLAY AGAIN — NEW SEED (SEND ZAMBONI)',
+      label: this.callbacks?.onOpenShop
+        ? '🏆 ADVANCE TO ORGAN LOFT & SHOP (SEND ZAMBONI)'
+        : '🔄 PLAY AGAIN — NEW SEED (SEND ZAMBONI)',
       rect: { x: bx + 12, y: 302, w: bw - 24, h: 34 },
       primary: true,
       onClick: () => {
         this.startZamboniSweep(() => {
-          this.callbacks?.onPlayAgainNewSeed();
+          if (this.callbacks?.onOpenShop) {
+            this.callbacks.onOpenShop();
+          } else {
+            this.callbacks?.onPlayAgainNewSeed();
+          }
         });
       },
     };

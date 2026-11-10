@@ -99,6 +99,21 @@ class OrganHeroApp {
           this.campaign.getOfficialReputationPct()
         );
       },
+      onOpenShop: () => {
+        this.isPaused = true;
+        this.screens.showOrganLoftShop(this.campaign, () => {
+          const nextCampMatch = this.campaign.getCurrentMatch();
+          if (nextCampMatch) {
+            this.currentSeed = Math.floor(1000 + Math.random() * 9000);
+            this.screens.showOrderClipboard(
+              nextCampMatch.assignedOrderId,
+              this.currentSeed,
+              nextCampMatch,
+              this.campaign.getOfficialReputationPct()
+            );
+          }
+        });
+      },
     });
     this.hud = new HudController();
 
