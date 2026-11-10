@@ -892,4 +892,34 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       sim.events.some((e) => e.type === 'PASS' && e.playerId === awayG.id)
     ).toBe(true);
   });
+
+  it('tracks global song cooldown state and counts down with simulation steps', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 123);
+    sim.phase = 'PLAYING';
+
+    expect(sim.isOnCooldown()).toBe(false);
+    expect(sim.getSongCooldownRemainingSec()).toBe(0);
+
+    const activeSong = sim.playSong('charge');
+    expect(activeSong).not.toBeNull();
+    expect(sim.isOnCooldown()).toBe(true);
+    expect(sim.getSongCooldownRemainingSec()).toBeCloseTo(cfg.songActiveDurationSec);
+
+    // Step 2 seconds
+    for (let i = 0; i < 120; i++) {
+      sim.step(1 / 60);
+    }
+    expect(sim.isOnCooldown()).toBe(true);
+    expect(sim.getSongCooldownRemainingSec()).toBeCloseTo(cfg.songActiveDurationSec - 2.0, 1);
+
+    // Step through remainder of cooldown
+    const remainingSteps = Math.ceil((cfg.songActiveDurationSec - 2.0) * 60) + 10;
+    for (let i = 0; i < remainingSteps; i++) {
+      sim.step(1 / 60);
+    }
+    expect(sim.isOnCooldown()).toBe(false);
+    expect(sim.getSongCooldownRemainingSec()).toBe(0);
+  });
 });
+

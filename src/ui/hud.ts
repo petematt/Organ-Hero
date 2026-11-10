@@ -165,6 +165,13 @@ export class HudController {
 
     const pp = getPowerPlayState(sim.players);
 
+    const onCooldown = sim.isOnCooldown();
+    const cooldownRemaining = sim.getSongCooldownRemainingSec();
+    const cooldownTotal = sim.activeSong?.durationSec ?? sim.cfg.songActiveDurationSec;
+    const cooldownPct = onCooldown && cooldownTotal > 0
+      ? (cooldownRemaining / cooldownTotal) * 100
+      : 0;
+
     // Update Song Button live / locked target pills, cue glows, stale badges, and progress bars
     for (const id of loadout) {
       const btn = document.getElementById(
@@ -231,15 +238,16 @@ export class HudController {
         }`;
       }
 
+      // Global cooldown: disable all song buttons while one song is on cooldown
+      btn.disabled = onCooldown;
       btn.classList.toggle('is-active', isActive);
-      btn.classList.toggle('is-cue-glow', isCueMatch);
+      btn.classList.toggle('is-cooldown-disabled', onCooldown && !isActive);
+      btn.classList.toggle('is-cue-glow', isCueMatch && !onCooldown);
       btn.classList.toggle('is-pp-disabled', Boolean(sDef.requiresPowerPlay && !pp.isPowerPlay));
       staleBadge.classList.toggle('hidden', !isStale);
 
-      if (isActive && sim.activeSong) {
-        const pct =
-          (sim.activeSong.remainingSec / sim.activeSong.durationSec) * 100;
-        progFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      if (onCooldown) {
+        progFill.style.width = `${Math.max(0, Math.min(100, cooldownPct))}%`;
       } else {
         progFill.style.width = '0%';
       }

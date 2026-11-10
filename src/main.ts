@@ -397,7 +397,7 @@ class OrganHeroApp {
     musicStandEl?.addEventListener('pointerdown', (e) => {
       const target = e.target as HTMLElement | null;
       const btn = target?.closest<HTMLButtonElement>('[data-song]');
-      if (!btn) return;
+      if (!btn || btn.disabled) return;
       e.preventDefault();
       const songId = btn.dataset.song as SongId | undefined;
       if (songId) {
@@ -446,6 +446,7 @@ class OrganHeroApp {
       }
       const slotIdx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key);
       if (slotIdx !== -1) {
+        if (this.sim.isOnCooldown()) return;
         const loadout = this.sim.getActiveSongLoadout();
         if (slotIdx < loadout.length) {
           this.triggerSong(loadout[slotIdx]);
@@ -475,6 +476,7 @@ class OrganHeroApp {
 
   private triggerSong(songId: SongId): void {
     if (this.isPaused || !this.hasStartedMatch) return;
+    if (this.sim.isOnCooldown()) return;
     if (
       this.sim.phase === 'PERIOD_END' ||
       this.sim.phase === 'MATCH_OVER' ||

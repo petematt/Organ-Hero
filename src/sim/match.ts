@@ -322,6 +322,14 @@ export class MatchSimulation {
     };
   }
 
+  public isOnCooldown(): boolean {
+    return this.activeSong !== null && this.activeSong.remainingSec > 0;
+  }
+
+  public getSongCooldownRemainingSec(): number {
+    return this.activeSong ? Math.max(0, this.activeSong.remainingSec) : 0;
+  }
+
   /**
    * Player taps one of the Organ Song buttons.
    */

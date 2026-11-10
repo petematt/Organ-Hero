@@ -517,8 +517,22 @@ body {
   border-color: rgba(132, 204, 22, 0.6);
 }
 
+.song-btn:disabled {
+  cursor: not-allowed;
+}
+
 .song-btn.is-pp-disabled {
   opacity: 0.68;
+}
+
+.song-btn.is-cooldown-disabled {
+  opacity: 0.42;
+  filter: grayscale(0.25);
+  border-color: rgba(71, 85, 105, 0.4) !important;
+}
+
+.song-btn.is-cooldown-disabled .song-progress-fill {
+  background: rgba(148, 163, 184, 0.55);
 }
 
 .song-btn.is-active {
