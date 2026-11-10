@@ -5,7 +5,13 @@ export type SongId =
   | 'grudge_toccata'
   | 'power_play_polka'
   | 'kill_the_clock'
-  | 'madeyalook';
+  | 'madeyalook'
+  | 'underdog_draw'
+  | 'second_wind'
+  | 'tic_tac_toe'
+  | 'the_fortress'
+  | 'sirens_waltz'
+  | 'overtime_overture';
 export type SongTarget = 'home' | 'away' | 'both';
 
 export type SkaterMode =
@@ -22,7 +28,14 @@ export type CueType =
   | 'TEMPER_FLARING'
   | 'POWER_PLAY'
   | 'PENALTY_KILL'
-  | 'GOALIE_TAUNT';
+  | 'GOALIE_TAUNT'
+  | 'FACEOFF_DRAW'
+  | 'EXHAUSTION'
+  | 'OPEN_PASS_LANE'
+  | 'DANGER_SLOT_SHOT'
+  | 'CARRIER_TRAPPED'
+  | 'FINAL_30_SECONDS'
+  | 'RIVAL_ORGANIST_ATTACK';
 
 export interface Vec2 {
   x: number;

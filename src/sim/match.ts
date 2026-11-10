@@ -35,6 +35,7 @@ import {
   dist,
   evalBezier,
   getOpponentGoalPos,
+  getOwnGoalPos,
   HOME_GOAL_X,
   normalize,
   RINK_HEIGHT,
@@ -55,6 +56,7 @@ import {
   Team,
   Vec2,
 } from './types';
+import { OpposingOrganistController } from './opposingOrganist';
 
 export interface MatchAudioHooks {
   onWhistle?: () => void;
@@ -67,6 +69,8 @@ export class MatchSimulation {
   public rng: SeededRNG;
   public orderId: OrderId;
   public audioHooks: MatchAudioHooks = {};
+  public opposingOrganist: OpposingOrganistController | null = null;
+  public overtimeOvertureTriggeredThisPeriod: boolean = false;
 
   public period: number = 1;
   public periodTimeRemainingSec: number;
@@ -216,6 +220,18 @@ export class MatchSimulation {
 
     this.phase = 'FACEOFF_COUNTDOWN';
     this.phaseTimerSec = this.cfg.faceoffCountdownRealSec * 2; // 3 game seconds (~1.5s at 2x)
+
+    if (this.homeScore <= this.awayScore && !this.activeCue) {
+      const loadout = this.getActiveSongLoadout();
+      if (loadout.includes('underdog_draw')) {
+        this.triggerCue(
+          'FACEOFF_DRAW',
+          'underdog_draw',
+          'home',
+          'FACEOFF DRAW! PLAY UNDERDOG DRAW FOR PUCK DROP CONTROL!'
+        );
+      }
+    }
   }
 
   private getPenaltyBoxPos(team: Team, playerId: string): Vec2 {
@@ -234,6 +250,7 @@ export class MatchSimulation {
     this.period += 1;
     this.periodTimeRemainingSec = this.cfg.periodDurationSec;
     this.activeCue = null;
+    this.overtimeOvertureTriggeredThisPeriod = false;
 
     // Restore stamina and clear all penalties / brawls / stuns between periods
     for (const p of this.players) {
@@ -341,6 +358,9 @@ export class MatchSimulation {
         2.4
       );
     } else if (cueHit) {
+      if (this.opposingOrganist && this.activeCue?.type === 'RIVAL_ORGANIST_ATTACK') {
+        this.opposingOrganist.onPlayerCounterHit(this);
+      }
       this.activeCue = null;
       this.adjustCrowdVolume(this.cfg.cueHitCrowdBoost);
       this.spawnCallout('★ CUE HIT! 2x EFFECT! ★', { x: CENTER_X, y: 70 }, '#facc15', 2.6);
@@ -371,6 +391,12 @@ export class MatchSimulation {
           } else if (songId === 'kill_the_clock' && p.role === 'goalie') {
             p.stamina = clamp(
               p.stamina + this.cfg.killClockGoalieStaminaInstant * multiplier,
+              0,
+              1
+            );
+          } else if (songId === 'second_wind') {
+            p.stamina = clamp(
+              p.stamina + 0.40 * multiplier,
               0,
               1
             );
@@ -449,6 +475,10 @@ export class MatchSimulation {
       }
     }
 
+    if (this.opposingOrganist) {
+      this.opposingOrganist.step(dtSec, this);
+    }
+
     // Update player effective stats & mood drift
     this.updateEffectiveStats(dtSec);
 
@@ -457,8 +487,17 @@ export class MatchSimulation {
       this.phaseTimerSec -= dtSec;
       if (this.phaseTimerSec <= 0) {
         this.phase = 'PLAYING';
-        const angle = this.rng.range(0, Math.PI * 2);
-        const nudgeSpeed = this.rng.range(45, 95);
+        let angle = this.rng.range(0, Math.PI * 2);
+        let nudgeSpeed = this.rng.range(45, 95);
+        if (this.activeSong?.songId === 'underdog_draw') {
+          const homeStriker = this.players.find(
+            (p) => p.team === 'home' && p.role === 'striker' && p.mode !== 'PENALTY_BOX'
+          );
+          if (homeStriker) {
+            angle = Math.atan2(homeStriker.pos.y - this.puck.pos.y, homeStriker.pos.x - this.puck.pos.x);
+            nudgeSpeed = 135;
+          }
+        }
         this.puck.vel = {
           x: Math.cos(angle) * nudgeSpeed,
           y: Math.sin(angle) * nudgeSpeed,
@@ -478,6 +517,24 @@ export class MatchSimulation {
 
     // Phase === 'PLAYING': advance period clock
     this.periodTimeRemainingSec = Math.max(0, this.periodTimeRemainingSec - dtSec);
+
+    // Final 30 seconds cue for overtime_overture
+    if (
+      this.periodTimeRemainingSec <= 30 &&
+      !this.overtimeOvertureTriggeredThisPeriod &&
+      !this.activeCue
+    ) {
+      this.overtimeOvertureTriggeredThisPeriod = true;
+      const loadout = this.getActiveSongLoadout();
+      if (loadout.includes('overtime_overture')) {
+        this.triggerCue(
+          'FINAL_30_SECONDS',
+          'overtime_overture',
+          'both',
+          'FINAL 30 SECONDS! PLAY OVERTIME OVERTURE FOR CLUTCH SURGE!'
+        );
+      }
+    }
 
     // Sample crowd volume every 1.0 game second
     this.crowdSampleAccumSec += dtSec;
@@ -540,6 +597,28 @@ export class MatchSimulation {
         );
         songFocus = mods.focusDelta;
         songAgg = mods.aggressionDelta;
+
+        if (
+          this.activeSong.songId === 'overtime_overture' &&
+          this.periodTimeRemainingSec <= 30
+        ) {
+          songFocus *= 1.6;
+          songAgg *= 1.8;
+        }
+      }
+
+      if (this.opposingOrganist && this.opposingOrganist.activeSongId) {
+        const rivalMods = getSongStatModifiers(
+          this.opposingOrganist.activeSongId,
+          'away',
+          1.0,
+          p.team,
+          p.role,
+          this.cfg,
+          this.players
+        );
+        songFocus += rivalMods.focusDelta;
+        songAgg += rivalMods.aggressionDelta;
       }
 
       p.focus = composeEffectiveStat(p.baseFocus, p.moodFocusOffset, songFocus);
@@ -725,11 +804,67 @@ export class MatchSimulation {
           continue;
         }
 
+        // Sirens Waltz Bewitchment: Opposing puck carrier turns 180 and shoots own goal!
+        if (
+          this.activeSong?.songId === 'sirens_waltz' &&
+          doesSongAffectTeam(this.activeSong.target, p.team) &&
+          p.team === 'away'
+        ) {
+          const ownGoal = getOwnGoalPos(p.team);
+          const dirToOwn = normalize({
+            x: ownGoal.x - p.pos.x,
+            y: ownGoal.y - p.pos.y,
+          });
+          p.vel = { x: dirToOwn.x * maxSpeed, y: dirToOwn.y * maxSpeed };
+          p.pos.x += p.vel.x * dtSec;
+          p.pos.y += p.vel.y * dtSec;
+          p.reactionTimer = 1.0;
+          p.reactionColor = '#ec4899';
+          const distToOwn = dist(p.pos, ownGoal);
+          if (p.possessionTimer >= 2.0 || distToOwn <= 140) {
+            this.shootPuck(p, true);
+            continue;
+          }
+          continue;
+        }
+
         // Check Breakaway cue
         this.checkBreakawayCue(p);
 
         const oppGoal = getOpponentGoalPos(p.team);
         const distToGoal = dist(p.pos, oppGoal);
+
+        // Check Sirens Waltz cue when opponent crosses center ice
+        if (
+          !this.activeCue &&
+          p.team === 'away' &&
+          p.pos.x < CENTER_X + 60 &&
+          p.pos.x > 320
+        ) {
+          const loadout = this.getActiveSongLoadout();
+          if (loadout.includes('sirens_waltz')) {
+            this.triggerCue(
+              'CARRIER_TRAPPED',
+              'sirens_waltz',
+              'away',
+              "OPPONENT IN THE TRAP! PLAY THE SIREN'S WALTZ TO CONFUSE!"
+            );
+          }
+        }
+
+        // Check The Fortress cue when opponent gets into dangerous shooting range
+        if (!this.activeCue && p.team === 'away' && distToGoal <= 175) {
+          const loadout = this.getActiveSongLoadout();
+          if (loadout.includes('the_fortress')) {
+            this.triggerCue(
+              'DANGER_SLOT_SHOT',
+              'the_fortress',
+              'home',
+              'HIGH DANGER CHANCE! PLAY THE FORTRESS FOR GLOVE CATCH!'
+            );
+          }
+        }
+
         if (
           p.possessionTimer >= this.cfg.maxPossessionSec ||
           distToGoal <= this.cfg.minShotDistance
@@ -1047,12 +1182,30 @@ export class MatchSimulation {
       return false;
     }
 
+    if (carrier.team === 'home' && !this.activeCue) {
+      const loadout = this.getActiveSongLoadout();
+      if (loadout.includes('tic_tac_toe')) {
+        this.triggerCue(
+          'OPEN_PASS_LANE',
+          'tic_tac_toe',
+          'home',
+          'PASSING LANE OPEN! PLAY TIC-TAC-TOE FOR CRISP PASS!'
+        );
+      }
+    }
+
     carrier.passCheckTimer = this.cfg.passCheckIntervalSec;
-    const tendency = computePassTendency(
-      carrier.focus,
-      carrier.aggression,
-      this.cfg
-    );
+    const isTicTacToeActive =
+      this.activeSong?.songId === 'tic_tac_toe' &&
+      doesSongAffectTeam(this.activeSong.target, carrier.team);
+
+    const tendency = isTicTacToeActive
+      ? 0.95
+      : computePassTendency(
+          carrier.focus,
+          carrier.aggression,
+          this.cfg
+        );
     if (!this.rng.rollAgainst(tendency)) {
       return false;
     }
@@ -1066,10 +1219,15 @@ export class MatchSimulation {
     receiver: PlayerEntity,
     isGoalieOutlet: boolean = false
   ): void {
-    const accuracy = isGoalieOutlet
-      ? clamp(0.85 + 0.15 * passer.focus, 0, 1)
-      : computePassAccuracy(passer.focus, passer.stamina, this.cfg);
-    const isAccurate = isGoalieOutlet || this.rng.rollAgainst(accuracy);
+    const isTicTacToe =
+      this.activeSong?.songId === 'tic_tac_toe' &&
+      doesSongAffectTeam(this.activeSong.target, passer.team);
+
+    const accuracy =
+      isGoalieOutlet || isTicTacToe
+        ? 1.0
+        : computePassAccuracy(passer.focus, passer.stamina, this.cfg);
+    const isAccurate = isGoalieOutlet || isTicTacToe || this.rng.rollAgainst(accuracy);
 
     const passDist = dist(passer.pos, receiver.pos);
     const leadSec = clamp(passDist / Math.max(200, this.cfg.passSpeed), 0.06, 0.32);
@@ -1222,18 +1380,20 @@ export class MatchSimulation {
     this.spawnCallout('GOALIE CLEAR!', goalie.pos, '#38bdf8', 1.4);
   }
 
-  public shootPuck(striker: PlayerEntity): void {
-    const oppGoal = getOpponentGoalPos(striker.team);
-    const defTeam = oppositeTeam(striker.team);
+  public shootPuck(striker: PlayerEntity, isOwnGoal: boolean = false): void {
+    const oppGoal = isOwnGoal ? getOwnGoalPos(striker.team) : getOpponentGoalPos(striker.team);
+    const defTeam = isOwnGoal ? striker.team : oppositeTeam(striker.team);
     const goalie = this.players.find(
       (p) => p.role === 'goalie' && p.team === defTeam
     );
 
-    const shooterAccuracy = computeShooterAccuracy(striker.focus, this.cfg);
-    const blockChance = goalie
+    const shooterAccuracy = isOwnGoal ? 0.95 : computeShooterAccuracy(striker.focus, this.cfg);
+    const blockChance = isOwnGoal
+      ? 0.05
+      : goalie
       ? computeGoalieBlockChance(goalie.focus, goalie.stamina, this.cfg)
       : 0;
-    const goalChance = computeGoalChance(shooterAccuracy, blockChance, this.cfg);
+    const goalChance = isOwnGoal ? 0.90 : computeGoalChance(shooterAccuracy, blockChance, this.cfg);
 
     // Pre-roll at shot release so we know immediately if this shot is going in!
     const isScoringShot = this.rng.rollAgainst(goalChance);
@@ -1280,7 +1440,9 @@ export class MatchSimulation {
     this.puck.vel = { x: dir.x * speed, y: dir.y * speed };
     this.puck.trail = [{ ...launchPos }];
 
-    if (isScoringShot) {
+    if (isOwnGoal) {
+      this.spawnCallout('🌀 BEWITCHED! OWN GOAL SHOT!', striker.pos, '#ec4899', 2.0);
+    } else if (isScoringShot) {
       striker.reactionTimer = 1.2;
       striker.reactionColor = '#facc15';
       this.spawnCallout('⚡ SNIPE! ⚡', striker.pos, '#facc15', 1.1);
@@ -1296,7 +1458,7 @@ export class MatchSimulation {
       activeSongTarget: this.activeSong?.target ?? null,
     });
 
-    if (!isScoringShot) {
+    if (!isScoringShot && !isOwnGoal) {
       this.triggerCue(
         'SHOT_OR_REBOUND',
         'hold_the_line',
@@ -1670,12 +1832,18 @@ export class MatchSimulation {
   }
 
   private resolveGoalieSave(goalie: PlayerEntity): void {
-    const critChance = computeCritSaveChance(
-      goalie.focus,
-      goalie.stamina,
-      this.cfg
-    );
-    const isCritSave = this.rng.rollAgainst(critChance);
+    const isTheFortressActive =
+      this.activeSong?.songId === 'the_fortress' &&
+      doesSongAffectTeam(this.activeSong.target, goalie.team);
+
+    const critChance = isTheFortressActive
+      ? 1.0
+      : computeCritSaveChance(
+          goalie.focus,
+          goalie.stamina,
+          this.cfg
+        );
+    const isCritSave = isTheFortressActive || this.rng.rollAgainst(critChance);
 
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;

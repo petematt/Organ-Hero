@@ -5,6 +5,7 @@ import { generateIntermissionTips } from './campaign/tips';
 import { GameConfig, loadConfig, saveConfig } from './config';
 import { evaluateOrder, pickRandomOrder } from './game/orders';
 import { MatchSimulation } from './sim/match';
+import { OpposingOrganistController } from './sim/opposingOrganist';
 import { SeededRNG } from './sim/rng';
 import { OrderId, SongId } from './sim/types';
 import { DebugPanelController } from './ui/debugPanel';
@@ -68,6 +69,9 @@ class OrganHeroApp {
       ? campMatch.assignedOrderId
       : pickRandomOrder(new SeededRNG(this.currentSeed)).id;
     this.sim = new MatchSimulation(this.cfg, this.currentSeed, initialOrder);
+    if (campMatch?.hasOpposingOrganist && campMatch.opposingOrganist) {
+      this.sim.opposingOrganist = new OpposingOrganistController(campMatch.opposingOrganist);
+    }
     this.synth = new OrganSynth();
     this.bindAudioHooks();
 
@@ -76,7 +80,7 @@ class OrganHeroApp {
       onContinueNextPeriod: () => {
         this.sim.startNextPeriod();
         this.isPaused = false;
-        this.hud.update(this.sim);
+        this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
       },
       onPlayAgainSameSeed: () => {
         this.startNewMatch(this.currentSeed, this.sim.orderId);
@@ -306,11 +310,14 @@ class OrganHeroApp {
     }
 
     this.sim = new MatchSimulation(this.cfg, seed, orderId);
+    if (campMatch?.hasOpposingOrganist && campMatch.opposingOrganist) {
+      this.sim.opposingOrganist = new OpposingOrganistController(campMatch.opposingOrganist);
+    }
     this.bindAudioHooks();
     this.hasStartedMatch = true;
     this.isPaused = false;
     this.simAccumulatorSec = 0;
-    this.hud.update(this.sim, this.campaign.getActiveTips());
+    this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
     setTimeout(() => this.renderer.resize(), 20);
   }
 
@@ -419,8 +426,11 @@ class OrganHeroApp {
       return;
     }
     this.synth.unlock();
-    this.sim.playSong(songId);
-    this.hud.update(this.sim);
+    const activeSong = this.sim.playSong(songId);
+    if (activeSong && activeSong.cueHit) {
+      this.campaign.recordCueHit(songId);
+    }
+    this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
   }
 
   private togglePause(forcePause?: boolean): void {
@@ -537,7 +547,7 @@ class OrganHeroApp {
         players: this.sim.players,
         isMatchOver: this.sim.phase === 'MATCH_OVER',
       });
-      this.hud.update(this.sim, this.campaign.getActiveTips());
+      this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
     }
 
     this.renderer.render(this.sim, rawDtSec);

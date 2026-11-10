@@ -1,7 +1,9 @@
+import { CampaignManager } from '../campaign/campaignState';
 import { TipOffer } from '../campaign/tips';
 import { evaluateOrder, getOrderById } from '../game/orders';
 import {
   getPowerPlayState,
+  getSongTooltip,
   isSongValidOnIce,
   resolveSongTarget,
   SONGS,
@@ -32,8 +34,8 @@ export class HudController {
   ) as HTMLElement;
   private renderedLoadoutKey: string = '';
 
-  private ensureSongButtons(loadout: SongId[]): void {
-    const key = loadout.join(',');
+  private ensureSongButtons(loadout: SongId[], campaignMgr?: CampaignManager): void {
+    const key = loadout.join(',') + (campaignMgr ? `:${loadout.map(s => campaignMgr.getSongMasteryLevel(s)).join('-')}` : '');
     if (key === this.renderedLoadoutKey) return;
     this.renderedLoadoutKey = key;
 
@@ -41,16 +43,20 @@ export class HudController {
     this.musicStandButtonsEl.innerHTML = loadout
       .map((songId) => {
         const sDef = SONGS[songId];
+        const mastery = campaignMgr ? campaignMgr.getSongMasteryLevel(songId) : 'FAMILIAR';
+        const tooltip = getSongTooltip(songId, mastery);
+        const star = mastery === 'MASTERED' ? ' <span style="color:#facc15">★</span>' : '';
         return `
           <button
             id="btn-song-${songId}"
             class="song-btn song-${songId}"
             type="button"
             data-song="${songId}"
+            title="${tooltip}"
             style="--song-accent: ${sDef.color}"
           >
             <div class="song-btn-top">
-              <span class="song-title">${sDef.buttonTitle}</span>
+              <span class="song-title">${sDef.buttonTitle}${star}</span>
               <span id="stale-badge-${songId}" class="stale-badge hidden">STALE</span>
             </div>
             <div class="song-btn-desc">${sDef.shortDesc}</div>
@@ -66,9 +72,13 @@ export class HudController {
       .join('');
   }
 
-  public update(sim: MatchSimulation, activeTips?: TipOffer[]): void {
+  public update(
+    sim: MatchSimulation,
+    activeTips?: TipOffer[],
+    campaignMgr?: CampaignManager
+  ): void {
     const loadout = sim.getActiveSongLoadout();
-    this.ensureSongButtons(loadout);
+    this.ensureSongButtons(loadout, campaignMgr);
 
     this.scoreHomeEl.textContent = String(sim.homeScore);
     this.scoreAwayEl.textContent = String(sim.awayScore);

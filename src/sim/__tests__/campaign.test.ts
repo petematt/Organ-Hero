@@ -4,7 +4,11 @@ import { buildCampaignSchedule } from '../../campaign/schedule';
 import { buildRosterForMatch, HOME_TEAM, RIVAL_TEAMS } from '../../campaign/teams';
 import { purchaseSong, purchaseStandUpgrade } from '../../campaign/shop';
 import { evaluateTip, generateIntermissionTips, TipOffer } from '../../campaign/tips';
-import { MatchEvent } from '../../sim/types';
+import { cloneConfig } from '../../config';
+import { getSongTooltip, SONGS } from '../../game/songs';
+import { MatchSimulation } from '../../sim/match';
+import { OpposingOrganistController } from '../../sim/opposingOrganist';
+import { MatchEvent, SongId } from '../../sim/types';
 
 class LocalStorageMock {
   private store: Record<string, string> = {};
@@ -369,3 +373,113 @@ describe('Phase 2C: The Organ Loft Shop & Music Stand Upgrades', () => {
     expect(mgr.getState().equippedSongs.length).toBe(2);
   });
 });
+
+describe('Phase 2D: Expanded Song Repertoire, Mastery Meter & Opposing Organist', () => {
+  it('includes all 12 songs with unique IDs and complete definitions', () => {
+    const expectedIds: SongId[] = [
+      'charge',
+      'hold_the_line',
+      'grudge_toccata',
+      'power_play_polka',
+      'kill_the_clock',
+      'madeyalook',
+      'underdog_draw',
+      'second_wind',
+      'tic_tac_toe',
+      'the_fortress',
+      'sirens_waltz',
+      'overtime_overture',
+    ];
+
+    for (const id of expectedIds) {
+      expect(SONGS[id]).toBeDefined();
+      expect(SONGS[id].title).toBeTruthy();
+      expect(SONGS[id].shortDesc).toBeTruthy();
+    }
+  });
+
+  it('tracks song mastery level strictly on on-cue hits', () => {
+    const mgr = new CampaignManager();
+    expect(mgr.getSongMasteryLevel('underdog_draw')).toBe('UNKNOWN');
+    expect(getSongTooltip('underdog_draw', 'UNKNOWN')).toContain('rumored to help');
+
+    // 1-3 hits: still UNKNOWN
+    mgr.recordCueHit('underdog_draw');
+    mgr.recordCueHit('underdog_draw');
+    mgr.recordCueHit('underdog_draw');
+    expect(mgr.getSongMasteryLevel('underdog_draw')).toBe('UNKNOWN');
+
+    // 4 hits: becomes FAMILIAR
+    mgr.recordCueHit('underdog_draw');
+    expect(mgr.getSongMasteryLevel('underdog_draw')).toBe('FAMILIAR');
+    expect(getSongTooltip('underdog_draw', 'FAMILIAR')).toContain('2x multiplier');
+
+    // 9 hits: becomes MASTERED
+    for (let i = 0; i < 5; i++) {
+      mgr.recordCueHit('underdog_draw');
+    }
+    expect(mgr.getSongMasteryLevel('underdog_draw')).toBe('MASTERED');
+    expect(getSongTooltip('underdog_draw', 'MASTERED')).toContain('MASTERED');
+  });
+
+  it('restores stamina across skaters when second_wind is played', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 42, 'home_wins');
+
+    // Drain home striker stamina
+    const homeStriker = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+    homeStriker.stamina = 0.20;
+
+    sim.playSong('second_wind');
+    expect(homeStriker.stamina).toBeGreaterThan(0.20 + 0.35);
+  });
+
+  it('guarantees critical glove save when the_fortress is active', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 42, 'home_wins');
+
+    const homeGoalie = sim.players.find((p) => p.team === 'home' && p.role === 'goalie')!;
+    homeGoalie.focus = 0.1;
+    homeGoalie.stamina = 0.1;
+
+    // Away has possession, so defending team is Home
+    sim.currentPossessor = 'away';
+    sim.playSong('the_fortress');
+    expect(sim.activeSong?.songId).toBe('the_fortress');
+    expect(sim.activeSong?.target).toBe('home');
+
+    (sim as unknown as { resolveGoalieSave: (g: typeof homeGoalie) => void }).resolveGoalieSave(homeGoalie);
+    expect(homeGoalie.mode).toBe('HOLDING_PUCK');
+    expect(sim.events.some((e) => e.type === 'SAVE' && e.isCritSave)).toBe(true);
+  });
+
+  it('opposing organist triggers rival tunes and is silenced by player counter hit', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 42, 'home_wins');
+    sim.phase = 'PLAYING';
+
+    const controller = new OpposingOrganistController({
+      name: 'Rival Ray',
+      title: 'Visiting Booth Virtuoso',
+      avatarColor: '#f43f5e',
+      playIntervalSec: 10,
+      favoredSongs: ['charge'],
+      tauntMessage: 'Loves loud fanfares.',
+    });
+    sim.opposingOrganist = controller;
+
+    // Advance controller cooldown to zero
+    controller.cooldownSec = 0.1;
+    controller.step(0.2, sim);
+
+    expect(controller.activeSongId).toBe('charge');
+    expect(controller.songRemainingSec).toBeGreaterThan(0);
+    expect(sim.activeCue?.type).toBe('RIVAL_ORGANIST_ATTACK');
+
+    // Player hits counter tune (hold_the_line counters charge)
+    sim.playSong('hold_the_line');
+    expect(controller.activeSongId).toBeNull();
+    expect(controller.songRemainingSec).toBe(0);
+  });
+});
+

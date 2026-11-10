@@ -148,7 +148,7 @@ export class OrganSynth {
         { freq: 329.63, durationSec: 0.11, delaySec: 0.90 }, // E4 tock
         { freq: 440.0, durationSec: 0.42, delaySec: 1.08, chord: [220.0, 329.63, 523.25] }, // Am lockdown chord
       ];
-    } else {
+    } else if (songId === 'madeyalook') {
       // Madeyalook: Taunting "Nyah-nyah-nyah-nyah-nyah-nyah!" goalie distraction motif
       sequence = [
         { freq: 783.99, durationSec: 0.16, delaySec: 0.0, chord: [392.0] }, // G5 "Made"
@@ -157,6 +157,53 @@ export class OrganSynth {
         { freq: 783.99, durationSec: 0.15, delaySec: 0.64, chord: [392.0] }, // G5
         { freq: 659.25, durationSec: 0.15, delaySec: 0.81, chord: [329.63] }, // E5
         { freq: 523.25, durationSec: 0.48, delaySec: 0.98, chord: [261.63, 329.63, 392.0] }, // C5 raspberry resolve
+      ];
+    } else if (songId === 'underdog_draw') {
+      // Underdog Draw: Fast ascending rally call
+      sequence = [
+        { freq: 466.16, durationSec: 0.12, delaySec: 0.0 }, // Bb4
+        { freq: 587.33, durationSec: 0.12, delaySec: 0.13 }, // D5
+        { freq: 698.46, durationSec: 0.12, delaySec: 0.26 }, // F5
+        { freq: 932.33, durationSec: 0.40, delaySec: 0.39, chord: [466.16, 587.33] }, // Bb5 triumph!
+      ];
+    } else if (songId === 'second_wind') {
+      // Second Wind: Soothing uplifting waltz arpeggio
+      sequence = [
+        { freq: 329.63, durationSec: 0.22, delaySec: 0.0, chord: [164.81] }, // E4
+        { freq: 440.0, durationSec: 0.22, delaySec: 0.22 }, // A4
+        { freq: 554.37, durationSec: 0.22, delaySec: 0.44 }, // C#5
+        { freq: 659.25, durationSec: 0.50, delaySec: 0.66, chord: [220.0, 329.63] }, // E5 oxygen restore
+      ];
+    } else if (songId === 'tic_tac_toe') {
+      // Tic-Tac-Toe: Rapid bouncy 3-note passing cadence
+      sequence = [
+        { freq: 523.25, durationSec: 0.12, delaySec: 0.0, chord: [261.63] }, // C5 (tic)
+        { freq: 659.25, durationSec: 0.12, delaySec: 0.16, chord: [329.63] }, // E5 (tac)
+        { freq: 783.99, durationSec: 0.35, delaySec: 0.32, chord: [392.0, 523.25, 1046.5] }, // G5 (toe - one timer!)
+      ];
+    } else if (songId === 'the_fortress') {
+      // The Fortress: Resonant Cathedral power chord (glove catch lockdown)
+      sequence = [
+        { freq: 261.63, durationSec: 0.70, delaySec: 0.0, chord: [130.81, 196.0, 392.0, 523.25] }, // Grand C minor anchor
+        { freq: 392.0, durationSec: 0.60, delaySec: 0.72, chord: [196.0, 311.13, 622.25] }, // Eb minor resolve
+      ];
+    } else if (songId === 'sirens_waltz') {
+      // Siren's Waltz: Eerie descending chromatic whole-tone trill
+      sequence = [
+        { freq: 740.0, durationSec: 0.18, delaySec: 0.0 }, // F#5
+        { freq: 659.25, durationSec: 0.18, delaySec: 0.18 }, // E5
+        { freq: 587.33, durationSec: 0.18, delaySec: 0.36 }, // D5
+        { freq: 523.25, durationSec: 0.45, delaySec: 0.54, chord: [261.63, 369.99] }, // C5 tritone bewitchment!
+      ];
+    } else if (songId === 'overtime_overture') {
+      // Overtime Overture: Dramatic accelerating staccato gallop
+      sequence = [
+        { freq: 293.66, durationSec: 0.10, delaySec: 0.0, chord: [146.83] }, // D4
+        { freq: 349.23, durationSec: 0.10, delaySec: 0.12 }, // F4
+        { freq: 440.0, durationSec: 0.10, delaySec: 0.24 }, // A4
+        { freq: 587.33, durationSec: 0.10, delaySec: 0.36 }, // D5
+        { freq: 698.46, durationSec: 0.12, delaySec: 0.48 }, // F5
+        { freq: 880.0, durationSec: 0.45, delaySec: 0.62, chord: [293.66, 440.0, 587.33] }, // D5 climax
       ];
     }
 

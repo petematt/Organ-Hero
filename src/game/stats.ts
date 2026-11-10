@@ -58,6 +58,12 @@ export function buildStatsSummary(
     power_play_polka: 0,
     kill_the_clock: 0,
     madeyalook: 0,
+    underdog_draw: 0,
+    second_wind: 0,
+    tic_tac_toe: 0,
+    the_fortress: 0,
+    sirens_waltz: 0,
+    overtime_overture: 0,
   };
   let cueHits = 0;
   let stalePlays = 0;
