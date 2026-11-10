@@ -18,10 +18,13 @@ function parseUrlParams(): {
   debug: boolean;
   autostart: boolean;
   screen: string | null;
+  steps: number | null;
 } {
   const params = new URLSearchParams(window.location.search);
   const seedRaw = params.get('seed');
   const parsedSeed = seedRaw !== null ? parseInt(seedRaw, 10) : NaN;
+  const stepsRaw = params.get('steps');
+  const parsedSteps = stepsRaw !== null ? parseInt(stepsRaw, 10) : NaN;
   const debug = params.get('debug') === '1';
   const autostart = params.get('autostart') === '1';
   const screen = params.get('screen');
@@ -30,6 +33,7 @@ function parseUrlParams(): {
     debug,
     autostart,
     screen,
+    steps: Number.isNaN(parsedSteps) ? null : parsedSteps,
   };
 }
 
@@ -226,8 +230,10 @@ class OrganHeroApp {
     if (urlOpts.autostart) {
       this.screens.hide();
       this.startNewMatch(this.currentSeed, initialOrder);
-      for (let i = 0; i < 240; i++) {
+      const steps = urlOpts.steps ?? 240;
+      for (let i = 0; i < steps; i++) {
         this.sim.step(1 / 60);
+        this.renderer.stepIceWear(this.sim, 1 / 60);
       }
       this.hud.update(this.sim);
     } else if (urlOpts.screen === 'clipboard') {

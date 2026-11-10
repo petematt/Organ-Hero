@@ -31,6 +31,13 @@ interface IceButton {
   onClick: () => void;
 }
 
+interface CornerSnowFlake {
+  x: number;
+  y: number;
+  r: number;
+  alpha: number;
+}
+
 function easeInOutCubic(t: number): number {
   const x = clamp(t, 0, 1);
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -69,6 +76,13 @@ export class RinkRenderer {
   private zamboniStartScrollY: number = CENTER_Y;
   private zamboniOnFinish: (() => void) | null = null;
 
+  // Dynamic ice wear (skate cuts & corner snow mounds) cleared by Zamboni
+  private iceWearCanvas: HTMLCanvasElement;
+  private iceWearCtx: CanvasRenderingContext2D;
+  private cornerSnowFlakes: CornerSnowFlake[] = [];
+  private cornerSnowLevel: number = 0; // 0.0 (fresh ice) to 1.0 (heavy wear/snow)
+  private ambientScratchTimerSec: number = 0;
+
   // Cached screen-to-rink transform parameters for pointer hit testing & drag scaling
   private lastScreenCenterX: number = 0;
   private lastScreenCenterY: number = 0;
@@ -93,6 +107,16 @@ export class RinkRenderer {
       throw new Error('Could not initialize offscreen summary 2D context');
     }
     this.summaryCtx = sCtx;
+
+    this.iceWearCanvas = document.createElement('canvas');
+    this.iceWearCanvas.width = RINK_WIDTH;
+    this.iceWearCanvas.height = RINK_HEIGHT;
+    const iwCtx = this.iceWearCanvas.getContext('2d');
+    if (!iwCtx) {
+      throw new Error('Could not initialize offscreen ice wear 2D context');
+    }
+    this.iceWearCtx = iwCtx;
+    this.initCornerSnowFlakes();
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -138,6 +162,7 @@ export class RinkRenderer {
     this.zamboniProgress = 0;
     this.intermissionZoomBlend = 0;
     this.iceButtons = [];
+    this.clearIceWear();
     const viewport = document.getElementById('app-viewport');
     viewport?.classList.remove('ice-focus-mode');
   }
@@ -315,6 +340,7 @@ export class RinkRenderer {
           this.intermissionZoomBlend = 0;
           this.zamboniOnFinish = null;
           this.iceButtons = [];
+          this.clearIceWear();
           const viewport = document.getElementById('app-viewport');
           viewport?.classList.remove('ice-focus-mode');
           finishCb?.();
@@ -425,6 +451,10 @@ export class RinkRenderer {
     this.lastScreenCenterX = screenCenterX;
     this.lastScreenCenterY = screenCenterY;
     this.lastCssScale = activeCssScale;
+
+    if (!this.isIceSummaryActive) {
+      this.updateIceWear(sim, realDtSec);
+    }
 
     ctx.save();
     ctx.clearRect(0, 0, cw, ch);
@@ -578,6 +608,21 @@ export class RinkRenderer {
       this.traceZamboniPathUpTo(sCtx, eraseDist);
       sCtx.stroke();
       sCtx.restore();
+
+      // Clear scratches from iceWearCanvas along the Zamboni's squeegee swath
+      this.iceWearCtx.save();
+      this.iceWearCtx.globalCompositeOperation = 'destination-out';
+      this.iceWearCtx.strokeStyle = '#000000';
+      this.iceWearCtx.lineWidth = swathWidth;
+      this.iceWearCtx.lineCap = 'round';
+      this.iceWearCtx.lineJoin = 'round';
+      this.iceWearCtx.beginPath();
+      this.traceZamboniPathUpTo(this.iceWearCtx, eraseDist);
+      this.iceWearCtx.stroke();
+      this.iceWearCtx.restore();
+
+      // Corner ice shavings clear as the Zamboni cleans the rink
+      this.cornerSnowLevel = Math.max(0, 1 - this.zamboniProgress);
     }
     sCtx.restore();
 
@@ -1683,6 +1728,9 @@ export class RinkRenderer {
     ctx.fill();
     ctx.stroke();
 
+    // Dynamic ice wear (skate blade scratches & banked corner snow shavings)
+    this.drawIceWearAndCornerShavings(ctx);
+
     ctx.restore();
 
     // Outer rink boards border
@@ -1694,6 +1742,172 @@ export class RinkRenderer {
     ctx.strokeStyle = '#f59e0b'; // Yellow kickplate highlight
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.restore();
+  }
+
+  public clearIceWear(): void {
+    this.iceWearCtx.clearRect(0, 0, RINK_WIDTH, RINK_HEIGHT);
+    this.cornerSnowLevel = 0;
+    this.ambientScratchTimerSec = 0;
+  }
+
+  private initCornerSnowFlakes(): void {
+    this.cornerSnowFlakes = [];
+    const r = RINK_CORNER_RADIUS; // 95
+    const corners = [
+      { cx: r, cy: r, startAngle: Math.PI },
+      { cx: RINK_WIDTH - r, cy: r, startAngle: 1.5 * Math.PI },
+      { cx: RINK_WIDTH - r, cy: RINK_HEIGHT - r, startAngle: 0 },
+      { cx: r, cy: RINK_HEIGHT - r, startAngle: 0.5 * Math.PI },
+    ];
+
+    let seed = 4289;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
+    for (const c of corners) {
+      for (let i = 0; i < 48; i++) {
+        const theta = c.startAngle + rnd() * (0.5 * Math.PI);
+        const dist = 60 + Math.pow(rnd(), 0.55) * 33;
+        const x = c.cx + Math.cos(theta) * dist;
+        const y = c.cy + Math.sin(theta) * dist;
+        const flakeR = 1.5 + rnd() * 2.8;
+        const alpha = 0.55 + rnd() * 0.45;
+        this.cornerSnowFlakes.push({ x, y, r: flakeR, alpha });
+      }
+    }
+  }
+
+  public stepIceWear(sim: MatchSimulation, dt: number): void {
+    this.updateIceWear(sim, dt);
+  }
+
+  private updateIceWear(sim: MatchSimulation, dt: number): void {
+    if (this.isIceSummaryActive || this.isZamboniClearing) return;
+
+    // 1. Match progress builds corner snow and ice shavings
+    const periodDuration = Math.max(1, sim.cfg.periodDurationSec ?? 120);
+    const periodProgress = 1 - clamp(sim.periodTimeRemainingSec / periodDuration, 0, 1);
+    this.cornerSnowLevel = Math.max(this.cornerSnowLevel, periodProgress);
+
+    // 2. Skater blade scratches
+    for (const p of sim.players) {
+      if (p.mode === 'PENALTY_BOX') continue;
+      const vx = p.vel.x;
+      const vy = p.vel.y;
+      const spdSq = vx * vx + vy * vy;
+      if (spdSq < 400) continue; // must be actively skating (> 20 px/s)
+
+      if (Math.random() > 0.45) continue;
+
+      const spd = Math.sqrt(spdSq);
+      const heading = Math.atan2(vy, vx);
+      const perpX = -Math.sin(heading);
+      const perpY = Math.cos(heading);
+
+      const bladeOffset = Math.random() < 0.5 ? 2.5 : -2.5;
+      const sx = p.pos.x + perpX * bladeOffset;
+      const sy = p.pos.y + perpY * bladeOffset;
+      const len = Math.min(18, 5 + spd * 0.055 + Math.random() * 7);
+      const jitter = (Math.random() - 0.5) * 0.22;
+      const ex = sx - Math.cos(heading + jitter) * len;
+      const ey = sy - Math.sin(heading + jitter) * len;
+
+      this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      this.iceWearCtx.lineWidth = 1.0 + Math.random() * 0.6;
+      this.iceWearCtx.beginPath();
+      this.iceWearCtx.moveTo(sx, sy);
+      this.iceWearCtx.lineTo(ex, ey);
+      this.iceWearCtx.stroke();
+
+      const inCorner =
+        (p.pos.x < 140 || p.pos.x > RINK_WIDTH - 140) &&
+        (p.pos.y < 140 || p.pos.y > RINK_HEIGHT - 140);
+      if (inCorner) {
+        this.cornerSnowLevel = Math.min(1.0, this.cornerSnowLevel + 0.0025);
+      }
+    }
+
+    // 3. Periodic ambient fine hairline cuts across active zones
+    this.ambientScratchTimerSec += dt;
+    if (this.ambientScratchTimerSec >= 0.18) {
+      this.ambientScratchTimerSec = 0;
+      const count = 1 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        const rx = 120 + Math.random() * (RINK_WIDTH - 240);
+        const ry = 45 + Math.random() * (RINK_HEIGHT - 90);
+        const angle = Math.random() * Math.PI * 2;
+        const rlen = 6 + Math.random() * 16;
+        this.iceWearCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+        this.iceWearCtx.lineWidth = 0.9;
+        this.iceWearCtx.beginPath();
+        this.iceWearCtx.moveTo(rx, ry);
+        this.iceWearCtx.lineTo(rx + Math.cos(angle) * rlen, ry + Math.sin(angle) * rlen);
+        this.iceWearCtx.stroke();
+      }
+    }
+  }
+
+  private drawIceWearAndCornerShavings(ctx: CanvasRenderingContext2D): void {
+    // 1. Skate scratches from offscreen canvas
+    ctx.drawImage(this.iceWearCanvas, 0, 0);
+
+    // 2. Corner snow accumulations & shavings
+    if (this.cornerSnowLevel > 0.005) {
+      this.drawCornerSnow(ctx);
+    }
+  }
+
+  private drawCornerSnow(ctx: CanvasRenderingContext2D): void {
+    const snowAlpha = clamp(this.cornerSnowLevel, 0, 1);
+    const r = RINK_CORNER_RADIUS; // 95
+
+    const corners: {
+      cx: number;
+      cy: number;
+      startAngle: number;
+      endAngle: number;
+    }[] = [
+      // Top-Left
+      { cx: r, cy: r, startAngle: Math.PI, endAngle: 1.5 * Math.PI },
+      // Top-Right
+      { cx: RINK_WIDTH - r, cy: r, startAngle: 1.5 * Math.PI, endAngle: 2 * Math.PI },
+      // Bottom-Right
+      { cx: RINK_WIDTH - r, cy: RINK_HEIGHT - r, startAngle: 0, endAngle: 0.5 * Math.PI },
+      // Bottom-Left
+      { cx: r, cy: RINK_HEIGHT - r, startAngle: 0.5 * Math.PI, endAngle: Math.PI },
+    ];
+
+    ctx.save();
+
+    for (const c of corners) {
+      // Soft powdery snow gradient banked against the inside curve of the corner boards
+      const grad = ctx.createRadialGradient(c.cx, c.cy, 48, c.cx, c.cy, r);
+      grad.addColorStop(0, 'rgba(224, 242, 254, 0)');
+      grad.addColorStop(0.45, `rgba(224, 242, 254, ${(0.28 * snowAlpha).toFixed(3)})`);
+      grad.addColorStop(0.75, `rgba(240, 248, 255, ${(0.58 * snowAlpha).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(255, 255, 255, ${(0.82 * snowAlpha).toFixed(3)})`);
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(c.cx, c.cy, r, c.startAngle, c.endAngle);
+      ctx.arc(c.cx, c.cy, 48, c.endAngle, c.startAngle, true);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Individual crisp crystalline snow speckles / ice shavings
+    for (const flake of this.cornerSnowFlakes) {
+      const alpha = flake.alpha * snowAlpha;
+      if (alpha <= 0.02) continue;
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(flake.x, flake.y, flake.r * (0.65 + snowAlpha * 0.35), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 
