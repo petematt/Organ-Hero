@@ -62,6 +62,10 @@ export interface MatchAudioHooks {
   onWhistle?: () => void;
   onGoalHorn?: () => void;
   onSongPlay?: (songId: SongId, cueHit: boolean, stale: boolean) => void;
+  onPuckAction?: (type: 'pass' | 'shot' | 'steal') => void;
+  onFightImpact?: () => void;
+  onPenaltyWhistle?: () => void;
+  onPeriodBuzzer?: () => void;
 }
 
 export class MatchSimulation {
@@ -556,7 +560,7 @@ export class MatchSimulation {
 
     // Check period end
     if (this.periodTimeRemainingSec <= 0) {
-      this.audioHooks.onWhistle?.();
+      this.audioHooks.onPeriodBuzzer?.();
       if (this.period >= 3) {
         this.phase = 'MATCH_OVER';
       } else {
@@ -700,6 +704,7 @@ export class MatchSimulation {
             p.fightPartnerId = null;
             p.isFightInstigator = false;
             p.pos = this.getPenaltyBoxPos(p.team, p.id);
+            this.audioHooks.onPenaltyWhistle?.();
             this.events.push({
               type: 'PENALTY',
               period: this.period,
@@ -1318,6 +1323,7 @@ export class MatchSimulation {
       activeSongTarget: this.activeSong?.target ?? null,
     });
 
+    this.audioHooks.onPuckAction?.('pass');
     this.spawnCallout(
       isGoalieOutlet ? 'OUTLET PASS!' : isAccurate ? 'PASS!' : 'WILD PASS!',
       passer.pos,
@@ -1451,6 +1457,7 @@ export class MatchSimulation {
       this.spawnCallout('⚡ SNIPE! ⚡', striker.pos, '#facc15', 1.1);
     }
 
+    this.audioHooks.onPuckAction?.('shot');
     this.events.push({
       type: 'SHOT',
       period: this.period,
@@ -1567,6 +1574,7 @@ export class MatchSimulation {
         activeSongTarget: this.activeSong?.target ?? null,
       });
 
+      this.audioHooks.onPuckAction?.('steal');
       this.spawnCallout('STEAL!', defender.pos, '#2dd4bf', 1.8);
       this.triggerCue(
         'TEMPER_FLARING',
@@ -1634,6 +1642,7 @@ export class MatchSimulation {
       activeSongTarget: this.activeSong?.target ?? null,
     });
 
+    this.audioHooks.onFightImpact?.();
     const mid = {
       x: (instigator.pos.x + victim.pos.x) * 0.5,
       y: (instigator.pos.y + victim.pos.y) * 0.5,

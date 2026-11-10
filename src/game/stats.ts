@@ -170,46 +170,113 @@ export function buildStatsSummary(
       : 50;
 
   const impactLines: string[] = [];
-  const totalOrganGoals = goalsDuringCharge + goalsDuringPolka + goalsDuringMadeyalook;
-  if (totalGoals > 0) {
-    if (goalsDuringPolka > 0 || goalsDuringMadeyalook > 0) {
+
+  // 1. Scoring songs (only if played)
+  if (songsPlayed['charge'] > 0) {
+    if (goalsDuringCharge > 0) {
       impactLines.push(
-        `${totalOrganGoals} of ${totalGoals} goal(s) scored under Organ buffs (Charge: ${goalsDuringCharge}, Polka: ${goalsDuringPolka}, Madeyalook: ${goalsDuringMadeyalook}).`
+        `Charge! Fanfare boosted ${goalsDuringCharge} of ${totalGoals} goal(s) (${songsPlayed['charge']} play(s)).`
       );
     } else {
       impactLines.push(
-        `${goalsDuringCharge} of ${totalGoals} goal(s) were scored under your Charge! Fanfare.`
+        `Charge! Fanfare played ${songsPlayed['charge']} time(s) with 0 goals scored.`
       );
     }
-  } else {
-    impactLines.push(`No goals scored yet — play Charge!, Polka, or Madeyalook to boost scoring.`);
   }
-
-  const totalOrganDef = savesAndStealsDuringHold + savesAndStealsDuringKillClock;
-  if (totalOrganDef > 0) {
-    if (savesAndStealsDuringKillClock > 0) {
+  if (songsPlayed['power_play_polka'] > 0) {
+    if (goalsDuringPolka > 0) {
       impactLines.push(
-        `Organ defense boosted ${totalOrganDef} save(s) & steal(s) (Hold: ${savesAndStealsDuringHold}, Kill Clock: ${savesAndStealsDuringKillClock}).`
+        `Power Play Polka boosted ${goalsDuringPolka} goal(s) (${songsPlayed['power_play_polka']} play(s)).`
       );
     } else {
+      impactLines.push(
+        `Power Play Polka played ${songsPlayed['power_play_polka']} time(s) (0 power play goals).`
+      );
+    }
+  }
+  if (songsPlayed['madeyalook'] > 0) {
+    if (goalsDuringMadeyalook > 0) {
+      impactLines.push(
+        `Madeyalook distraction created ${goalsDuringMadeyalook} goal(s) (${songsPlayed['madeyalook']} play(s)).`
+      );
+    } else {
+      impactLines.push(
+        `Madeyalook played ${songsPlayed['madeyalook']} time(s) with 0 goals resulting.`
+      );
+    }
+  }
+
+  // 2. Defensive songs (only if played)
+  if (songsPlayed['hold_the_line'] > 0) {
+    if (savesAndStealsDuringHold > 0) {
       impactLines.push(
         `Hold the Line directly boosted ${savesAndStealsDuringHold} defensive save(s) & steal(s).`
       );
+    } else {
+      impactLines.push(
+        `Hold the Line played ${songsPlayed['hold_the_line']} time(s) (0 saves/steals during buff).`
+      );
     }
-  } else {
+  }
+  if (songsPlayed['kill_the_clock'] > 0) {
+    if (savesAndStealsDuringKillClock > 0) {
+      impactLines.push(
+        `Kill the Clock aided ${savesAndStealsDuringKillClock} shorthanded save(s) & steal(s).`
+      );
+    } else {
+      impactLines.push(
+        `Kill the Clock played ${songsPlayed['kill_the_clock']} time(s) (0 shorthanded stops).`
+      );
+    }
+  }
+
+  // 3. Brawl / Agitation song (only if played)
+  if (songsPlayed['grudge_toccata'] > 0) {
+    if (fightsDuringGrudge > 0) {
+      impactLines.push(
+        `Grudge Toccata sparked ${fightsDuringGrudge} of ${fights} brawl(s) on the ice.`
+      );
+    } else {
+      impactLines.push(
+        `Grudge Toccata played ${songsPlayed['grudge_toccata']} time(s) with 0 brawls ignited.`
+      );
+    }
+  }
+
+  // 4. Other campaign songs (only if played)
+  if (songsPlayed['underdog_draw'] > 0) {
     impactLines.push(
-      `Hold the Line / Kill the Clock contributed 0 boosted saves/steals — tap when shots fly.`
+      `Underdog Draw played ${songsPlayed['underdog_draw']} time(s) swinging faceoff win odds.`
+    );
+  }
+  if (songsPlayed['second_wind'] > 0) {
+    impactLines.push(
+      `Second Wind played ${songsPlayed['second_wind']} time(s) reviving bench skater stamina.`
+    );
+  }
+  if (songsPlayed['tic_tac_toe'] > 0) {
+    impactLines.push(
+      `Tic-Tac-Toe played ${songsPlayed['tic_tac_toe']} time(s) sharpening passing speed & precision.`
+    );
+  }
+  if (songsPlayed['the_fortress'] > 0) {
+    impactLines.push(
+      `The Fortress played ${songsPlayed['the_fortress']} time(s) bolstering clutch goaltending saves.`
+    );
+  }
+  if (songsPlayed['sirens_waltz'] > 0) {
+    impactLines.push(
+      `The Siren's Waltz played ${songsPlayed['sirens_waltz']} time(s) mesmerizing opponent puck carriers.`
+    );
+  }
+  if (songsPlayed['overtime_overture'] > 0) {
+    impactLines.push(
+      `Overtime Overture played ${songsPlayed['overtime_overture']} time(s) surging late-game skating tempo.`
     );
   }
 
-  if (fights > 0) {
-    impactLines.push(
-      `Grudge Toccata sparked ${fightsDuringGrudge} of ${fights} brawl(s) on the ice.`
-    );
-  } else {
-    impactLines.push(
-      `0 brawls broke out — unleash Grudge Toccata when tempers flare after a collision.`
-    );
+  if (impactLines.length === 0) {
+    impactLines.push('No organ songs were played this period.');
   }
 
   return {

@@ -323,6 +323,10 @@ class OrganHeroApp {
           this.campaign.recordCueHit(songId);
         }
       },
+      onPuckAction: (type) => this.synth.playPuckClick(type),
+      onFightImpact: () => this.synth.playFightImpact(),
+      onPenaltyWhistle: () => this.synth.playPenaltyWhistle(),
+      onPeriodBuzzer: () => this.synth.playPeriodBuzzer(),
     };
   }
 

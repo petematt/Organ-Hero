@@ -375,4 +375,190 @@ export class OrganSynth {
     osc.stop(now + dur + 0.02);
     lfo.stop(now + dur + 0.02);
   }
+
+  public playPuckClick(type: 'pass' | 'shot' | 'steal'): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+
+    const now = ctx.currentTime + 0.005;
+    const jitter = 0.88 + Math.random() * 0.24;
+
+    if (type === 'shot') {
+      // Powerful slap/wrist shot with low-end stick flex and snappy crack
+      const dur = 0.075;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      gain.connect(this.masterGain);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(320 * jitter, now);
+      osc.frequency.exponentialRampToValueAtTime(75, now + dur);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+
+      // High blade snap transient
+      const clickGain = ctx.createGain();
+      clickGain.gain.setValueAtTime(0.12, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.022);
+      clickGain.connect(this.masterGain);
+
+      const clickOsc = ctx.createOscillator();
+      clickOsc.type = 'sine';
+      clickOsc.frequency.setValueAtTime(1450 * jitter, now);
+      clickOsc.frequency.exponentialRampToValueAtTime(300, now + 0.022);
+      clickOsc.connect(clickGain);
+      clickOsc.start(now);
+      clickOsc.stop(now + 0.03);
+    } else if (type === 'pass') {
+      // Clean composite stick pass click
+      const dur = 0.045;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.12, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      gain.connect(this.masterGain);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(540 * jitter, now);
+      osc.frequency.exponentialRampToValueAtTime(160, now + dur);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    } else {
+      // Steal / poke check blade-on-puck snap
+      const dur = 0.038;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.14, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      gain.connect(this.masterGain);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(820 * jitter, now);
+      osc.frequency.exponentialRampToValueAtTime(280, now + dur);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    }
+  }
+
+  public playFightImpact(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+
+    const now = ctx.currentTime + 0.005;
+    const pitchVar = 0.85 + Math.random() * 0.3;
+    const isDouble = Math.random() < 0.45;
+    const punches = isDouble ? [0, 0.08 + Math.random() * 0.04] : [0];
+
+    for (const offset of punches) {
+      const pStart = now + offset;
+      const dur = 0.12;
+
+      // Heavy body thud
+      const thudGain = ctx.createGain();
+      thudGain.gain.setValueAtTime(0.001, pStart);
+      thudGain.gain.linearRampToValueAtTime(0.24, pStart + 0.015);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, pStart + dur);
+      thudGain.connect(this.masterGain);
+
+      const thudOsc = ctx.createOscillator();
+      thudOsc.type = 'triangle';
+      thudOsc.frequency.setValueAtTime(160 * pitchVar, pStart);
+      thudOsc.frequency.exponentialRampToValueAtTime(38, pStart + dur);
+      thudOsc.connect(thudGain);
+      thudOsc.start(pStart);
+      thudOsc.stop(pStart + dur + 0.02);
+
+      // Punch slap / glove crack transient
+      const slapGain = ctx.createGain();
+      slapGain.gain.setValueAtTime(0.001, pStart);
+      slapGain.gain.linearRampToValueAtTime(0.15, pStart + 0.005);
+      slapGain.gain.exponentialRampToValueAtTime(0.001, pStart + 0.05);
+      slapGain.connect(this.masterGain);
+
+      const slapOsc = ctx.createOscillator();
+      slapOsc.type = 'sawtooth';
+      slapOsc.frequency.setValueAtTime(750 * pitchVar, pStart);
+      slapOsc.frequency.exponentialRampToValueAtTime(120, pStart + 0.05);
+      slapOsc.connect(slapGain);
+      slapOsc.start(pStart);
+      slapOsc.stop(pStart + 0.06);
+    }
+  }
+
+  public playPenaltyWhistle(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+
+    const now = ctx.currentTime + 0.01;
+    // Distinct double-burst referee blast for penalties
+    const bursts = [
+      { start: now, dur: 0.10, freq: 2750 },
+      { start: now + 0.14, dur: 0.24, freq: 3100 },
+    ];
+
+    for (const b of bursts) {
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, b.start);
+      gain.gain.linearRampToValueAtTime(0.20, b.start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.001, b.start + b.dur);
+      gain.connect(this.masterGain);
+
+      const osc = ctx.createOscillator();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(b.freq, b.start);
+      lfo.frequency.setValueAtTime(45, b.start);
+      lfoGain.gain.value = 160;
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+      osc.connect(gain);
+
+      osc.start(b.start);
+      lfo.start(b.start);
+      osc.stop(b.start + b.dur + 0.02);
+      lfo.stop(b.start + b.dur + 0.02);
+    }
+  }
+
+  public playPeriodBuzzer(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+
+    const now = ctx.currentTime + 0.01;
+    const dur = 1.15;
+
+    const buzzerGain = ctx.createGain();
+    buzzerGain.gain.setValueAtTime(0.001, now);
+    buzzerGain.gain.linearRampToValueAtTime(0.28, now + 0.03);
+    buzzerGain.gain.setValueAtTime(0.26, now + dur - 0.06);
+    buzzerGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    buzzerGain.connect(this.masterGain);
+
+    // Filter to emulate arena acoustic horn resonance
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(750, now);
+    filter.Q.setValueAtTime(2.0, now);
+    filter.connect(buzzerGain);
+
+    // Thick dual-sawtooth detuned buzzer tone
+    const freqs = [135, 137.5, 272];
+    for (const f of freqs) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, now);
+      osc.connect(filter);
+      osc.start(now);
+      osc.stop(now + dur + 0.03);
+    }
+  }
 }

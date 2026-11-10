@@ -3,6 +3,7 @@ import { cloneConfig, DEFAULT_CONFIG } from '../../config';
 import { evaluateOrder } from '../../game/orders';
 import { resolveSongTarget } from '../../game/songs';
 import { buildStatsSummary } from '../../game/stats';
+import { OrganSynth } from '../../audio/organSynth';
 import {
   composeEffectiveStat,
   computeCritSaveChance,
@@ -517,6 +518,143 @@ describe('Determinism & Breakdown Attribution', () => {
     expect(summary.goalsDuringCharge).toBe(1);
     expect(summary.savesAndStealsDuringHold).toBe(1);
     expect(summary.fightsDuringGrudge).toBe(1);
+  });
+
+  it('only includes song impact for songs actually played in the period', () => {
+    // Case 1: No songs played at all
+    const noSongsSummary = buildStatsSummary(
+      [
+        {
+          type: 'GOAL',
+          period: 1,
+          timeRemainingSec: 150,
+          team: 'home',
+          activeSongId: null,
+          activeSongTarget: null,
+        },
+      ],
+      [{ period: 1, volume: 50 }],
+      1
+    );
+    expect(noSongsSummary.impactLines).toEqual(['No organ songs were played this period.']);
+
+    // Case 2: Only Charge! played, Grudge Toccata never played
+    const chargeOnlySummary = buildStatsSummary(
+      [
+        {
+          type: 'SONG_PLAYED',
+          period: 1,
+          timeRemainingSec: 200,
+          songId: 'charge',
+          cueHit: true,
+          stale: false,
+          activeSongId: null,
+          activeSongTarget: null,
+        },
+        {
+          type: 'GOAL',
+          period: 1,
+          timeRemainingSec: 195,
+          team: 'home',
+          activeSongId: 'charge',
+          activeSongTarget: 'home',
+        },
+      ],
+      [{ period: 1, volume: 60 }],
+      1
+    );
+
+    // Charge! should be reported
+    expect(chargeOnlySummary.impactLines.some((l) => l.includes('Charge!'))).toBe(true);
+    // Unplayed songs should NOT be mentioned
+    expect(chargeOnlySummary.impactLines.some((l) => l.includes('Grudge Toccata'))).toBe(false);
+    expect(chargeOnlySummary.impactLines.some((l) => l.includes('Hold the Line'))).toBe(false);
+    expect(chargeOnlySummary.impactLines.some((l) => l.includes('Power Play Polka'))).toBe(false);
+
+    // Case 3: Grudge Toccata played
+    const grudgeSummary = buildStatsSummary(
+      [
+        {
+          type: 'SONG_PLAYED',
+          period: 1,
+          timeRemainingSec: 100,
+          songId: 'grudge_toccata',
+          cueHit: true,
+          stale: false,
+          activeSongId: null,
+          activeSongTarget: null,
+        },
+        {
+          type: 'FIGHT',
+          period: 1,
+          timeRemainingSec: 95,
+          team: 'home',
+          activeSongId: 'grudge_toccata',
+          activeSongTarget: 'both',
+        },
+      ],
+      [{ period: 1, volume: 75 }],
+      1
+    );
+    expect(grudgeSummary.impactLines.some((l) => l.includes('Grudge Toccata sparked 1 of 1 brawl(s)'))).toBe(true);
+    expect(grudgeSummary.impactLines.some((l) => l.includes('Charge!'))).toBe(false);
+  });
+
+  it('triggers audio hooks for pass, shot, steal, fight impact, penalty whistle, and period buzzer', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 101);
+
+    const puckActions: string[] = [];
+    let fightImpacts = 0;
+    let penaltyWhistles = 0;
+    let periodBuzzers = 0;
+
+    sim.audioHooks = {
+      onPuckAction: (t) => puckActions.push(t),
+      onFightImpact: () => fightImpacts++,
+      onPenaltyWhistle: () => penaltyWhistles++,
+      onPeriodBuzzer: () => periodBuzzers++,
+    };
+
+    const homePlayers = sim.players.filter((p) => p.team === 'home');
+    const passer = homePlayers[0];
+    const receiver = homePlayers[1];
+    sim.passPuck(passer, receiver);
+    expect(puckActions).toContain('pass');
+
+    sim.shootPuck(passer);
+    expect(puckActions).toContain('shot');
+
+    const awayStriker = sim.players.find((p) => p.role === 'striker' && p.team === 'away')!;
+    sim.startFight(passer, awayStriker);
+    expect(fightImpacts).toBe(1);
+
+    // Simulate penalty box arrival after brawl
+    sim.phase = 'PLAYING';
+    passer.mode = 'FIGHTING';
+    passer.isFightInstigator = true;
+    passer.stateTimer = 0.05;
+    sim.step(0.1);
+    expect(passer.mode).toBe('PENALTY_BOX');
+    expect(penaltyWhistles).toBe(1);
+
+    // Period end buzzer
+    sim.periodTimeRemainingSec = 0.01;
+    sim.step(0.05);
+    expect(periodBuzzers).toBe(1);
+    expect(sim.phase).toBe('PERIOD_END');
+  });
+
+  it('allows invoking OrganSynth SFX methods without throwing', () => {
+    const synth = new OrganSynth();
+    expect(() => {
+      synth.playPuckClick('pass');
+      synth.playPuckClick('shot');
+      synth.playPuckClick('steal');
+      synth.playFightImpact();
+      synth.playPenaltyWhistle();
+      synth.playPeriodBuzzer();
+    }).not.toThrow();
   });
 
   it('limits active song loadout to maxSongSlots (default 3) and supports configuring slots & songs', () => {
