@@ -392,6 +392,9 @@ class OrganHeroApp {
   }
 
   private bindControls(): void {
+    // Global user-gesture audio unlock on any user interaction
+    window.addEventListener('pointerdown', () => this.synth.unlock());
+
     // Song buttons via Pointer Event delegation on .music-stand-buttons
     const musicStandEl = document.querySelector('.music-stand-buttons');
     musicStandEl?.addEventListener('pointerdown', (e) => {
@@ -522,8 +525,14 @@ class OrganHeroApp {
 
     const portraitBlocked = this.isPortraitBlocked();
 
+    const isIntermission =
+      this.sim.phase === 'PERIOD_END' || this.sim.phase === 'MATCH_OVER';
+
     if (this.hasStartedMatch) {
-      this.synth.setCrowdVolume(this.sim.crowdVolume, this.isPaused);
+      // Crowd ambiance and sound effects continue during intermission;
+      // only quiet down if user explicitly paused via the pause modal.
+      const isCrowdPaused = this.isPaused && !isIntermission;
+      this.synth.setCrowdVolume(this.sim.crowdVolume, isCrowdPaused);
     }
 
     if (!this.isPaused && this.hasStartedMatch && !portraitBlocked) {

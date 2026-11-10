@@ -921,5 +921,68 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
     expect(sim.isOnCooldown()).toBe(false);
     expect(sim.getSongCooldownRemainingSec()).toBe(0);
   });
+
+  it('triggers onFightImpact periodically while players are fighting', () => {
+    const cfg = cloneConfig();
+    cfg.brawlDurationSec = 3.0;
+    const sim = new MatchSimulation(cfg, 456);
+    sim.phase = 'PLAYING';
+
+    let punchCount = 0;
+    sim.audioHooks = {
+      onFightImpact: () => {
+        punchCount++;
+      },
+    };
+
+    const s1 = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+    const s2 = sim.players.find((p) => p.team === 'away' && p.role === 'striker')!;
+
+    sim.startFight(s1, s2);
+    expect(punchCount).toBe(1); // initial fight impact
+
+    // Step 2 seconds during the fight
+    for (let i = 0; i < 120; i++) {
+      sim.step(1 / 60);
+    }
+    // Punches should have landed repeatedly throughout the brawl
+    expect(punchCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('triggers onPuckAction on pass, shot, steal, and possession gain', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 789);
+    sim.phase = 'PLAYING';
+
+    const actions: string[] = [];
+    sim.audioHooks = {
+      onPuckAction: (type) => {
+        actions.push(type);
+      },
+    };
+
+    const homeS1 = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+    const homeS2 = sim.players.find((p) => p.team === 'home' && p.id !== homeS1.id && p.role === 'striker')!;
+    const awayS = sim.players.find((p) => p.team === 'away' && p.role === 'striker')!;
+
+    sim.gainPossession(homeS1);
+    expect(actions).toContain('pass'); // gain possession stick trap
+
+    actions.length = 0;
+    sim.passPuck(homeS1, homeS2);
+    expect(actions).toContain('pass');
+
+    actions.length = 0;
+    sim.gainPossession(homeS1);
+    sim.shootPuck(homeS1);
+    expect(actions).toContain('shot');
+
+    actions.length = 0;
+    cfg.T_stealChance = 10;
+    sim.gainPossession(homeS1);
+    sim.handleCarrierCollision(awayS, homeS1);
+    expect(actions).toContain('steal');
+  });
 });
+
 

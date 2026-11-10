@@ -82,6 +82,7 @@ export interface PlayerEntity {
   passCheckTimer: number;
   fightPartnerId: string | null;
   isFightInstigator: boolean;
+  fightPunchCooldown?: number;
   collisionCooldown: number;
   attackPath: BezierPath | null;
 

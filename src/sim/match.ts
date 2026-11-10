@@ -705,6 +705,16 @@ export class MatchSimulation {
       if (p.mode === 'FIGHTING') {
         p.vel = { x: 0, y: 0 };
         p.stateTimer -= dtSec;
+
+        // Ongoing punch cadence during the brawl
+        if (p.isFightInstigator) {
+          p.fightPunchCooldown = (p.fightPunchCooldown ?? 0.35) - dtSec;
+          if (p.fightPunchCooldown <= 0) {
+            p.fightPunchCooldown = 0.36 + this.rng.range(0, 0.24);
+            this.audioHooks.onFightImpact?.();
+          }
+        }
+
         if (p.stateTimer <= 0) {
           if (p.isFightInstigator) {
             p.mode = 'PENALTY_BOX';
@@ -1133,6 +1143,11 @@ export class MatchSimulation {
       striker.moodFocusOffset += this.cfg.oneTimerFocusBonus;
       striker.reactionTimer = 1.0;
       striker.reactionColor = '#38bdf8';
+    }
+
+    const wasCarriedByOther = this.puck.carrierId !== striker.id;
+    if (wasCarriedByOther) {
+      this.audioHooks.onPuckAction?.('pass');
     }
 
     this.puck.carrierId = striker.id;
@@ -1619,6 +1634,7 @@ export class MatchSimulation {
     instigator.stateTimer = this.cfg.brawlDurationSec;
     instigator.fightPartnerId = victim.id;
     instigator.isFightInstigator = true;
+    instigator.fightPunchCooldown = 0.35;
     instigator.vel = { x: 0, y: 0 };
     instigator.attackPath = null;
 
