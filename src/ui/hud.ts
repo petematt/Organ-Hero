@@ -1,3 +1,4 @@
+import { TipOffer } from '../campaign/tips';
 import { evaluateOrder, getOrderById } from '../game/orders';
 import {
   getPowerPlayState,
@@ -20,6 +21,9 @@ export class HudController {
   private crowdBarFillEl = document.getElementById('crowd-bar-fill')!;
   private hudOrderTitleEl = document.getElementById('hud-order-title')!;
   private hudOrderStatusEl = document.getElementById('hud-order-status')!;
+  private hudTipBoxEl = document.getElementById('hud-tip-box');
+  private hudTipTitleEl = document.getElementById('hud-tip-title');
+  private hudTipStatusEl = document.getElementById('hud-tip-status');
 
   private edgeTintEl = document.getElementById('edge-tint')!;
 
@@ -62,7 +66,7 @@ export class HudController {
       .join('');
   }
 
-  public update(sim: MatchSimulation): void {
+  public update(sim: MatchSimulation, activeTips?: TipOffer[]): void {
     const loadout = sim.getActiveSongLoadout();
     this.ensureSongButtons(loadout);
 
@@ -117,6 +121,25 @@ export class HudController {
     } else {
       this.hudOrderStatusEl.textContent = 'FAIL';
       this.hudOrderStatusEl.className = 'order-status-pill status-fail';
+    }
+
+    // Active Intermission Tip Status
+    const acceptedTip = activeTips?.find(
+      (t) => t.status === 'ACCEPTED' || t.status === 'PASSED'
+    );
+    if (acceptedTip && this.hudTipBoxEl && this.hudTipTitleEl && this.hudTipStatusEl) {
+      this.hudTipBoxEl.classList.remove('hidden');
+      this.hudTipTitleEl.textContent = acceptedTip.conditionDescription;
+      this.hudTipTitleEl.title = `${acceptedTip.senderName}: ${acceptedTip.flavorText} (${acceptedTip.liveProgressText})`;
+      if (acceptedTip.status === 'PASSED') {
+        this.hudTipStatusEl.textContent = `DONE (+$${acceptedTip.bribePayout})`;
+        this.hudTipStatusEl.className = 'tip-status-pill status-track';
+      } else {
+        this.hudTipStatusEl.textContent = `+$${acceptedTip.bribePayout}`;
+        this.hudTipStatusEl.className = 'tip-status-pill status-risk';
+      }
+    } else if (this.hudTipBoxEl) {
+      this.hudTipBoxEl.classList.add('hidden');
     }
 
     // Screen-edge tint while a song is active

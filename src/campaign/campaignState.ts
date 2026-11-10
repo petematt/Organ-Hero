@@ -1,5 +1,6 @@
 import { SongId } from '../sim/types';
 import { buildCampaignSchedule, MatchScheduleEntry } from './schedule';
+import { TipConditionContext, TipOffer, evaluateTip } from './tips';
 
 export const CAMPAIGN_STORAGE_KEY = 'organ_hero_campaign_v2';
 
@@ -123,6 +124,57 @@ export class CampaignManager {
     if (hits >= 9) return 'MASTERED';
     if (hits >= 4) return 'FAMILIAR';
     return 'UNKNOWN';
+  }
+
+  // Active match tips
+  private currentActiveTips: TipOffer[] = [];
+
+  public getActiveTips(): TipOffer[] {
+    return this.currentActiveTips;
+  }
+
+  public addTipOffers(offers: TipOffer[]): void {
+    this.currentActiveTips.push(...offers);
+  }
+
+  public acceptTip(tipId: string): void {
+    const tip = this.currentActiveTips.find((t) => t.id === tipId);
+    if (tip) {
+      tip.status = 'ACCEPTED';
+    }
+  }
+
+  public declineTip(tipId: string): void {
+    const tip = this.currentActiveTips.find((t) => t.id === tipId);
+    if (tip) {
+      tip.status = 'DECLINED';
+    }
+  }
+
+  public evaluateActiveTips(ctx: TipConditionContext): void {
+    for (const tip of this.currentActiveTips) {
+      if (tip.status === 'ACCEPTED') {
+        const evalRes = evaluateTip(tip, ctx);
+        tip.status = evalRes.status;
+        tip.liveProgressText = evalRes.progressText;
+      }
+    }
+  }
+
+  public clearActiveTips(): void {
+    this.currentActiveTips = [];
+  }
+
+  public getCompletedTipsCountAndEarnings(): { count: number; earnings: number } {
+    let count = 0;
+    let earnings = 0;
+    for (const tip of this.currentActiveTips) {
+      if (tip.status === 'PASSED') {
+        count++;
+        earnings += tip.bribePayout;
+      }
+    }
+    return { count, earnings };
   }
 
   public recordMatchEnd(record: Omit<CampaignMatchRecord, 'matchNumber' | 'tier' | 'opponentId' | 'opponentName'>): {

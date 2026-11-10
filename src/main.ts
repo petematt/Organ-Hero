@@ -1,6 +1,7 @@
 import { OrganSynth } from './audio/organSynth';
 import { CampaignManager } from './campaign/campaignState';
 import { buildRosterForMatch } from './campaign/teams';
+import { generateIntermissionTips } from './campaign/tips';
 import { GameConfig, loadConfig, saveConfig } from './config';
 import { evaluateOrder, pickRandomOrder } from './game/orders';
 import { MatchSimulation } from './sim/match';
@@ -279,6 +280,7 @@ class OrganHeroApp {
   private startNewMatch(seed: number, orderId: OrderId): void {
     this.currentSeed = seed;
     this.currentMatchRecorded = false;
+    this.campaign.clearActiveTips();
     this.renderer.resetIceSummaryImmediate();
 
     const campMatch = this.campaign.getCurrentMatch();
@@ -293,7 +295,7 @@ class OrganHeroApp {
     this.hasStartedMatch = true;
     this.isPaused = false;
     this.simAccumulatorSec = 0;
-    this.hud.update(this.sim);
+    this.hud.update(this.sim, this.campaign.getActiveTips());
     setTimeout(() => this.renderer.resize(), 20);
   }
 
@@ -447,7 +449,33 @@ class OrganHeroApp {
         if (prevPhase !== this.sim.phase) {
           if (this.sim.phase === 'PERIOD_END' || this.sim.phase === 'MATCH_OVER') {
             this.isPaused = true;
-            if (this.sim.phase === 'MATCH_OVER' && !this.currentMatchRecorded) {
+            if (
+              this.sim.phase === 'PERIOD_END' &&
+              (this.sim.period === 1 || this.sim.period === 2)
+            ) {
+              const offers = generateIntermissionTips(
+                this.sim.period as 1 | 2,
+                this.campaign.getState().unofficialRepLevel,
+                this.sim.orderId,
+                this.currentSeed
+              );
+              if (offers.length > 0) {
+                this.campaign.addTipOffers(offers);
+                setTimeout(() => {
+                  this.screens.showIntermissionTipNote(
+                    offers[0],
+                    () => {
+                      this.campaign.acceptTip(offers[0].id);
+                      this.hud.update(this.sim, this.campaign.getActiveTips());
+                    },
+                    () => {
+                      this.campaign.declineTip(offers[0].id);
+                      this.hud.update(this.sim, this.campaign.getActiveTips());
+                    }
+                  );
+                }, 1000);
+              }
+            } else if (this.sim.phase === 'MATCH_OVER' && !this.currentMatchRecorded) {
               this.currentMatchRecorded = true;
               const campMatch = this.campaign.getCurrentMatch();
               if (campMatch) {
@@ -465,16 +493,18 @@ class OrganHeroApp {
                 const baseSalary = evalRes.passed
                   ? Math.round(campMatch.baseSalary * campMatch.payoutMultiplier)
                   : 0;
+                const { count: tipsPassed, earnings: tipEarnings } =
+                  this.campaign.getCompletedTipsCountAndEarnings();
                 this.campaign.recordMatchEnd({
                   homeScore: this.sim.homeScore,
                   awayScore: this.sim.awayScore,
                   officialOrderId: this.sim.orderId,
                   officialOrderPassed: evalRes.passed,
                   baseSalaryEarned: baseSalary,
-                  tipsOffered: 0,
-                  tipsPassed: 0,
-                  tipEarnings: 0,
-                  totalEarnings: baseSalary,
+                  tipsOffered: this.campaign.getActiveTips().length,
+                  tipsPassed,
+                  tipEarnings,
+                  totalEarnings: baseSalary + tipEarnings,
                 });
               }
             }
@@ -484,7 +514,15 @@ class OrganHeroApp {
         }
       }
 
-      this.hud.update(this.sim);
+      this.campaign.evaluateActiveTips({
+        period: this.sim.period,
+        homeScore: this.sim.homeScore,
+        awayScore: this.sim.awayScore,
+        events: this.sim.events,
+        players: this.sim.players,
+        isMatchOver: this.sim.phase === 'MATCH_OVER',
+      });
+      this.hud.update(this.sim, this.campaign.getActiveTips());
     }
 
     this.renderer.render(this.sim, rawDtSec);
