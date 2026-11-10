@@ -664,6 +664,8 @@ describe('Determinism & Breakdown Attribution', () => {
       synth.playFightImpact();
       synth.playPenaltyWhistle();
       synth.playPeriodBuzzer();
+      synth.triggerCrowdSurge('shot');
+      synth.triggerCrowdSurge('goal');
     }).not.toThrow();
   });
 

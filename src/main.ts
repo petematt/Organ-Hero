@@ -352,14 +352,22 @@ class OrganHeroApp {
   private bindAudioHooks(): void {
     this.sim.audioHooks = {
       onWhistle: () => this.synth.playWhistle(),
-      onGoalHorn: () => this.synth.playGoalHorn(),
+      onGoalHorn: () => {
+        this.synth.playGoalHorn();
+        this.synth.triggerCrowdSurge('goal');
+      },
       onSongPlay: (songId, cueHit, stale) => {
         this.synth.playSong(songId, cueHit, stale);
         if (cueHit) {
           this.campaign.recordCueHit(songId);
         }
       },
-      onPuckAction: (type) => this.synth.playPuckClick(type),
+      onPuckAction: (type) => {
+        this.synth.playPuckClick(type);
+        if (type === 'shot') {
+          this.synth.triggerCrowdSurge('shot');
+        }
+      },
       onFightImpact: () => this.synth.playFightImpact(),
       onPenaltyWhistle: () => this.synth.playPenaltyWhistle(),
       onPeriodBuzzer: () => this.synth.playPeriodBuzzer(),

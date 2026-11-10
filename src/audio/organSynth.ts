@@ -15,6 +15,8 @@ export class OrganSynth {
   private unlocked: boolean = false;
   private crowdGain: GainNode | null = null;
   private crowdFilter: BiquadFilterNode | null = null;
+  private crowdSurgeGain: GainNode | null = null;
+  private crowdBaseFreq: number = 650;
   private crowdRunning: boolean = false;
 
   public unlock(): void {
@@ -74,12 +76,16 @@ export class OrganSynth {
       this.crowdGain = ctx.createGain();
       this.crowdGain.gain.value = 0.22;
 
+      this.crowdSurgeGain = ctx.createGain();
+      this.crowdSurgeGain.gain.value = 1.0;
+
       source.connect(this.crowdFilter);
       this.crowdFilter.connect(this.crowdGain);
+      this.crowdGain.connect(this.crowdSurgeGain);
       if (this.masterGain) {
-        this.crowdGain.connect(this.masterGain);
+        this.crowdSurgeGain.connect(this.masterGain);
       } else {
-        this.crowdGain.connect(ctx.destination);
+        this.crowdSurgeGain.connect(ctx.destination);
       }
 
       source.start();
@@ -124,6 +130,7 @@ export class OrganSynth {
     // Warm, resonant arena crowd roar — lively ambiance during active play and intermission
     const targetGain = isPaused ? 0.06 : 0.20 + norm * 0.40;
     const targetFreq = isPaused ? 380 : 500 + norm * 700;
+    this.crowdBaseFreq = targetFreq;
 
     const now = ctx.currentTime;
     if (this.crowdGain) {
@@ -131,6 +138,49 @@ export class OrganSynth {
     }
     if (this.crowdFilter) {
       this.crowdFilter.frequency.setTargetAtTime(targetFreq, now, 0.2);
+    }
+  }
+
+  /**
+   * Spikes crowd excitement following a shot or a goal:
+   * Quick rise in volume and brightness, followed by a smooth return to baseline.
+   */
+  public triggerCrowdSurge(type: 'shot' | 'goal'): void {
+    if (!this.unlocked) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.crowdSurgeGain || !this.crowdRunning) return;
+
+    const now = ctx.currentTime;
+    const surgeGain = this.crowdSurgeGain.gain;
+
+    if (type === 'shot') {
+      // 1-second spike after a shot: quick rise (0.07s) and slower return to normal (1.0s)
+      surgeGain.cancelScheduledValues(now);
+      surgeGain.setValueAtTime(surgeGain.value, now);
+      surgeGain.linearRampToValueAtTime(2.4, now + 0.07);
+      surgeGain.exponentialRampToValueAtTime(1.0, now + 1.02);
+
+      if (this.crowdFilter) {
+        const baseFreq = this.crowdBaseFreq || 700;
+        this.crowdFilter.frequency.cancelScheduledValues(now);
+        this.crowdFilter.frequency.setValueAtTime(this.crowdFilter.frequency.value, now);
+        this.crowdFilter.frequency.linearRampToValueAtTime(baseFreq + 520, now + 0.07);
+        this.crowdFilter.frequency.exponentialRampToValueAtTime(baseFreq, now + 1.02);
+      }
+    } else {
+      // Goal roar explosion: quick rise (0.06s) and slower return (1.8s)
+      surgeGain.cancelScheduledValues(now);
+      surgeGain.setValueAtTime(surgeGain.value, now);
+      surgeGain.linearRampToValueAtTime(3.2, now + 0.06);
+      surgeGain.exponentialRampToValueAtTime(1.0, now + 1.8);
+
+      if (this.crowdFilter) {
+        const baseFreq = this.crowdBaseFreq || 700;
+        this.crowdFilter.frequency.cancelScheduledValues(now);
+        this.crowdFilter.frequency.setValueAtTime(this.crowdFilter.frequency.value, now);
+        this.crowdFilter.frequency.linearRampToValueAtTime(1600, now + 0.06);
+        this.crowdFilter.frequency.exponentialRampToValueAtTime(baseFreq, now + 1.8);
+      }
     }
   }
 
@@ -426,114 +476,78 @@ export class OrganSynth {
     lfo.stop(now + dur + 0.02);
   }
 
+  private playImpulseClick(
+    ctx: AudioContext,
+    dest: AudioNode,
+    startTime: number,
+    freq: number,
+    durationSec: number,
+    gain: number,
+    q: number = 3.0
+  ): void {
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.max(1, Math.floor(sampleRate * durationSec));
+    const buffer = ctx.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+
+    // Ultra-snappy acoustic transient impulse (instantaneous spike + exponential decay)
+    const decayConst = 1 / (durationSec * 0.22);
+    for (let i = 0; i < length; i++) {
+      const t = i / sampleRate;
+      const decay = Math.exp(-t * decayConst);
+      // Sharp initial impulse spike for first 3 samples followed by rapid decay
+      const spike = i === 0 ? 1.0 : i === 1 ? -0.7 : i === 2 ? 0.35 : 0;
+      const noise = (Math.random() * 2 - 1) * 0.85;
+      data[i] = (spike * 0.65 + noise * 0.35) * decay;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    // Fixed resonant bandpass filter (blade acoustic resonance — NO sweeping pitch!)
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(freq, startTime);
+    filter.Q.setValueAtTime(q, startTime);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(gain, startTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + durationSec);
+
+    source.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(dest);
+
+    source.start(startTime);
+    source.stop(startTime + durationSec + 0.005);
+  }
+
   public playPuckClick(type: 'pass' | 'shot' | 'steal'): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
     const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
 
-    const now = ctx.currentTime + 0.003;
-    const jitter = 0.92 + Math.random() * 0.18;
+    const now = ctx.currentTime + 0.001;
+    const jitter = 0.94 + Math.random() * 0.12;
 
     if (type === 'shot') {
-      // Slap shot / hard wrist shot: powerful stick whip, blade snap & crack
-      const dur = 0.085;
-      const flexGain = ctx.createGain();
-      flexGain.gain.setValueAtTime(0.001, now);
-      flexGain.gain.linearRampToValueAtTime(0.72, now + 0.006);
-      flexGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      flexGain.connect(dest);
-
-      const flexOsc = ctx.createOscillator();
-      flexOsc.type = 'triangle';
-      flexOsc.frequency.setValueAtTime(480 * jitter, now);
-      flexOsc.frequency.exponentialRampToValueAtTime(80, now + dur);
-      flexOsc.connect(flexGain);
-      flexOsc.start(now);
-      flexOsc.stop(now + dur + 0.01);
-
-      // High composite blade snap crack
-      const crackGain = ctx.createGain();
-      crackGain.gain.setValueAtTime(0.001, now);
-      crackGain.gain.linearRampToValueAtTime(0.68, now + 0.003);
-      crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.028);
-      crackGain.connect(dest);
-
-      const crackOsc = ctx.createOscillator();
-      crackOsc.type = 'sine';
-      crackOsc.frequency.setValueAtTime(3200 * jitter, now);
-      crackOsc.frequency.exponentialRampToValueAtTime(450, now + 0.028);
-      crackOsc.connect(crackGain);
-      crackOsc.start(now);
-      crackOsc.stop(now + 0.035);
-
-      this.playNoiseTransient(ctx, dest, now, 0.025, 2600, 0.55);
+      // Slap shot / hard wrist shot: sharp, high-velocity stick-on-puck crack
+      // 1. Ice contact pre-click (3ms before puck strike)
+      this.playImpulseClick(ctx, dest, now, 2400 * jitter, 0.014, 0.55, 2.2);
+      // 2. Main composite blade strike crack (instantaneous, sharp crack!)
+      this.playImpulseClick(ctx, dest, now + 0.002, 3400 * jitter, 0.020, 0.95, 3.2);
+      // 3. High blade snap transient
+      this.playImpulseClick(ctx, dest, now + 0.002, 4800 * jitter, 0.012, 0.70, 2.8);
+      // 4. Solid vulcanized rubber body pop (tight, fixed frequency — not a sweeping bloop)
+      this.playImpulseClick(ctx, dest, now + 0.003, 1350 * jitter, 0.016, 0.75, 2.0);
     } else if (type === 'pass') {
-      // Tape-on-puck click & composite stick pass/reception pop
-      const dur = 0.055;
-      const popGain = ctx.createGain();
-      popGain.gain.setValueAtTime(0.001, now);
-      popGain.gain.linearRampToValueAtTime(0.68, now + 0.004);
-      popGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      popGain.connect(dest);
-
-      const popOsc = ctx.createOscillator();
-      popOsc.type = 'triangle';
-      popOsc.frequency.setValueAtTime(1180 * jitter, now);
-      popOsc.frequency.exponentialRampToValueAtTime(260, now + dur);
-      popOsc.connect(popGain);
-      popOsc.start(now);
-      popOsc.stop(now + dur + 0.01);
-
-      // Clean transient click
-      const clickGain = ctx.createGain();
-      clickGain.gain.setValueAtTime(0.001, now);
-      clickGain.gain.linearRampToValueAtTime(0.52, now + 0.002);
-      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.020);
-      clickGain.connect(dest);
-
-      const clickOsc = ctx.createOscillator();
-      clickOsc.type = 'sine';
-      clickOsc.frequency.setValueAtTime(2200 * jitter, now);
-      clickOsc.frequency.exponentialRampToValueAtTime(650, now + 0.020);
-      clickOsc.connect(clickGain);
-      clickOsc.start(now);
-      clickOsc.stop(now + 0.025);
-
-      this.playNoiseTransient(ctx, dest, now, 0.018, 2200, 0.45);
+      // Tape-on-puck pass / trap click: clean, dry, crisp acoustic pop (12ms)
+      this.playImpulseClick(ctx, dest, now, 3100 * jitter, 0.011, 0.85, 3.0);
+      this.playImpulseClick(ctx, dest, now, 1800 * jitter, 0.014, 0.65, 2.5);
     } else {
-      // Poke check / steal: sharp blade-on-stick clash
-      const dur = 0.045;
-      const clashGain = ctx.createGain();
-      clashGain.gain.setValueAtTime(0.001, now);
-      clashGain.gain.linearRampToValueAtTime(0.72, now + 0.003);
-      clashGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      clashGain.connect(dest);
-
-      const clashOsc = ctx.createOscillator();
-      clashOsc.type = 'triangle';
-      clashOsc.frequency.setValueAtTime(2400 * jitter, now);
-      clashOsc.frequency.exponentialRampToValueAtTime(580, now + dur);
-      clashOsc.connect(clashGain);
-      clashOsc.start(now);
-      clashOsc.stop(now + dur + 0.01);
-
-      // Secondary clatter
-      const clatterTime = now + 0.014;
-      const clatterGain = ctx.createGain();
-      clatterGain.gain.setValueAtTime(0.001, clatterTime);
-      clatterGain.gain.linearRampToValueAtTime(0.58, clatterTime + 0.003);
-      clatterGain.gain.exponentialRampToValueAtTime(0.001, clatterTime + 0.025);
-      clatterGain.connect(dest);
-
-      const clatterOsc = ctx.createOscillator();
-      clatterOsc.type = 'sine';
-      clatterOsc.frequency.setValueAtTime(1900 * jitter, clatterTime);
-      clatterOsc.frequency.exponentialRampToValueAtTime(450, clatterTime + 0.025);
-      clatterOsc.connect(clatterGain);
-      clatterOsc.start(clatterTime);
-      clatterOsc.stop(clatterTime + 0.03);
-
-      this.playNoiseTransient(ctx, dest, now, 0.026, 3000, 0.50);
+      // Steal / poke check: blade-on-stick clash (two rapid sharp carbon fiber clicks)
+      this.playImpulseClick(ctx, dest, now, 3800 * jitter, 0.009, 0.88, 3.8);
+      this.playImpulseClick(ctx, dest, now + 0.008, 4400 * jitter, 0.009, 0.75, 4.0);
     }
   }
 
