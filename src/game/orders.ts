@@ -135,7 +135,7 @@ export function evaluateOrder(
           return {
             passed: true,
             liveStatus: 'PASSED',
-            reason: `Home won ${homeGoals}–${awayGoals} with only ${totalFights} fight(s).`,
+            reason: `Home won ${homeGoals}–${awayGoals} with only ${totalFights} ${totalFights === 1 ? 'fight' : 'fights'}.`,
           };
         }
         const why = tooManyFights

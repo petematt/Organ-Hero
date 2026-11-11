@@ -71,8 +71,10 @@ export function buildStatsSummary(
   let goalsDuringCharge = 0;
   let goalsDuringPolka = 0;
   let goalsDuringMadeyalook = 0;
-  let savesAndStealsDuringHold = 0;
-  let savesAndStealsDuringKillClock = 0;
+  let savesDuringHold = 0;
+  let stealsDuringHold = 0;
+  let savesDuringKillClock = 0;
+  let stealsDuringKillClock = 0;
   let fightsDuringGrudge = 0;
 
   for (const ev of filteredEvents) {
@@ -116,14 +118,14 @@ export function buildStatsSummary(
           ev.activeSongTarget &&
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
-          savesAndStealsDuringHold++;
+          savesDuringHold++;
         } else if (
           ev.activeSongId === 'kill_the_clock' &&
           ev.team &&
           ev.activeSongTarget &&
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
-          savesAndStealsDuringKillClock++;
+          savesDuringKillClock++;
         }
         break;
       case 'STEAL':
@@ -133,14 +135,14 @@ export function buildStatsSummary(
           ev.activeSongTarget &&
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
-          savesAndStealsDuringHold++;
+          stealsDuringHold++;
         } else if (
           ev.activeSongId === 'kill_the_clock' &&
           ev.team &&
           ev.activeSongTarget &&
           doesSongAffectTeam(ev.activeSongTarget, ev.team)
         ) {
-          savesAndStealsDuringKillClock++;
+          stealsDuringKillClock++;
         }
         break;
       case 'FIGHT':
@@ -162,6 +164,19 @@ export function buildStatsSummary(
     }
   }
 
+  const plural = (n: number, singular: string, pluralForm = `${singular}s`): string =>
+    `${n} ${n === 1 ? singular : pluralForm}`;
+
+  const formatStops = (saves: number, steals: number, qualifier: string): string => {
+    if (saves > 0 && steals > 0) {
+      return `${saves} ${qualifier} ${saves === 1 ? 'save' : 'saves'} & ${plural(steals, 'steal')}`;
+    }
+    if (saves > 0) {
+      return `${saves} ${qualifier} ${saves === 1 ? 'save' : 'saves'}`;
+    }
+    return `${steals} ${qualifier} ${steals === 1 ? 'steal' : 'steals'}`;
+  };
+
   const totalGoals = homeGoals + awayGoals;
   const sparkline = filteredCrowd.map((c) => c.volume);
   const avgCrowdVolume =
@@ -175,57 +190,59 @@ export function buildStatsSummary(
   if (songsPlayed['charge'] > 0) {
     if (goalsDuringCharge > 0) {
       impactLines.push(
-        `Charge! Fanfare boosted ${goalsDuringCharge} of ${totalGoals} goal(s) (${songsPlayed['charge']} play(s)).`
+        `Charge! Fanfare boosted ${goalsDuringCharge} of ${plural(totalGoals, 'goal')} (${plural(songsPlayed['charge'], 'play')}).`
       );
     } else {
       impactLines.push(
-        `Charge! Fanfare played ${songsPlayed['charge']} time(s) with 0 goals scored.`
+        `Charge! Fanfare played ${plural(songsPlayed['charge'], 'time')} with 0 goals scored.`
       );
     }
   }
   if (songsPlayed['power_play_polka'] > 0) {
     if (goalsDuringPolka > 0) {
       impactLines.push(
-        `Power Play Polka boosted ${goalsDuringPolka} goal(s) (${songsPlayed['power_play_polka']} play(s)).`
+        `Power Play Polka boosted ${plural(goalsDuringPolka, 'goal')} (${plural(songsPlayed['power_play_polka'], 'play')}).`
       );
     } else {
       impactLines.push(
-        `Power Play Polka played ${songsPlayed['power_play_polka']} time(s) (0 power play goals).`
+        `Power Play Polka played ${plural(songsPlayed['power_play_polka'], 'time')} (0 power play goals).`
       );
     }
   }
   if (songsPlayed['madeyalook'] > 0) {
     if (goalsDuringMadeyalook > 0) {
       impactLines.push(
-        `Madeyalook distraction created ${goalsDuringMadeyalook} goal(s) (${songsPlayed['madeyalook']} play(s)).`
+        `Madeyalook distraction created ${plural(goalsDuringMadeyalook, 'goal')} (${plural(songsPlayed['madeyalook'], 'play')}).`
       );
     } else {
       impactLines.push(
-        `Madeyalook played ${songsPlayed['madeyalook']} time(s) with 0 goals resulting.`
+        `Madeyalook played ${plural(songsPlayed['madeyalook'], 'time')} with 0 goals resulting.`
       );
     }
   }
 
   // 2. Defensive songs (only if played)
+  const savesAndStealsDuringHold = savesDuringHold + stealsDuringHold;
   if (songsPlayed['hold_the_line'] > 0) {
     if (savesAndStealsDuringHold > 0) {
       impactLines.push(
-        `Hold the Line directly boosted ${savesAndStealsDuringHold} defensive save(s) & steal(s).`
+        `Hold the Line directly boosted ${formatStops(savesDuringHold, stealsDuringHold, 'defensive')}.`
       );
     } else {
       impactLines.push(
-        `Hold the Line played ${songsPlayed['hold_the_line']} time(s) (0 saves/steals during buff).`
+        `Hold the Line played ${plural(songsPlayed['hold_the_line'], 'time')} (0 saves or steals during buff).`
       );
     }
   }
+  const savesAndStealsDuringKillClock = savesDuringKillClock + stealsDuringKillClock;
   if (songsPlayed['kill_the_clock'] > 0) {
     if (savesAndStealsDuringKillClock > 0) {
       impactLines.push(
-        `Kill the Clock aided ${savesAndStealsDuringKillClock} shorthanded save(s) & steal(s).`
+        `Kill the Clock aided ${formatStops(savesDuringKillClock, stealsDuringKillClock, 'shorthanded')}.`
       );
     } else {
       impactLines.push(
-        `Kill the Clock played ${songsPlayed['kill_the_clock']} time(s) (0 shorthanded stops).`
+        `Kill the Clock played ${plural(songsPlayed['kill_the_clock'], 'time')} (0 shorthanded stops).`
       );
     }
   }
@@ -234,11 +251,11 @@ export function buildStatsSummary(
   if (songsPlayed['grudge_toccata'] > 0) {
     if (fightsDuringGrudge > 0) {
       impactLines.push(
-        `Grudge Toccata sparked ${fightsDuringGrudge} of ${fights} brawl(s) on the ice.`
+        `Grudge Toccata sparked ${fightsDuringGrudge} of ${plural(fights, 'brawl')} on the ice.`
       );
     } else {
       impactLines.push(
-        `Grudge Toccata played ${songsPlayed['grudge_toccata']} time(s) with 0 brawls ignited.`
+        `Grudge Toccata played ${plural(songsPlayed['grudge_toccata'], 'time')} with 0 brawls ignited.`
       );
     }
   }
@@ -246,32 +263,32 @@ export function buildStatsSummary(
   // 4. Other campaign songs (only if played)
   if (songsPlayed['underdog_draw'] > 0) {
     impactLines.push(
-      `Underdog Draw played ${songsPlayed['underdog_draw']} time(s) swinging faceoff win odds.`
+      `Underdog Draw played ${plural(songsPlayed['underdog_draw'], 'time')} swinging faceoff win odds.`
     );
   }
   if (songsPlayed['second_wind'] > 0) {
     impactLines.push(
-      `Second Wind played ${songsPlayed['second_wind']} time(s) reviving bench skater stamina.`
+      `Second Wind played ${plural(songsPlayed['second_wind'], 'time')} reviving bench skater stamina.`
     );
   }
   if (songsPlayed['tic_tac_toe'] > 0) {
     impactLines.push(
-      `Tic-Tac-Toe played ${songsPlayed['tic_tac_toe']} time(s) sharpening passing speed & precision.`
+      `Tic-Tac-Toe played ${plural(songsPlayed['tic_tac_toe'], 'time')} sharpening passing speed & precision.`
     );
   }
   if (songsPlayed['the_fortress'] > 0) {
     impactLines.push(
-      `The Fortress played ${songsPlayed['the_fortress']} time(s) bolstering clutch goaltending saves.`
+      `The Fortress played ${plural(songsPlayed['the_fortress'], 'time')} bolstering clutch goaltending saves.`
     );
   }
   if (songsPlayed['sirens_waltz'] > 0) {
     impactLines.push(
-      `The Siren's Waltz played ${songsPlayed['sirens_waltz']} time(s) mesmerizing opponent puck carriers.`
+      `The Siren's Waltz played ${plural(songsPlayed['sirens_waltz'], 'time')} mesmerizing opponent puck carriers.`
     );
   }
   if (songsPlayed['overtime_overture'] > 0) {
     impactLines.push(
-      `Overtime Overture played ${songsPlayed['overtime_overture']} time(s) surging late-game skating tempo.`
+      `Overtime Overture played ${plural(songsPlayed['overtime_overture'], 'time')} surging late-game skating tempo.`
     );
   }
 

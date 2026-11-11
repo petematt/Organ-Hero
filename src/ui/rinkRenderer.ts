@@ -87,6 +87,7 @@ export class RinkRenderer {
   private lastScreenCenterX: number = 0;
   private lastScreenCenterY: number = 0;
   private lastCssScale: number = 1;
+  private penaltyBoxExpand: Record<Team, number> = { home: 0, away: 0 };
 
   // Offscreen canvas used so the Zamboni's 2-loop path erases the on-ice stats like a real squeegee
   private summaryCanvas: HTMLCanvasElement;
@@ -454,6 +455,23 @@ export class RinkRenderer {
 
     if (!this.isIceSummaryActive) {
       this.updateIceWear(sim, realDtSec);
+    }
+
+    for (const team of ['home', 'away'] as const) {
+      const hasPenalty = sim.players.some(
+        (p) => p.team === team && p.mode === 'PENALTY_BOX'
+      );
+      const target = hasPenalty ? 1 : 0;
+      if (realDtSec <= 0 || this.animTime <= 0.05) {
+        this.penaltyBoxExpand[team] = target;
+      } else {
+        const rate = hasPenalty ? 9.0 : 7.0;
+        this.penaltyBoxExpand[team] +=
+          (target - this.penaltyBoxExpand[team]) * Math.min(1, realDtSec * rate);
+        if (Math.abs(target - this.penaltyBoxExpand[team]) < 0.005) {
+          this.penaltyBoxExpand[team] = target;
+        }
+      }
     }
 
     ctx.save();
@@ -1918,28 +1936,62 @@ export class RinkRenderer {
   ): void {
     if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
     ctx.save();
-    // Top center penalty boxes: Home centered at 425 (377..473), Away centered at 575 (527..623)
-    const boxes: { team: Team; x: number; label: string; primaryColor: string; trimColor: string }[] = [
-      { team: 'home', x: CENTER_X - 75 - 48, label: 'HOME PENALTY', primaryColor: '#1d4ed8', trimColor: '#60a5fa' },
-      { team: 'away', x: CENTER_X + 75 - 48, label: 'AWAY PENALTY', primaryColor: '#b91c1c', trimColor: '#fca5a5' },
+    // Top center penalty boxes: Home centered at 425, Away centered at 575
+    const boxes: {
+      team: Team;
+      cx: number;
+      label: string;
+      primaryColor: string;
+      alertColor: string;
+      trimColor: string;
+    }[] = [
+      {
+        team: 'home',
+        cx: CENTER_X - 75,
+        label: 'HOME PENALTY',
+        primaryColor: '#1d4ed8',
+        alertColor: '#38bdf8',
+        trimColor: '#60a5fa',
+      },
+      {
+        team: 'away',
+        cx: CENTER_X + 75,
+        label: 'AWAY PENALTY',
+        primaryColor: '#b91c1c',
+        alertColor: '#ef4444',
+        trimColor: '#fca5a5',
+      },
     ];
 
     for (const b of boxes) {
-      const activeInBox = sim.players.filter((p) => p.team === b.team && p.mode === 'PENALTY_BOX');
-      const hasPenalty = activeInBox.length > 0;
+      const hasPenalty = sim.players.some(
+        (p) => p.team === b.team && p.mode === 'PENALTY_BOX'
+      );
+      const expand = this.penaltyBoxExpand[b.team];
 
-      // Dark tinted glass box
-      ctx.fillStyle = hasPenalty ? 'rgba(15, 23, 42, 0.94)' : 'rgba(15, 23, 42, 0.78)';
+      // Collapsed empty bench: tiny 80x9 strip hugging the top boards; Expanded: 96x55 box
+      const boxW = 80 + 16 * expand;
+      const boxH = 9 + 46 * expand;
+      const bx = b.cx - boxW * 0.5;
+      const by = 2;
+
+      ctx.fillStyle =
+        expand > 0.15
+          ? `rgba(15, 23, 42, ${(0.72 + 0.22 * expand).toFixed(2)})`
+          : 'rgba(15, 23, 42, 0.72)';
       ctx.beginPath();
-      ctx.roundRect(b.x, 2, 96, 54, 6);
+      ctx.roundRect(bx, by, boxW, boxH, 3 + 3 * expand);
       ctx.fill();
 
-      // Outer alert border (glows brightly when a penalty is active!)
-      ctx.strokeStyle = hasPenalty ? (b.team === 'home' ? '#38bdf8' : '#ef4444') : b.primaryColor;
-      ctx.lineWidth = hasPenalty ? 2.5 : 1.5;
-      if (hasPenalty) {
-        ctx.shadowColor = b.team === 'home' ? 'rgba(56, 189, 248, 0.55)' : 'rgba(239, 68, 68, 0.55)';
-        ctx.shadowBlur = 6;
+      // Outer border (subtle trim when collapsed, bright glowing alert when occupied)
+      ctx.strokeStyle = hasPenalty ? b.alertColor : b.primaryColor;
+      ctx.lineWidth = 1.2 + 1.3 * expand;
+      if (hasPenalty && expand > 0.2) {
+        ctx.shadowColor =
+          b.team === 'home'
+            ? 'rgba(56, 189, 248, 0.55)'
+            : 'rgba(239, 68, 68, 0.55)';
+        ctx.shadowBlur = 6 * expand;
       } else {
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
@@ -1947,22 +1999,31 @@ export class RinkRenderer {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Top title banner header
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.90)';
-      ctx.beginPath();
-      ctx.roundRect(b.x + 1, 3, 94, 13, [5, 5, 0, 0]);
-      ctx.fill();
+      if (expand < 0.35) {
+        // Slim collapsed empty bench seat plank detail (takes almost zero screen space)
+        ctx.strokeStyle = b.trimColor + '88';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(bx + 8, by + boxH * 0.5);
+        ctx.lineTo(bx + boxW - 8, by + boxH * 0.5);
+        ctx.stroke();
+      } else {
+        const contentAlpha = clamp((expand - 0.35) / 0.65, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = contentAlpha;
 
-      ctx.fillStyle = hasPenalty ? '#ffffff' : b.trimColor;
-      ctx.font = '700 8.5px "Chakra Petch", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(b.label, b.x + 48, 12);
+        // Top title banner header
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.92)';
+        ctx.beginPath();
+        ctx.roundRect(bx + 1, by + 1, boxW - 2, 13, [5, 5, 0, 0]);
+        ctx.fill();
 
-      // If empty, draw subtle dashed bench seat indicator
-      if (!hasPenalty) {
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
-        ctx.font = '600 8.5px "Chakra Petch", sans-serif';
-        ctx.fillText('BENCH CLEAR', b.x + 48, 36);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label, b.cx, by + 10);
+
+        ctx.restore();
       }
     }
     ctx.restore();
@@ -1978,13 +2039,21 @@ export class RinkRenderer {
 
     ctx.save();
     for (const p of penalized) {
+      const expand = this.penaltyBoxExpand[p.team];
+      const alpha = clamp((expand - 0.35) / 0.65, 0, 1);
+      if (alpha <= 0.01) continue;
+
+      const seatPos = sim.getPenaltyBoxPos(p.team, p.id);
       const remainingSec = Math.max(0, Math.ceil(p.stateTimer));
       const text = `${remainingSec}s`;
 
-      const pillW = 42;
+      const pillW = 38;
       const pillH = 15;
-      const pillX = p.pos.x - pillW * 0.5;
-      const pillY = 40; // Positioned cleanly underneath the seated player (y=28, radius=12)
+      const pillX = seatPos.x - pillW * 0.5;
+      const pillY = 40; // Positioned cleanly inside the penalty box slot underneath y=28
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
 
       // High-contrast obsidian pill with bright glowing amber border
       ctx.fillStyle = '#020617';
@@ -2004,7 +2073,9 @@ export class RinkRenderer {
       ctx.font = '800 11px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(text, p.pos.x, pillY + pillH * 0.5 + 0.5);
+      ctx.fillText(text, seatPos.x, pillY + pillH * 0.5 + 0.5);
+
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -2208,11 +2279,16 @@ export class RinkRenderer {
     ctx.save();
     const r = p.role === 'goalie' ? sim.cfg.skaterRadius + 2 : sim.cfg.skaterRadius;
 
-    // 1. Speed streaks when buffed by an active song or moving fast
+    // 1. Speed streaks when buffed by an active song or moving fast (skip for penalized players heading to box)
     const speed = Math.hypot(p.vel.x, p.vel.y);
     const isBuffedBySong =
       sim.activeSong !== null && doesSongAffectTeam(sim.activeSong.target, p.team);
-    if (p.role === 'striker' && speed > 140 && (isBuffedBySong || speed > 195)) {
+    if (
+      p.role === 'striker' &&
+      p.mode !== 'PENALTY_BOX' &&
+      speed > 140 &&
+      (isBuffedBySong || speed > 195)
+    ) {
       const dirX = -p.vel.x / speed;
       const dirY = -p.vel.y / speed;
       ctx.strokeStyle = isBuffedBySong
@@ -2232,8 +2308,10 @@ export class RinkRenderer {
       }
     }
 
-    // 2. Under-player mood ring
-    this.drawMoodRing(ctx, p, r);
+    // 2. Under-player mood ring (skip when penalized)
+    if (p.mode !== 'PENALTY_BOX') {
+      this.drawMoodRing(ctx, p, r);
+    }
 
     // 3. Strong song tap flare ring & musical note particles
     if (p.reactionTimer > 0) {

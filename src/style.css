@@ -706,6 +706,166 @@ body {
   color: var(--text-primary);
 }
 
+.modal-card.tip-note-host,
+.modal-card:has(> .tip-note-card) {
+  width: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+/* Intermission Unsavory Offer / Confidential Proposition Card — scales with desktop & mobile viewports */
+.tip-note-card {
+  width: clamp(460px, 64vw, 1600px);
+  max-width: 90vw;
+  max-height: 92dvh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  color: #1c1917;
+  border: clamp(2px, 0.3vmin, 4px) solid #d97706;
+  border-radius: clamp(10px, 1.8vmin, 24px);
+  padding: clamp(14px, 3.2vmin, 46px) clamp(18px, 3.8vmin, 54px);
+  box-shadow: 0 28px 68px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(251, 191, 36, 0.35);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.tip-note-eyebrow {
+  font-family: 'Chakra Petch', monospace;
+  font-size: clamp(10px, 1.6vmin, 22px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #92400e;
+  border-bottom: clamp(2px, 0.25vmin, 3px) dashed #b45309;
+  padding-bottom: clamp(5px, 1vmin, 14px);
+  margin-bottom: clamp(10px, 2vmin, 28px);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tip-note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: clamp(12px, 2.2vmin, 30px);
+}
+
+.tip-note-sender {
+  font-size: clamp(17px, 3.4vmin, 46px);
+  font-weight: 800;
+  line-height: 1.18;
+  color: #78350f;
+}
+
+.tip-note-role {
+  font-size: clamp(12px, 2.1vmin, 28px);
+  color: #92400e;
+  font-style: italic;
+  margin-top: clamp(2px, 0.35vmin, 6px);
+}
+
+.tip-note-payout {
+  background: #15803d;
+  color: #f0fdf4;
+  padding: clamp(4px, 0.9vmin, 14px) clamp(12px, 2.2vmin, 30px);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: clamp(14px, 2.8vmin, 38px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.24);
+  flex-shrink: 0;
+}
+
+.tip-note-quote {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: clamp(13px, 2.35vmin, 32px);
+  font-weight: 600;
+  line-height: 1.48;
+  color: #292524;
+  background: rgba(255, 251, 235, 0.8);
+  border-left: clamp(4px, 0.5vmin, 7px) solid #d97706;
+  border-radius: 0 clamp(6px, 0.9vmin, 12px) clamp(6px, 0.9vmin, 12px) 0;
+  padding: clamp(10px, 2vmin, 28px) clamp(12px, 2.4vmin, 34px);
+  margin-bottom: clamp(12px, 2.2vmin, 28px);
+}
+
+.tip-note-demand {
+  background: rgba(217, 119, 6, 0.16);
+  border: clamp(1.5px, 0.2vmin, 2.5px) solid #d97706;
+  border-radius: clamp(8px, 1.1vmin, 14px);
+  padding: clamp(9px, 1.8vmin, 24px) clamp(12px, 2.4vmin, 32px);
+  margin-bottom: clamp(10px, 1.8vmin, 24px);
+  font-size: clamp(12.5px, 2.2vmin, 30px);
+  font-weight: 800;
+  line-height: 1.4;
+  color: #78350f;
+}
+
+.tip-note-demand-text {
+  color: #451a03;
+  font-weight: 600;
+}
+
+.tip-conflict-warning {
+  margin: clamp(8px, 1.5vmin, 20px) 0;
+  background: rgba(185, 28, 28, 0.14);
+  border: clamp(1.5px, 0.2vmin, 2.5px) solid #dc2626;
+  color: #991b1b;
+  padding: clamp(7px, 1.4vmin, 18px) clamp(10px, 2vmin, 26px);
+  border-radius: clamp(8px, 1.1vmin, 14px);
+  font-size: clamp(11.5px, 1.9vmin, 25px);
+  font-weight: 700;
+}
+
+.tip-note-actions {
+  display: flex;
+  gap: clamp(8px, 1.6vmin, 22px);
+  margin-top: clamp(14px, 2.4vmin, 32px);
+}
+
+.tip-btn-accept {
+  flex: 2;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  padding: clamp(10px, 1.9vmin, 26px) clamp(14px, 2.6vmin, 34px);
+  border-radius: clamp(8px, 1.1vmin, 14px);
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(13px, 2.25vmin, 30px);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.tip-btn-accept:hover {
+  background: #15803d;
+}
+
+.tip-btn-decline {
+  flex: 1;
+  background: #57534e;
+  color: #ffffff;
+  border: none;
+  padding: clamp(10px, 1.9vmin, 26px) clamp(14px, 2.6vmin, 32px);
+  border-radius: clamp(8px, 1.1vmin, 14px);
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: clamp(12px, 2.05vmin, 28px);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.tip-btn-decline:hover {
+  background: #44403c;
+}
+
 .modal-eyebrow {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;

@@ -211,12 +211,17 @@ export class MatchSimulation {
       p.fightPartnerId = null;
       p.isFightInstigator = false;
       if (p.mode === 'PENALTY_BOX') {
-        // Stay in penalty box across mid-period faceoffs until timer expires
-        p.pos = this.getPenaltyBoxPos(p.team, p.id);
-        p.vel = { x: 0, y: 0 };
+        // Stay in penalty box across mid-period faceoffs until timer expires;
+        // if still gliding along cosmetic curve, let them finish seamlessly
+        if (!p.penaltyTravelPath) {
+          p.pos = this.getPenaltyBoxPos(p.team, p.id);
+          p.vel = { x: 0, y: 0 };
+        }
       } else {
         p.mode = 'DEFENDING';
         p.stateTimer = 0;
+        p.penaltyTravelPath = null;
+        p.penaltyTravelProg = 0;
         p.pos = { ...p.homeSpot };
         p.vel = { x: 0, y: 0 };
       }
@@ -238,12 +243,79 @@ export class MatchSimulation {
     }
   }
 
-  private getPenaltyBoxPos(team: Team, playerId: string): Vec2 {
+  public getPenaltyBoxPos(team: Team, playerId: string): Vec2 {
     const slotOffset = playerId.endsWith('2') ? 20 : -20;
     return {
       x: team === 'home' ? CENTER_X - 75 + slotOffset : CENTER_X + 75 + slotOffset,
       y: 28,
     };
+  }
+
+  private beginPenaltyBoxTravel(p: PlayerEntity): void {
+    const p0: Vec2 = { x: p.pos.x, y: p.pos.y };
+    const p2 = this.getPenaltyBoxPos(p.team, p.id);
+    const dx = p0.x - p2.x;
+    const dy = p0.y - p2.y;
+    const chordDist = Math.hypot(dx, dy);
+
+    if (chordDist < 6) {
+      p.pos = p2;
+      p.vel = { x: 0, y: 0 };
+      p.penaltyTravelPath = null;
+      p.penaltyTravelProg = 1;
+      return;
+    }
+
+    // Natural sweeping skating arc across open ice that curves smoothly into the penalty box gate
+    const absDx = Math.abs(dx);
+    const lateralBow =
+      absDx < 85 ? (dx >= 0 ? 1 : -1) * clamp(chordDist * 0.2, 14, 46) : 0;
+    const ctrlX = clamp(p2.x + dx * 0.34 + lateralBow, 110, RINK_WIDTH - 110);
+    const minGateApproachY = 28 + clamp(absDx * 0.32, 26, 118);
+    const ctrlY = clamp(
+      Math.max(p0.y * 0.56 + 18, minGateApproachY),
+      54,
+      RINK_HEIGHT - 50
+    );
+
+    const p1: Vec2 = { x: ctrlX, y: ctrlY };
+    const arcLen =
+      Math.hypot(p1.x - p0.x, p1.y - p0.y) + Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+    p.penaltyTravelPath = { p0, p1, p2 };
+    p.penaltyTravelProg = 0;
+    p.penaltyTravelDurationSec = clamp(arcLen / 195, 0.55, 2.35);
+  }
+
+  private updatePenaltyBoxTravel(p: PlayerEntity, dtSec: number): void {
+    if (!p.penaltyTravelPath || (p.penaltyTravelProg ?? 1) >= 1) {
+      p.penaltyTravelPath = null;
+      p.pos = this.getPenaltyBoxPos(p.team, p.id);
+      p.vel = { x: 0, y: 0 };
+      return;
+    }
+    const dur = Math.max(0.1, p.penaltyTravelDurationSec ?? 1.2);
+    const nextProg = clamp((p.penaltyTravelProg ?? 0) + dtSec / dur, 0, 1);
+    p.penaltyTravelProg = nextProg;
+
+    if (nextProg >= 1) {
+      p.pos = { ...p.penaltyTravelPath.p2 };
+      p.vel = { x: 0, y: 0 };
+      p.penaltyTravelPath = null;
+      return;
+    }
+
+    // Smoothstep glide: push off from brawl spot, sweep along curve, coast into box seat
+    const s = nextProg * nextProg * (3 - 2 * nextProg);
+    const prevPos = p.pos;
+    const nextPos = evalBezier(p.penaltyTravelPath, s);
+    p.pos = nextPos;
+    if (dtSec > 1e-5) {
+      p.vel = {
+        x: (nextPos.x - prevPos.x) / dtSec,
+        y: (nextPos.y - prevPos.y) / dtSec,
+      };
+    }
   }
 
   public startNextPeriod(): void {
@@ -261,6 +333,8 @@ export class MatchSimulation {
       p.stamina = 1.0;
       p.mode = 'DEFENDING';
       p.stateTimer = 0;
+      p.penaltyTravelPath = null;
+      p.penaltyTravelProg = 0;
       p.possessionTimer = 0;
       p.passCheckTimer = 0;
       p.fightPartnerId = null;
@@ -499,6 +573,11 @@ export class MatchSimulation {
 
     // Handle Faceoff countdown or Goal celebration phases
     if (this.phase === 'FACEOFF_COUNTDOWN') {
+      for (const p of this.players) {
+        if (p.mode === 'PENALTY_BOX' && p.penaltyTravelPath) {
+          this.updatePenaltyBoxTravel(p, dtSec);
+        }
+      }
       this.phaseTimerSec -= dtSec;
       if (this.phaseTimerSec <= 0) {
         this.phase = 'PLAYING';
@@ -523,6 +602,11 @@ export class MatchSimulation {
     }
 
     if (this.phase === 'GOAL_CELEBRATION') {
+      for (const p of this.players) {
+        if (p.mode === 'PENALTY_BOX' && p.penaltyTravelPath) {
+          this.updatePenaltyBoxTravel(p, dtSec);
+        }
+      }
       this.phaseTimerSec -= dtSec;
       if (this.phaseTimerSec <= 0) {
         this.setupFaceoff();
@@ -685,17 +769,19 @@ export class MatchSimulation {
           0,
           1
         );
-        p.pos = this.getPenaltyBoxPos(p.team, p.id);
-        p.vel = { x: 0, y: 0 };
+        this.updatePenaltyBoxTravel(p, dtSec);
         p.stateTimer -= dtSec;
         if (p.stateTimer <= 0) {
           p.mode = 'DEFENDING';
           p.stateTimer = 0;
+          p.penaltyTravelPath = null;
+          p.penaltyTravelProg = 0;
           p.collisionCooldown = 1.0;
           p.pos = {
             x: p.team === 'home' ? CENTER_X - 60 : CENTER_X + 60,
             y: 48,
           };
+          p.vel = { x: 0, y: 0 };
           p.moodAggressionOffset += this.cfg.moodLeaveBoxAggression;
           this.spawnCallout(`#${p.number} BACK ON ICE`, p.pos, '#38bdf8', 1.8);
         }
@@ -717,11 +803,15 @@ export class MatchSimulation {
 
         if (p.stateTimer <= 0) {
           if (p.isFightInstigator) {
+            const calloutPos: Vec2 = {
+              x: p.pos.x,
+              y: Math.max(36, p.pos.y - 18),
+            };
             p.mode = 'PENALTY_BOX';
             p.stateTimer = this.cfg.penaltyDurationSec;
             p.fightPartnerId = null;
             p.isFightInstigator = false;
-            p.pos = this.getPenaltyBoxPos(p.team, p.id);
+            this.beginPenaltyBoxTravel(p);
             this.audioHooks.onPenaltyWhistle?.();
             this.events.push({
               type: 'PENALTY',
@@ -733,8 +823,8 @@ export class MatchSimulation {
               activeSongTarget: this.activeSong?.target ?? null,
             });
             this.spawnCallout(
-              `#${p.number} PENALTY BOX (30s)`,
-              { x: p.pos.x, y: p.pos.y + 24 },
+              `#${p.number} PENALTY BOX (${Math.round(this.cfg.penaltyDurationSec)}s)`,
+              calloutPos,
               '#fb923c',
               2.5
             );

@@ -39,6 +39,7 @@ export class ScreenModalManager {
 
   public hide(): void {
     this.backdropEl.classList.add('hidden');
+    this.contentEl.classList.remove('tip-note-host');
     this.contentEl.innerHTML = '';
   }
 
@@ -54,45 +55,46 @@ export class ScreenModalManager {
     onAccept: () => void,
     onDecline: () => void
   ): void {
+    this.contentEl.classList.add('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const conflictHtml = tip.conflictsWithOfficial
-      ? `<div class="tip-conflict-warning" style="margin: 10px 0; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;">
+      ? `<div class="tip-conflict-warning">
           ⚠️ <strong>MORAL HAZARD:</strong> This demand conflicts with management's Official Order!
          </div>`
       : '';
 
     this.contentEl.innerHTML = `
-      <div class="modal-card tip-note-card" style="background: #fef3c7; color: #1c1917; border: 2px solid #d97706; box-shadow: 0 20px 40px rgba(0,0,0,0.6); max-width: 520px; font-family: 'DM Sans', sans-serif;">
-        <div style="font-family: 'Chakra Petch', monospace; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: #92400e; border-bottom: 2px dashed #b45309; padding-bottom: 4px; margin-bottom: 10px; display: flex; justify-content: space-between;">
+      <div class="tip-note-card">
+        <div class="tip-note-eyebrow">
           <span>📎 CONFIDENTIAL PROPOSITION</span>
           <span>SLIPPED UNDER BOOTH DOOR</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div class="tip-note-header">
           <div>
-            <div style="font-size: 16px; font-weight: 800; color: #78350f;">${tip.senderName}</div>
-            <div style="font-size: 12px; color: #92400e; font-style: italic;">${tip.senderTitle}</div>
+            <div class="tip-note-sender">${tip.senderName}</div>
+            <div class="tip-note-role">${tip.senderTitle}</div>
           </div>
-          <div style="background: #15803d; color: #f0fdf4; padding: 4px 10px; border-radius: 20px; font-weight: 900; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+          <div class="tip-note-payout">
             +$${tip.bribePayout}
           </div>
         </div>
 
-        <div style="font-family: 'Courier New', Courier, monospace; font-size: 13.5px; line-height: 1.5; color: #292524; background: rgba(254, 243, 199, 0.8); border-left: 3px solid #d97706; padding: 8px 12px; margin-bottom: 12px;">
+        <div class="tip-note-quote">
           "${tip.flavorText}"
         </div>
 
-        <div style="background: rgba(217, 119, 6, 0.15); border: 1px solid #d97706; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: #78350f;">
-          🎯 DEMAND: <span style="color: #451a03; font-weight: 600;">${tip.conditionDescription}</span>
+        <div class="tip-note-demand">
+          🎯 DEMAND: <span class="tip-note-demand-text">${tip.conditionDescription}</span>
         </div>
 
         ${conflictHtml}
 
-        <div style="display: flex; gap: 8px; margin-top: 14px;">
-          <button id="btn-accept-tip" type="button" style="flex: 2; background: #16a34a; color: white; border: none; padding: 10px 14px; border-radius: 6px; font-weight: 800; font-size: 13px; cursor: pointer;">
+        <div class="tip-note-actions">
+          <button id="btn-accept-tip" class="tip-btn-accept" type="button">
             🤝 ACCEPT BRIBE (+$${tip.bribePayout})
           </button>
-          <button id="btn-decline-tip" type="button" style="flex: 1; background: #78716c; color: white; border: none; padding: 10px 14px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer;">
+          <button id="btn-decline-tip" class="tip-btn-decline" type="button">
             🗑️ DECLINE
           </button>
         </div>
@@ -114,6 +116,7 @@ export class ScreenModalManager {
    * 1. Initial "Tap to Take Your Seat" screen to unlock Web Audio on iOS/Android.
    */
   public showStartSeatScreen(): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     this.contentEl.innerHTML = `
       <div class="modal-inner start-seat-modal">
@@ -161,6 +164,7 @@ export class ScreenModalManager {
     campaignMatch?: MatchScheduleEntry | null,
     officialRepPct?: number
   ): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     let selectedId: OrderId = assignedOrderId;
 
@@ -282,6 +286,7 @@ export class ScreenModalManager {
    * 3. Between-Period Breakdown Modal.
    */
   public showPeriodBreakdown(sim: MatchSimulation): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const pStats = buildStatsSummary(sim.events, sim.crowdSamples, sim.period);
     const orderDef = getOrderById(sim.orderId);
@@ -369,6 +374,7 @@ export class ScreenModalManager {
    * 4. Final Game Breakdown Modal (After Period 3).
    */
   public showGameBreakdown(sim: MatchSimulation): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const totalStats = buildStatsSummary(sim.events, sim.crowdSamples);
     const p1 = buildStatsSummary(sim.events, sim.crowdSamples, 1);
@@ -481,6 +487,7 @@ export class ScreenModalManager {
     sim: MatchSimulation,
     activeTips: TipOffer[] = []
   ): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const orderDef = getOrderById(sim.orderId);
     const orderEval = evaluateOrder(sim.orderId, {
@@ -579,6 +586,7 @@ export class ScreenModalManager {
     mgr: CampaignManager,
     onProceedNextMatch: () => void
   ): void {
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
 
     const render = () => {
@@ -892,6 +900,7 @@ export class ScreenModalManager {
       onRestartSeason();
     });
 
+    this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
   }
 }

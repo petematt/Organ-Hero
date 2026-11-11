@@ -596,7 +596,8 @@ describe('Determinism & Breakdown Attribution', () => {
       [{ period: 1, volume: 75 }],
       1
     );
-    expect(grudgeSummary.impactLines.some((l) => l.includes('Grudge Toccata sparked 1 of 1 brawl(s)'))).toBe(true);
+    expect(grudgeSummary.impactLines.some((l) => l.includes('Grudge Toccata sparked 1 of 1 brawl on the ice.'))).toBe(true);
+    expect(grudgeSummary.impactLines.some((l) => l.includes('(s)'))).toBe(false);
     expect(grudgeSummary.impactLines.some((l) => l.includes('Charge!'))).toBe(false);
   });
 
@@ -985,6 +986,108 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
     sim.handleCarrierCollision(awayS, homeS1);
     expect(actions).toContain('steal');
   });
+
+  it('travels to the penalty box along a smooth cosmetic curve without game interaction while penalty timer ticks immediately', () => {
+    const cfg = cloneConfig();
+    const sim = new MatchSimulation(cfg, 404);
+    sim.phase = 'PLAYING';
+
+    const instigator = sim.players.find((p) => p.id === 'home-s1')!;
+    const victim = sim.players.find((p) => p.id === 'away-s1')!;
+    const startFightPos = { x: 405, y: 340 };
+    instigator.pos = { ...startFightPos };
+    victim.pos = { x: 425, y: 340 };
+
+    sim.startFight(instigator, victim);
+    // Advance right past the end of the brawl so instigator is sent to the box
+    instigator.stateTimer = 0.02;
+    victim.stateTimer = 0.02;
+    sim.step(0.05);
+
+    expect(instigator.mode).toBe('PENALTY_BOX');
+    expect(instigator.penaltyTravelPath).toBeTruthy();
+
+    // Did NOT teleport straight to y=28 on the first frame
+    const boxSeat = sim.getPenaltyBoxPos(instigator.team, instigator.id);
+    expect(Math.hypot(instigator.pos.x - startFightPos.x, instigator.pos.y - startFightPos.y)).toBeLessThan(30);
+    expect(Math.hypot(instigator.pos.x - boxSeat.x, instigator.pos.y - boxSeat.y)).toBeGreaterThan(250);
+
+    // Penalty timer ticks down immediately while skating along the curve
+    const timerAtStart = instigator.stateTimer;
+    let maxCurveBowX = 0;
+    for (let i = 0; i < 6; i++) {
+      // Place loose puck directly on top of the traveling penalized skater to verify zero interaction
+      sim.puck.carrierId = null;
+      sim.puck.pos = { ...instigator.pos };
+      sim.puck.vel = { x: 0, y: 0 };
+      sim.step(0.1);
+      expect(sim.puck.carrierId).not.toBe(instigator.id);
+      maxCurveBowX = Math.max(maxCurveBowX, Math.abs(instigator.pos.x - startFightPos.x));
+    }
+
+    expect(instigator.stateTimer).toBeCloseTo(timerAtStart - 0.6, 5);
+    // Path curves naturally rather than moving on a straight vertical line (startFightPos.x === boxSeat.x === 405)
+    expect(maxCurveBowX).toBeGreaterThan(6);
+
+    // Advance until travel completes (~2.5s max) -> arrives cleanly at penalty box seat
+    for (let i = 0; i < 25; i++) {
+      sim.step(0.1);
+    }
+    expect(instigator.penaltyTravelPath).toBeNull();
+    expect(instigator.pos.x).toBeCloseTo(boxSeat.x, 2);
+    expect(instigator.pos.y).toBeCloseTo(boxSeat.y, 2);
+  });
+
+  it('formats singular and plural counts without any "(s)" in stats and order summaries', () => {
+    const summary1 = buildStatsSummary(
+      [
+        { type: 'SONG_PLAYED', period: 1, timeRemainingSec: 100, songId: 'charge', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'GOAL', period: 1, timeRemainingSec: 98, team: 'home', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'SONG_PLAYED', period: 1, timeRemainingSec: 80, songId: 'hold_the_line', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+        { type: 'SAVE', period: 1, timeRemainingSec: 78, team: 'home', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+      ],
+      [{ period: 1, volume: 60 }],
+      1
+    );
+    expect(summary1.impactLines).toContain('Charge! Fanfare boosted 1 of 1 goal (1 play).');
+    expect(summary1.impactLines).toContain('Hold the Line directly boosted 1 defensive save.');
+
+    const summary2 = buildStatsSummary(
+      [
+        { type: 'SONG_PLAYED', period: 1, timeRemainingSec: 100, songId: 'charge', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'SONG_PLAYED', period: 1, timeRemainingSec: 70, songId: 'charge', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'GOAL', period: 1, timeRemainingSec: 98, team: 'home', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'GOAL', period: 1, timeRemainingSec: 68, team: 'home', activeSongId: 'charge', activeSongTarget: 'home' },
+        { type: 'SONG_PLAYED', period: 1, timeRemainingSec: 50, songId: 'hold_the_line', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+        { type: 'SAVE', period: 1, timeRemainingSec: 48, team: 'home', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+        { type: 'SAVE', period: 1, timeRemainingSec: 47, team: 'home', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+        { type: 'STEAL', period: 1, timeRemainingSec: 46, team: 'home', activeSongId: 'hold_the_line', activeSongTarget: 'home' },
+      ],
+      [{ period: 1, volume: 60 }],
+      1
+    );
+    expect(summary2.impactLines).toContain('Charge! Fanfare boosted 2 of 2 goals (2 plays).');
+    expect(summary2.impactLines).toContain('Hold the Line directly boosted 2 defensive saves & 1 steal.');
+    expect(summary2.impactLines.every((l) => !l.includes('(s)'))).toBe(true);
+
+    const order1 = evaluateOrder('clean_sheet', {
+      homeGoals: 2,
+      awayGoals: 1,
+      totalFights: 1,
+      averageCrowdVolume: 65,
+      isMatchOver: true,
+    });
+    expect(order1.reason).toBe('Home won 2–1 with only 1 fight.');
+    const order0 = evaluateOrder('clean_sheet', {
+      homeGoals: 2,
+      awayGoals: 1,
+      totalFights: 0,
+      averageCrowdVolume: 65,
+      isMatchOver: true,
+    });
+    expect(order0.reason).toBe('Home won 2–1 with only 0 fights.');
+  });
 });
+
 
 

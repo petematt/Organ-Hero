@@ -85,6 +85,9 @@ export interface PlayerEntity {
   fightPunchCooldown?: number;
   collisionCooldown: number;
   attackPath: BezierPath | null;
+  penaltyTravelPath?: BezierPath | null;
+  penaltyTravelProg?: number;
+  penaltyTravelDurationSec?: number;
 
   // Visual reaction timer on song tap
   reactionTimer: number;

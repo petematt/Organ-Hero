@@ -37,12 +37,12 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
   {
     title: 'Song Modifiers & Timings (Game Sec)',
     items: [
-      { key: 'periodDurationSec', label: 'Period Length (s)', min: 30, max: 240, step: 15 },
-      { key: 'songActiveDurationSec', label: 'Song Duration (s)', min: 4, max: 20, step: 1 },
-      { key: 'cueWindowDurationSec', label: 'Cue Window (s)', min: 2, max: 10, step: 0.5 },
-      { key: 'brawlDurationSec', label: 'Brawl Duration (s)', min: 2, max: 12, step: 1 },
-      { key: 'penaltyDurationSec', label: 'Penalty Box (s)', min: 10, max: 60, step: 5 },
-      { key: 'goalieHoldDurationSec', label: 'Goalie Hold (s)', min: 0.4, max: 3.0, step: 0.2 },
+      { key: 'periodDurationSec', label: 'Period Length (sec)', min: 30, max: 240, step: 15 },
+      { key: 'songActiveDurationSec', label: 'Song Duration (sec)', min: 4, max: 20, step: 1 },
+      { key: 'cueWindowDurationSec', label: 'Cue Window (sec)', min: 2, max: 10, step: 0.5 },
+      { key: 'brawlDurationSec', label: 'Brawl Duration (sec)', min: 2, max: 12, step: 1 },
+      { key: 'penaltyDurationSec', label: 'Penalty Box (sec)', min: 10, max: 60, step: 5 },
+      { key: 'goalieHoldDurationSec', label: 'Goalie Hold (sec)', min: 0.4, max: 3.0, step: 0.2 },
       { key: 'chargeFocusBonus', label: 'Charge +Focus', min: 0, max: 0.6, step: 0.05 },
       { key: 'chargeAggressionBonus', label: 'Charge +Aggression', min: 0, max: 0.6, step: 0.05 },
       { key: 'holdGoalieFocusBonus', label: 'Hold +Goalie Focus', min: 0, max: 0.6, step: 0.05 },
@@ -57,9 +57,9 @@ const SLIDER_GROUPS: { title: string; items: SliderSpec[] }[] = [
   {
     title: 'Rink Physics & Mood Drift',
     items: [
-      { key: 'maxPossessionSec', label: 'Max Possession (s)', min: 1.5, max: 8.0, step: 0.5 },
+      { key: 'maxPossessionSec', label: 'Max Possession (sec)', min: 1.5, max: 8.0, step: 0.5 },
       { key: 'minShotDistance', label: 'Min Shot Dist (px)', min: 100, max: 350, step: 10 },
-      { key: 'moodHalfLifeSec', label: 'Mood Half-Life (s)', min: 2, max: 20, step: 1 },
+      { key: 'moodHalfLifeSec', label: 'Mood Half-Life (sec)', min: 2, max: 20, step: 1 },
       { key: 'pushStrength', label: 'Push Strength', min: 10, max: 90, step: 5 },
     ],
   },
