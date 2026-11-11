@@ -936,10 +936,14 @@ export class MatchSimulation {
           p.attackPath = createCurvedPathToGoal(p.pos, p.team, this.rng);
         }
 
+        const ownGoal = getOwnGoalPos(p.team);
+        const inDefensiveZone = dist(p.pos, ownGoal) < 240;
+        const minPassPossessionTime = inDefensiveZone ? 0.05 : 0.25;
+
         // Evaluate passing to an open / better-positioned teammate if passing is enabled
         if (
           this.cfg.enablePassing &&
-          p.possessionTimer >= 0.25 &&
+          p.possessionTimer >= minPassPossessionTime &&
           p.passCheckTimer <= 0
         ) {
           if (this.tryPassPuck(p)) {
@@ -1085,7 +1089,12 @@ export class MatchSimulation {
           x: targetPos.x - p.pos.x,
           y: targetPos.y - p.pos.y,
         });
-        p.vel = { x: dir.x * maxSpeed, y: dir.y * maxSpeed };
+        const ownGoal = getOwnGoalPos(p.team);
+        const isLooseInDefensiveZone =
+          this.puck.carrierId === null && dist(this.puck.pos, ownGoal) < 240;
+        const skaterSpeed =
+          isLooseInDefensiveZone && !holdingGoalie ? maxSpeed * 1.25 : maxSpeed;
+        p.vel = { x: dir.x * skaterSpeed, y: dir.y * skaterSpeed };
       }
       p.pos.x += p.vel.x * dtSec;
       p.pos.y += p.vel.y * dtSec;
@@ -1099,9 +1108,11 @@ export class MatchSimulation {
       }
 
       // Check loose puck pickup (stunned players never trigger collisions with the puck,
-      // and a passer on cooldown does not immediately re-grab their own outgoing pass)
+      // and a passer or shooter on cooldown does not immediately re-grab their own outgoing puck)
       const isPasserOnCooldown =
         this.puck.inFlightPassFromId === p.id && p.collisionCooldown > 0;
+      const isShooterOnCooldown =
+        this.puck.shooterId === p.id && p.collisionCooldown > 0;
       const pickupRadius =
         this.cfg.skaterRadius +
         this.cfg.puckRadius +
@@ -1110,6 +1121,7 @@ export class MatchSimulation {
       if (
         (p.mode as string) !== 'STUNNED' &&
         !isPasserOnCooldown &&
+        !isShooterOnCooldown &&
         this.puck.carrierId === null &&
         dist(p.pos, this.puck.pos) <= pickupRadius
       ) {
@@ -1296,9 +1308,12 @@ export class MatchSimulation {
     this.currentPossessor = striker.team;
     this.lastPossessor = striker.team;
 
+    const ownGoal = getOwnGoalPos(striker.team);
+    const inDefensiveZone = dist(striker.pos, ownGoal) < 240;
+
     striker.mode = 'POSSESSING';
     striker.possessionTimer = receivedCleanPass ? this.cfg.maxPossessionSec * 0.45 : 0;
-    striker.passCheckTimer = this.cfg.passCheckIntervalSec;
+    striker.passCheckTimer = inDefensiveZone ? 0 : this.cfg.passCheckIntervalSec;
     striker.attackPath = createCurvedPathToGoal(striker.pos, striker.team, this.rng);
   }
 
@@ -1341,11 +1356,15 @@ export class MatchSimulation {
       minOppDistToTeammate = Math.min(minOppDistToTeammate, dist(opp.pos, teammate.pos));
     }
 
+    const ownGoal = getOwnGoalPos(carrier.team);
+    const inDefensiveZone = dist(carrier.pos, ownGoal) < 240;
+
     const isPressured = minOppDistToCarrier < 95 && minOppDistToTeammate > 60;
     const isTeammateBetterPositioned =
       teammateGoalDist < carrierGoalDist - 20 && minOppDistToTeammate > 60;
+    const isDefensiveBreakout = inDefensiveZone && teammateGoalDist < carrierGoalDist;
 
-    if (!isPressured && !isTeammateBetterPositioned) {
+    if (!isPressured && !isTeammateBetterPositioned && !isDefensiveBreakout) {
       return false;
     }
 
@@ -1366,7 +1385,9 @@ export class MatchSimulation {
       this.activeSong?.songId === 'tic_tac_toe' &&
       doesSongAffectTeam(this.activeSong.target, carrier.team);
 
-    const tendency = isTicTacToeActive
+    const tendency = isDefensiveBreakout
+      ? 1.0
+      : isTicTacToeActive
       ? 0.95
       : computePassTendency(
           carrier.focus,
@@ -1389,9 +1410,11 @@ export class MatchSimulation {
     const isTicTacToe =
       this.activeSong?.songId === 'tic_tac_toe' &&
       doesSongAffectTeam(this.activeSong.target, passer.team);
+    const isDefensiveBreakout =
+      dist(passer.pos, getOwnGoalPos(passer.team)) < 240;
 
     const accuracy =
-      isGoalieOutlet || isTicTacToe
+      isGoalieOutlet || isTicTacToe || isDefensiveBreakout
         ? 1.0
         : computePassAccuracy(passer.focus, passer.stamina, this.cfg);
     const isAccurate = isGoalieOutlet || isTicTacToe || this.rng.rollAgainst(accuracy);
@@ -1587,7 +1610,7 @@ export class MatchSimulation {
     striker.mode = 'DEFENDING';
     striker.possessionTimer = 0;
     striker.attackPath = null;
-    striker.collisionCooldown = 0.35;
+    striker.collisionCooldown = 0.55;
 
     const launchPos = {
       x: striker.pos.x + dir.x * (this.cfg.skaterRadius + 4),
@@ -1869,7 +1892,7 @@ export class MatchSimulation {
         this.puck.inFlightShotFrom = null;
         this.puck.isScoringShot = false;
         this.puck.shotStartPos = null;
-        this.puck.shooterId = null;
+        // Keep this.puck.shooterId active so shooter follow-through cooldown applies to post rebounds
         this.puck.inFlightPassToId = null;
         this.puck.inFlightPassFromId = null;
 
@@ -2080,7 +2103,9 @@ export class MatchSimulation {
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;
     this.puck.shotStartPos = null;
-    this.puck.shooterId = null;
+    if (isCritSave) {
+      this.puck.shooterId = null;
+    }
     this.puck.inFlightPassToId = null;
     this.puck.inFlightPassFromId = null;
 

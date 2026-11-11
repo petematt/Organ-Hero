@@ -140,19 +140,23 @@ describe('Rink Physics & 60-Degree Rebound Vector', () => {
     expect(v1.x).toBeCloseTo(300 * Math.exp(-cfg.puckFrictionPerSec));
   });
 
-  it('redirects blocked shots at 60 degrees from the goal line toward the horizontal center line', () => {
+  it('redirects blocked shots into corners/boards away from the center line', () => {
     const rng = new SeededRNG(10);
-    // Puck above center line (y = 150 < 212.5) saved by Home goalie -> should move +X and +Y (toward 212.5)
+    // Puck above center line (y = 150 < 212.5) saved by Home goalie -> should move +X (away from net) and -Y (toward top boards)
     const vAbove = computeReboundVelocity('home', 150, 500, cfg, rng);
     expect(vAbove.x).toBeGreaterThan(0);
-    expect(vAbove.y).toBeGreaterThan(0);
-    const angleFromGoalLine = Math.atan2(Math.abs(vAbove.x), Math.abs(vAbove.y));
-    expect((angleFromGoalLine * 180) / Math.PI).toBeCloseTo(60, 2);
+    expect(vAbove.y).toBeLessThan(0);
+    const angleAbove = (Math.atan2(Math.abs(vAbove.x), Math.abs(vAbove.y)) * 180) / Math.PI;
+    expect(angleAbove).toBeGreaterThanOrEqual(34);
+    expect(angleAbove).toBeLessThanOrEqual(46);
 
-    // Puck below center line (y = 280 > 212.5) saved by Away goalie -> should move -X and -Y (toward 212.5)
+    // Puck below center line (y = 280 > 212.5) saved by Away goalie -> should move -X (away from net) and +Y (toward bottom boards)
     const vBelow = computeReboundVelocity('away', 280, 500, cfg, rng);
     expect(vBelow.x).toBeLessThan(0);
-    expect(vBelow.y).toBeLessThan(0);
+    expect(vBelow.y).toBeGreaterThan(0);
+    const angleBelow = (Math.atan2(Math.abs(vBelow.x), Math.abs(vBelow.y)) * 180) / Math.PI;
+    expect(angleBelow).toBeGreaterThanOrEqual(34);
+    expect(angleBelow).toBeLessThanOrEqual(46);
   });
 });
 
@@ -338,6 +342,93 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.puck.carrierId).toBeNull();
     sim.step(1 / 60);
     expect(sim.puck.carrierId).toBeNull();
+  });
+
+  it('shooter follow-through collision cooldown prevents immediate re-grab of own rebound', () => {
+    const sim = new MatchSimulation(cloneConfig(), 456);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    for (const p of sim.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 50, y: 50 };
+      }
+    }
+    homeS1.pos = { x: 750, y: CENTER_Y };
+    sim.gainPossession(homeS1);
+    sim.shootPuck(homeS1);
+
+    expect(homeS1.collisionCooldown).toBeCloseTo(0.55, 2);
+    expect(sim.puck.shooterId).toBe(homeS1.id);
+
+    // Simulate puck bouncing off goalie into a rebound (non-critical save)
+    const awayGoalie = sim.players.find((p) => p.role === 'goalie' && p.team === 'away')!;
+    sim.puck.pos = { ...awayGoalie.pos };
+    (sim as any).resolveGoalieSave(awayGoalie);
+
+    // ShooterId should still be preserved on non-critical rebound
+    expect(sim.puck.shooterId).toBe(homeS1.id);
+
+    // Place the rebound right on the shooter while shooter cooldown > 0
+    sim.puck.pos = { ...homeS1.pos };
+    sim.puck.vel = { x: 0, y: 0 };
+    sim.step(1 / 60);
+
+    // Shooter should NOT have vacuumed up the puck
+    expect(sim.puck.carrierId).toBeNull();
+    expect(homeS1.mode).toBe('DEFENDING');
+  });
+
+  it('defending skaters gain slot clearance speed boost when puck is loose in defensive zone', () => {
+    const sim = new MatchSimulation(cloneConfig(), 789);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const baseSpeed = computeSkateSpeed(homeS1.stamina, homeS1.aggression, sim.cfg);
+
+    // Puck loose in home defensive slot (HOME_GOAL_X = 55, dist < 240)
+    sim.puck.carrierId = null;
+    sim.puck.pos = { x: 120, y: CENTER_Y };
+    sim.puck.vel = { x: 0, y: 0 };
+
+    homeS1.pos = { x: 200, y: CENTER_Y };
+    homeS1.mode = 'DEFENDING';
+
+    sim.step(1 / 60);
+
+    // Expected speed should be boosted by 1.25x
+    const currentSpeed = Math.hypot(homeS1.vel.x, homeS1.vel.y);
+    expect(currentSpeed).toBeCloseTo(baseSpeed * 1.25, 1);
+  });
+
+  it('defenders prioritize breakout pass when recovering puck in defensive slot', () => {
+    const sim = new MatchSimulation(cloneConfig(), 321);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+
+    // Position homeS1 in own defensive zone (x = 100) and homeS2 up-ice (x = 400)
+    homeS1.pos = { x: 100, y: CENTER_Y };
+    homeS2.pos = { x: 400, y: CENTER_Y + 80 };
+    homeS2.mode = 'DEFENDING';
+
+    // Move away strikers away so there is a clean passing lane
+    for (const p of sim.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.pos = { x: 800, y: 50 };
+      }
+    }
+
+    sim.gainPossession(homeS1);
+    expect(homeS1.mode).toBe('POSSESSING');
+
+    // Step just 0.1s - well below normal 0.25s passing threshold, but enough for defensive breakout
+    sim.step(0.1);
+
+    // A breakout pass should have been initiated to homeS2
+    const passEvent = sim.events.find((e) => e.type === 'PASS');
+    expect(passEvent).toBeDefined();
+    expect(passEvent?.playerId).toBe(homeS1.id);
+    expect(sim.puck.inFlightPassFromId).toBe(homeS1.id);
+    expect(sim.puck.inFlightPassToId).toBe(homeS2.id);
   });
 });
 

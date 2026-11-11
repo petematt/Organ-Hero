@@ -74,9 +74,9 @@ export function evalBezier(path: BezierPath, t: number): Vec2 {
 }
 
 /**
- * Computes the 60-degree goalie block rebound velocity.
- * The angle is 60 degrees from the goal line (i.e., 30 degrees off the horizontal axis, or 60 degrees off the vertical goal line),
- * directed away from the net and vertically toward the rink's horizontal center line (y = 212.5).
+ * Computes goalie block rebound velocity directed into the corners / side boards,
+ * away from the dangerous center slot (y = CENTER_Y).
+ * The angle is between 34 and 46 degrees from the vertical goal line, deflecting towards the nearest boards.
  */
 export function computeReboundVelocity(
   goalieTeam: Team,
@@ -85,20 +85,23 @@ export function computeReboundVelocity(
   cfg: GameConfig,
   rng: SeededRNG
 ): Vec2 {
-  const outSpeed = Math.max(220, incomingSpeed * cfg.reboundSpeedRatio);
-  // 60 degrees from the vertical goal line = 60 deg angle from the goal mouth
-  const angleFromGoalLine = (60 * Math.PI) / 180;
+  const outSpeed = Math.max(240, incomingSpeed * cfg.reboundSpeedRatio);
+  // Rebound angle: 34 to 46 degrees from the vertical goal line, kicking toward the corners
+  const angleDeg = rng ? rng.range(34, 46) : 40;
+  const angleFromGoalLine = (angleDeg * Math.PI) / 180;
+
   // Horizontal direction: away from own net toward center ice
   const dirX = goalieTeam === 'home' ? 1 : -1;
-  // Vertical direction: toward the horizontal center line (y = CENTER_Y)
+
+  // Vertical direction: AWAY from horizontal center line (toward nearest boards / corner)
   let dirY: number;
   if (Math.abs(puckY - CENTER_Y) < 1e-3) {
-    dirY = rng.sign();
+    dirY = rng ? rng.sign() : 1;
   } else {
-    dirY = puckY < CENTER_Y ? 1 : -1;
+    // If puck is in top half (puckY < CENTER_Y), kick UP (-1); if in bottom half, kick DOWN (+1)
+    dirY = puckY < CENTER_Y ? -1 : 1;
   }
 
-  // Angle from goal line (vertical axis) is 60 deg => sin(60) along x, cos(60) along y
   const vx = dirX * Math.sin(angleFromGoalLine) * outSpeed;
   const vy = dirY * Math.cos(angleFromGoalLine) * outSpeed;
   return { x: vx, y: vy };
