@@ -16,8 +16,17 @@ export class OrganSynth {
   private crowdGain: GainNode | null = null;
   private crowdFilter: BiquadFilterNode | null = null;
   private crowdSurgeGain: GainNode | null = null;
-  private crowdBaseFreq: number = 650;
   private crowdRunning: boolean = false;
+  private lastCrowdTargetGain: number = -1;
+  private lastCrowdTargetFreq: number = -1;
+
+  // Analytical surge envelope state for glitch-free overlapping surges
+  private surgeStartTime: number = 0;
+  private surgeStartVal: number = 1.0;
+  private surgePeakVal: number = 1.0;
+  private surgeAttackSec: number = 0.08;
+  private surgeHoldSec: number = 0.04;
+  private surgeDecayTau: number = 0.40;
 
   public unlock(): void {
     try {
@@ -130,20 +139,38 @@ export class OrganSynth {
     // Warm, resonant arena crowd roar — lively ambiance during active play and intermission
     const targetGain = isPaused ? 0.06 : 0.20 + norm * 0.40;
     const targetFreq = isPaused ? 380 : 500 + norm * 700;
-    this.crowdBaseFreq = targetFreq;
 
     const now = ctx.currentTime;
-    if (this.crowdGain) {
-      this.crowdGain.gain.setTargetAtTime(targetGain, now, 0.15);
+    if (this.crowdGain && Math.abs(targetGain - this.lastCrowdTargetGain) > 0.001) {
+      this.lastCrowdTargetGain = targetGain;
+      this.crowdGain.gain.setTargetAtTime(targetGain, now, 0.2);
     }
-    if (this.crowdFilter) {
-      this.crowdFilter.frequency.setTargetAtTime(targetFreq, now, 0.2);
+    if (this.crowdFilter && Math.abs(targetFreq - this.lastCrowdTargetFreq) > 1.5) {
+      this.lastCrowdTargetFreq = targetFreq;
+      this.crowdFilter.frequency.setTargetAtTime(targetFreq, now, 0.25);
     }
   }
 
+  private getCurrentSurgeValue(now: number): number {
+    if (this.surgePeakVal <= 1.0001) return 1.0;
+    const elapsed = now - this.surgeStartTime;
+    if (elapsed <= 0) return this.surgeStartVal;
+    if (elapsed < this.surgeAttackSec) {
+      const frac = elapsed / this.surgeAttackSec;
+      return this.surgeStartVal + (this.surgePeakVal - this.surgeStartVal) * frac;
+    }
+    if (elapsed < this.surgeAttackSec + this.surgeHoldSec) {
+      return this.surgePeakVal;
+    }
+    const decayElapsed = elapsed - (this.surgeAttackSec + this.surgeHoldSec);
+    const val = 1.0 + (this.surgePeakVal - 1.0) * Math.exp(-decayElapsed / this.surgeDecayTau);
+    return val < 1.0005 ? 1.0 : val;
+  }
+
   /**
-   * Spikes crowd excitement following a shot or a goal:
-   * Quick rise in volume and brightness, followed by a smooth return to baseline.
+   * Spikes crowd excitement up to ~2x baseline following a shot or a goal:
+   * Quick rise in volume, brief rounded crest, and smooth asymptotic decay back to baseline
+   * without touching crowdFilter (avoiding multi-stage cutoffs or filter stomping).
    */
   public triggerCrowdSurge(type: 'shot' | 'goal'): void {
     if (!this.unlocked) return;
@@ -152,36 +179,33 @@ export class OrganSynth {
 
     const now = ctx.currentTime;
     const surgeGain = this.crowdSurgeGain.gain;
+    const currentVal = this.getCurrentSurgeValue(now);
 
-    if (type === 'shot') {
-      // 1-second spike after a shot: quick rise (0.07s) and slower return to normal (1.0s)
-      surgeGain.cancelScheduledValues(now);
-      surgeGain.setValueAtTime(surgeGain.value, now);
-      surgeGain.linearRampToValueAtTime(2.4, now + 0.07);
-      surgeGain.exponentialRampToValueAtTime(1.0, now + 1.02);
+    const targetPeak = type === 'goal' ? 2.0 : 1.8;
+    const peakVal = Math.min(2.0, Math.max(currentVal, targetPeak));
+    const attackSec = type === 'goal' ? 0.08 : 0.07;
+    const holdSec = type === 'goal' ? 0.08 : 0.03;
+    const decayTau = type === 'goal' ? 0.55 : 0.36;
 
-      if (this.crowdFilter) {
-        const baseFreq = this.crowdBaseFreq || 700;
-        this.crowdFilter.frequency.cancelScheduledValues(now);
-        this.crowdFilter.frequency.setValueAtTime(this.crowdFilter.frequency.value, now);
-        this.crowdFilter.frequency.linearRampToValueAtTime(baseFreq + 520, now + 0.07);
-        this.crowdFilter.frequency.exponentialRampToValueAtTime(baseFreq, now + 1.02);
-      }
+    const paramWithHold = surgeGain as AudioParam & {
+      cancelAndHoldAtTime?: (cancelTime: number) => AudioParam;
+    };
+    if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
+      paramWithHold.cancelAndHoldAtTime(now);
     } else {
-      // Goal roar explosion: quick rise (0.06s) and slower return (1.8s)
       surgeGain.cancelScheduledValues(now);
-      surgeGain.setValueAtTime(surgeGain.value, now);
-      surgeGain.linearRampToValueAtTime(3.2, now + 0.06);
-      surgeGain.exponentialRampToValueAtTime(1.0, now + 1.8);
-
-      if (this.crowdFilter) {
-        const baseFreq = this.crowdBaseFreq || 700;
-        this.crowdFilter.frequency.cancelScheduledValues(now);
-        this.crowdFilter.frequency.setValueAtTime(this.crowdFilter.frequency.value, now);
-        this.crowdFilter.frequency.linearRampToValueAtTime(1600, now + 0.06);
-        this.crowdFilter.frequency.exponentialRampToValueAtTime(baseFreq, now + 1.8);
-      }
     }
+
+    surgeGain.setValueAtTime(currentVal, now);
+    surgeGain.linearRampToValueAtTime(peakVal, now + attackSec);
+    surgeGain.setTargetAtTime(1.0, now + attackSec + holdSec, decayTau);
+
+    this.surgeStartTime = now;
+    this.surgeStartVal = currentVal;
+    this.surgePeakVal = peakVal;
+    this.surgeAttackSec = attackSec;
+    this.surgeHoldSec = holdSec;
+    this.surgeDecayTau = decayTau;
   }
 
   private ensureContext(): AudioContext | null {
