@@ -30,12 +30,14 @@ import {
   CENTER_Y,
   clampSkaterToBoards,
   collidePuckWithBoards,
+  collidePuckWithGoalPosts,
   computeReboundVelocity,
   createCurvedPathToGoal,
   dist,
   evalBezier,
   getOpponentGoalPos,
   getOwnGoalPos,
+  GOAL_HALF_WIDTH,
   HOME_GOAL_X,
   normalize,
   RINK_HEIGHT,
@@ -66,6 +68,15 @@ export interface MatchAudioHooks {
   onFightImpact?: () => void;
   onPenaltyWhistle?: () => void;
   onPeriodBuzzer?: () => void;
+  onPostHit?: (postPos: Vec2) => void;
+  onGoalieSave?: (isGlove: boolean, defendingTeam: Team) => void;
+  onCrowdGroan?: () => void;
+  onCrowdCheer?: () => void;
+}
+
+export interface MatchVisualHooks {
+  onPostHit?: (postPos: Vec2) => void;
+  onGoalieSave?: (pos: Vec2, isGlove: boolean) => void;
 }
 
 export class MatchSimulation {
@@ -73,6 +84,9 @@ export class MatchSimulation {
   public rng: SeededRNG;
   public orderId: OrderId;
   public audioHooks: MatchAudioHooks = {};
+  public visualHooks: MatchVisualHooks = {};
+  public timeDilation: number = 1.0;
+  public hitstopTimerSec: number = 0;
   public opposingOrganist: OpposingOrganistController | null = null;
   public overtimeOvertureTriggeredThisPeriod: boolean = false;
 
@@ -203,6 +217,8 @@ export class MatchSimulation {
     this.puck.vel = { x: 0, y: 0 };
     this.puck.trail = [];
     this.currentPossessor = null;
+    this.timeDilation = 1.0;
+    this.hitstopTimerSec = 0;
 
     for (const p of this.players) {
       p.attackPath = null;
@@ -241,6 +257,36 @@ export class MatchSimulation {
         );
       }
     }
+  }
+
+  public triggerHitstop(durationSec: number = 0.065): void {
+    this.hitstopTimerSec = durationSec;
+    this.timeDilation = 0.05;
+  }
+
+  public getTimeDilation(): number {
+    return this.timeDilation;
+  }
+
+  public updateTimeDilation(realDtSec: number): void {
+    let targetDilation = 1.0;
+
+    if (this.hitstopTimerSec > 0) {
+      this.hitstopTimerSec = Math.max(0, this.hitstopTimerSec - realDtSec);
+      targetDilation = 0.05;
+    } else if (this.puck.inFlightShotFrom !== null) {
+      // Smoothly slow down time as in-flight shot nears the opponent's net
+      const defGoalX =
+        this.puck.inFlightShotFrom === 'home' ? AWAY_GOAL_X : HOME_GOAL_X;
+      const distToGoalX = Math.abs(this.puck.pos.x - defGoalX);
+      const normDist = clamp(distToGoalX / 300, 0, 1);
+      targetDilation = 0.32 + 0.68 * normDist;
+    } else {
+      targetDilation = 1.0;
+    }
+
+    const lerpRate = Math.min(1, realDtSec * 9.5);
+    this.timeDilation += (targetDilation - this.timeDilation) * lerpRate;
   }
 
   public getPenaltyBoxPos(team: Team, playerId: string): Vec2 {
@@ -1521,8 +1567,8 @@ export class MatchSimulation {
     const isScoringShot = this.rng.rollAgainst(goalChance);
 
     const scatterY = isScoringShot
-      ? this.rng.range(-10, 10)
-      : this.rng.range(-18, 18) * (1 - striker.focus * 0.6);
+      ? this.rng.range(-12, 12)
+      : this.rng.range(-38, 38) * (1 - striker.focus * 0.35);
 
     const targetX = isScoringShot
       ? defTeam === 'home'
@@ -1808,6 +1854,50 @@ export class MatchSimulation {
       }
     }
 
+    if (!this.puck.isScoringShot) {
+      // Check collision with goalposts before goalie crease intercept
+      const postCol = collidePuckWithGoalPosts(
+        this.puck.pos,
+        this.puck.vel,
+        this.cfg.puckRadius
+      );
+      if (postCol.hit) {
+        this.puck.pos = postCol.pos;
+        this.puck.vel = postCol.vel;
+        const wasShot = this.puck.inFlightShotFrom !== null;
+        const shooterTeam = this.puck.inFlightShotFrom;
+        this.puck.inFlightShotFrom = null;
+        this.puck.isScoringShot = false;
+        this.puck.shotStartPos = null;
+        this.puck.shooterId = null;
+        this.puck.inFlightPassToId = null;
+        this.puck.inFlightPassFromId = null;
+
+        if (wasShot) {
+          const postPos = postCol.postPos ?? { ...this.puck.pos };
+          this.triggerHitstop(0.065);
+          this.audioHooks.onPostHit?.(postPos);
+          this.visualHooks.onPostHit?.(postPos);
+          if (shooterTeam === 'home') {
+            this.audioHooks.onCrowdGroan?.();
+          } else {
+            this.audioHooks.onCrowdCheer?.();
+          }
+          this.events.push({
+            type: 'POST_HIT',
+            period: this.period,
+            timeRemainingSec: this.periodTimeRemainingSec,
+            team: shooterTeam ?? undefined,
+            postPos,
+            activeSongId: this.activeSong?.songId ?? null,
+            activeSongTarget: this.activeSong?.target ?? null,
+          });
+          this.recordPuckTrail();
+          return;
+        }
+      }
+    }
+
     // Check shot interception by opposing goalie or goal-line crossing into net
     if (this.puck.inFlightShotFrom !== null) {
       const defendingTeam = oppositeTeam(this.puck.inFlightShotFrom);
@@ -1827,10 +1917,13 @@ export class MatchSimulation {
           }
         } else {
           // Saved shot is intercepted at the goalie crease
+          const inGoalMouthY =
+            Math.abs(this.puck.pos.y - CENTER_Y) <= GOAL_HALF_WIDTH + 6;
           const reachedGoalieCrease =
             dist(this.puck.pos, goalie.pos) <= this.cfg.creaseRadius ||
-            (defendingTeam === 'home' && this.puck.pos.x <= HOME_GOAL_X + 14) ||
-            (defendingTeam === 'away' && this.puck.pos.x >= AWAY_GOAL_X - 14);
+            (((defendingTeam === 'home' && this.puck.pos.x <= HOME_GOAL_X + 14) ||
+              (defendingTeam === 'away' && this.puck.pos.x >= AWAY_GOAL_X - 14)) &&
+             inGoalMouthY);
 
           if (reachedGoalieCrease) {
             this.resolveGoalieSave(goalie);
@@ -1850,6 +1943,12 @@ export class MatchSimulation {
       this.puck.pos = bounced.pos;
       this.puck.vel = bounced.vel;
       if (bounced.bounced) {
+        if (this.puck.inFlightShotFrom !== null) {
+          if (this.puck.inFlightShotFrom === 'home') {
+            this.audioHooks.onCrowdGroan?.();
+          }
+          this.triggerHitstop(0.04);
+        }
         this.puck.inFlightShotFrom = null;
         this.puck.inFlightPassToId = null;
         this.puck.inFlightPassFromId = null;
@@ -1977,12 +2076,22 @@ export class MatchSimulation {
         );
     const isCritSave = isTheFortressActive || this.rng.rollAgainst(critChance);
 
+    const shooterTeam = this.puck.inFlightShotFrom;
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;
     this.puck.shotStartPos = null;
     this.puck.shooterId = null;
     this.puck.inFlightPassToId = null;
     this.puck.inFlightPassFromId = null;
+
+    this.triggerHitstop(0.065);
+    this.audioHooks.onGoalieSave?.(isCritSave, goalie.team);
+    this.visualHooks.onGoalieSave?.({ ...goalie.pos }, isCritSave);
+    if (shooterTeam === 'home') {
+      this.audioHooks.onCrowdGroan?.();
+    } else if (goalie.team === 'home') {
+      this.audioHooks.onCrowdCheer?.();
+    }
 
     if (isCritSave) {
       // CRITICAL SAVE (GLOVE CATCH & HOLD):
@@ -2020,7 +2129,6 @@ export class MatchSimulation {
         activeSongTarget: this.activeSong?.target ?? null,
       });
 
-      this.spawnCallout('🧤 CRIT SAVE! (HOLD)', goalie.pos, '#facc15', 1.8);
       this.triggerCue(
         'BREAKAWAY',
         'charge',
@@ -2058,7 +2166,6 @@ export class MatchSimulation {
       activeSongTarget: this.activeSong?.target ?? null,
     });
 
-    this.spawnCallout('BIG SAVE!', goalie.pos, '#2dd4bf', 1.8);
     this.triggerCue(
       'SHOT_OR_REBOUND',
       'hold_the_line',

@@ -143,7 +143,8 @@ export type MatchEventType =
   | 'STEAL'
   | 'FIGHT'
   | 'PENALTY'
-  | 'SONG_PLAYED';
+  | 'SONG_PLAYED'
+  | 'POST_HIT';
 
 export interface MatchEvent {
   type: MatchEventType;
@@ -153,6 +154,7 @@ export interface MatchEvent {
   playerId?: string;
   targetPlayerId?: string;
   isCritSave?: boolean;
+  postPos?: Vec2;
   activeSongId: SongId | null;
   activeSongTarget: SongTarget | null;
   songId?: SongId;

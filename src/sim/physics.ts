@@ -210,3 +210,54 @@ export function clampSkaterToBoards(
   const res = collidePuckWithBoards(pos, vel, radius, 0);
   return { pos: res.pos, vel: res.vel };
 }
+
+export const POST_RADIUS = 4.5;
+
+export interface PostCollisionResult {
+  hit: boolean;
+  postPos: Vec2 | null;
+  pos: Vec2;
+  vel: Vec2;
+}
+
+/**
+ * Checks and resolves collision between the puck and the red goalposts.
+ * Posts are located at top and bottom of each goal mouth.
+ */
+export function collidePuckWithGoalPosts(
+  pos: Vec2,
+  vel: Vec2,
+  puckRadius: number,
+  restitution: number = 0.88
+): PostCollisionResult {
+  const minDist = puckRadius + POST_RADIUS;
+  const postYCoords = [CENTER_Y - GOAL_HALF_WIDTH, CENTER_Y + GOAL_HALF_WIDTH];
+  const postXCoords = [HOME_GOAL_X, AWAY_GOAL_X];
+
+  for (const px of postXCoords) {
+    for (const py of postYCoords) {
+      const dx = pos.x - px;
+      const dy = pos.y - py;
+      const d = Math.hypot(dx, dy);
+      if (d < minDist && d > 1e-4) {
+        const nx = dx / d;
+        const ny = dy / d;
+        const newPos = {
+          x: px + nx * minDist,
+          y: py + ny * minDist,
+        };
+        const dot = vel.x * nx + vel.y * ny;
+        if (dot < 0) {
+          const newVel = {
+            x: vel.x - (1 + restitution) * dot * nx,
+            y: vel.y - (1 + restitution) * dot * ny,
+          };
+          return { hit: true, postPos: { x: px, y: py }, pos: newPos, vel: newVel };
+        }
+      }
+    }
+  }
+
+  return { hit: false, postPos: null, pos, vel };
+}
+

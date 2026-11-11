@@ -21,9 +21,13 @@ import {
 import { MatchSimulation } from '../match';
 import {
   applyPuckFriction,
+  AWAY_GOAL_X,
   CENTER_Y,
   collidePuckWithBoards,
+  collidePuckWithGoalPosts,
   computeReboundVelocity,
+  GOAL_HALF_WIDTH,
+  HOME_GOAL_X,
 } from '../physics';
 import { SeededRNG } from '../rng';
 
@@ -1086,6 +1090,149 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       isMatchOver: true,
     });
     expect(order0.reason).toBe('Home won 2–1 with only 0 fights.');
+  });
+
+  describe('Failed-Shot Juice & Goalpost Collisions', () => {
+    it('detects puck collisions against goalposts and reflects velocity', () => {
+      // Test top post of away goal (AWAY_GOAL_X, CENTER_Y - GOAL_HALF_WIDTH)
+      const topPostY = CENTER_Y - GOAL_HALF_WIDTH;
+      const puckPos = { x: AWAY_GOAL_X - 6, y: topPostY };
+      const puckVel = { x: 300, y: 0 }; // flying into the post from left
+
+      const res = collidePuckWithGoalPosts(puckPos, puckVel, 5);
+      expect(res.hit).toBe(true);
+      expect(res.postPos).not.toBeNull();
+      expect(res.postPos?.x).toBe(AWAY_GOAL_X);
+      expect(res.postPos?.y).toBe(topPostY);
+      expect(res.vel.x).toBeLessThan(0); // reflected backward into rink
+
+      // Test bottom post of home goal (HOME_GOAL_X, CENTER_Y + GOAL_HALF_WIDTH)
+      const botPostY = CENTER_Y + GOAL_HALF_WIDTH;
+      const homePuckPos = { x: HOME_GOAL_X + 6, y: botPostY };
+      const homePuckVel = { x: -300, y: 0 }; // flying into home post from right
+      const homeRes = collidePuckWithGoalPosts(homePuckPos, homePuckVel, 5);
+      expect(homeRes.hit).toBe(true);
+      expect(homeRes.postPos?.x).toBe(HOME_GOAL_X);
+      expect(homeRes.postPos?.y).toBe(botPostY);
+      expect(homeRes.vel.x).toBeGreaterThan(0); // reflected forward into rink
+
+      // Test puck in center ice - no hit
+      const centerRes = collidePuckWithGoalPosts({ x: 500, y: 200 }, { x: 100, y: 0 }, 5);
+      expect(centerRes.hit).toBe(false);
+      expect(centerRes.postPos).toBeNull();
+    });
+
+    it('manages time dilation during in-flight shots and hitstop micro-freeze', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 42);
+      sim.phase = 'PLAYING';
+
+      // Initially at normal speed
+      expect(sim.getTimeDilation()).toBe(1.0);
+
+      // In-flight shot heading towards away goal (AWAY_GOAL_X = 945)
+      sim.puck.inFlightShotFrom = 'home';
+      sim.puck.pos = { x: 880, y: CENTER_Y }; // near away goal
+
+      // Step time dilation with real elapsed time
+      for (let i = 0; i < 20; i++) {
+        sim.updateTimeDilation(1 / 60);
+      }
+      expect(sim.getTimeDilation()).toBeLessThan(0.70); // slowed down into bullet-time!
+
+      // Trigger hitstop on save / post hit
+      sim.triggerHitstop(0.065);
+      expect(sim.getTimeDilation()).toBe(0.05);
+
+      // After hitstop timer expires and shot ends, dilation recovers toward 1.0
+      sim.puck.inFlightShotFrom = null;
+      for (let i = 0; i < 60; i++) {
+        sim.updateTimeDilation(1 / 60);
+      }
+      expect(sim.getTimeDilation()).toBeGreaterThan(0.85);
+    });
+
+    it('emits post hit event, triggers hitstop, and calls onPostHit & crowd groan', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 123);
+      sim.phase = 'PLAYING';
+
+      let postHitHookCalled = false;
+      let crowdGroanCalled = false;
+      let visualPostHitCalled = false;
+
+      sim.audioHooks = {
+        onPostHit: () => {
+          postHitHookCalled = true;
+        },
+        onCrowdGroan: () => {
+          crowdGroanCalled = true;
+        },
+      };
+
+      sim.visualHooks = {
+        onPostHit: () => {
+          visualPostHitCalled = true;
+        },
+      };
+
+      // Set puck heading right into the top post of the away goal
+      const topPostY = CENTER_Y - GOAL_HALF_WIDTH;
+      sim.puck.inFlightShotFrom = 'home';
+      sim.puck.isScoringShot = false;
+      sim.puck.pos = { x: AWAY_GOAL_X - 8, y: topPostY };
+      sim.puck.vel = { x: 250, y: 0 };
+
+      sim.step(1 / 60);
+
+      expect(postHitHookCalled).toBe(true);
+      expect(crowdGroanCalled).toBe(true);
+      expect(visualPostHitCalled).toBe(true);
+      expect(sim.hitstopTimerSec).toBeGreaterThan(0);
+      expect(sim.puck.inFlightShotFrom).toBeNull(); // shot state resolved
+
+      const postEvents = sim.events.filter((e) => e.type === 'POST_HIT');
+      expect(postEvents.length).toBe(1);
+      expect(postEvents[0].team).toBe('home');
+    });
+
+    it('emits onGoalieSave and onCrowdGroan when a home shot is stopped by goalie', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 456);
+      sim.phase = 'PLAYING';
+
+      let saveHookCalled = false;
+      let groanHookCalled = false;
+      let visualSaveCalled = false;
+
+      sim.audioHooks = {
+        onGoalieSave: () => {
+          saveHookCalled = true;
+        },
+        onCrowdGroan: () => {
+          groanHookCalled = true;
+        },
+      };
+
+      sim.visualHooks = {
+        onGoalieSave: () => {
+          visualSaveCalled = true;
+        },
+      };
+
+      const awayGoalie = sim.players.find((p) => p.role === 'goalie' && p.team === 'away')!;
+      sim.puck.inFlightShotFrom = 'home';
+      sim.puck.isScoringShot = false;
+      sim.puck.pos = { x: awayGoalie.pos.x - 5, y: awayGoalie.pos.y };
+      sim.puck.vel = { x: 100, y: 0 };
+
+      sim.step(1 / 60);
+
+      expect(saveHookCalled).toBe(true);
+      expect(groanHookCalled).toBe(true);
+      expect(visualSaveCalled).toBe(true);
+      expect(sim.hitstopTimerSec).toBeGreaterThan(0);
+    });
   });
 });
 

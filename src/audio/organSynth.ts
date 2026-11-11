@@ -580,6 +580,146 @@ export class OrganSynth {
     }
   }
 
+  /**
+   * Synthesizes the iconic resonant metallic goalpost / crossbar 'PING!':
+   * Dual tuned high-Q resonant ringing modes (~2950 Hz & ~4180 Hz) with an instantaneous hard transient impact.
+   */
+  public playPostPing(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
+    const now = ctx.currentTime + 0.001;
+    const jitter = 0.98 + Math.random() * 0.04;
+
+    // 1. Initial puck-on-steel strike transient clicks
+    this.playImpulseClick(ctx, dest, now, 5200 * jitter, 0.015, 0.95, 3.5);
+    this.playImpulseClick(ctx, dest, now + 0.001, 3800 * jitter, 0.020, 0.85, 3.0);
+
+    // 2. High-resonance dual-mode metallic ringing sine oscillators with exponential decay
+    const modes = [
+      { freq: 2950 * jitter, gain: 0.65, decaySec: 0.52 },
+      { freq: 4180 * jitter, gain: 0.40, decaySec: 0.42 },
+      { freq: 980 * jitter, gain: 0.28, decaySec: 0.32 },
+    ];
+
+    for (const m of modes) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(m.freq, now);
+
+      const gainNode = ctx.createGain();
+      gainNode.gain.setValueAtTime(m.gain, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + m.decaySec);
+
+      osc.connect(gainNode);
+      gainNode.connect(dest);
+
+      osc.start(now);
+      osc.stop(now + m.decaySec + 0.01);
+    }
+  }
+
+  /**
+   * Synthesizes a heavy goalie pad rebound save:
+   * Dampened surface slap (synthetic leather / composite) coupled with a deep low-frequency pad body thump.
+   */
+  public playPadSaveThud(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
+    const now = ctx.currentTime + 0.001;
+    const jitter = 0.95 + Math.random() * 0.10;
+
+    // Surface pad slap
+    this.playImpulseClick(ctx, dest, now, 1600 * jitter, 0.025, 0.95, 2.0);
+    this.playImpulseClick(ctx, dest, now + 0.002, 2800 * jitter, 0.015, 0.70, 2.5);
+
+    // Low-end pad body thud
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(125 * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(55 * jitter, now + 0.09);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0.85, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+    osc.connect(gainNode);
+    gainNode.connect(dest);
+
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  /**
+   * Synthesizes a crisp goalie glove pocket snatch / catch snap:
+   * Sharp leather pocket click into rapid acoustic deadening.
+   */
+  public playGloveCatchSnap(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
+    const now = ctx.currentTime + 0.001;
+    const jitter = 0.95 + Math.random() * 0.10;
+
+    this.playImpulseClick(ctx, dest, now, 2800 * jitter, 0.012, 0.98, 3.2);
+    this.playImpulseClick(ctx, dest, now + 0.003, 1950 * jitter, 0.020, 0.85, 2.5);
+    this.playImpulseClick(ctx, dest, now + 0.005, 340 * jitter, 0.028, 0.60, 1.8);
+  }
+
+  /**
+   * Synthesizes a collective disappointed arena crowd groan ('OHHHH!'):
+   * Descending vocal formant filter sweep with pink noise.
+   */
+  public triggerCrowdGroan(): void {
+    if (!this.unlocked) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const dest = this.masterGain ?? ctx.destination;
+    const now = ctx.currentTime;
+
+    const durationSec = 0.65;
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.floor(sampleRate * durationSec);
+    const buffer = ctx.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + white * 0.0990460;
+      b1 = 0.96300 * b1 + white * 0.2965164;
+      b2 = 0.57000 * b2 + white * 1.0526913;
+      data[i] = (b0 + b1 + b2 + white * 0.1848) * 0.18;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    // Formant filter: sweeps from 620 Hz down to 360 Hz (authentic crowd 'Oooh...' drop)
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(620, now);
+    filter.frequency.exponentialRampToValueAtTime(360, now + durationSec);
+    filter.Q.setValueAtTime(3.2, now);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0.001, now);
+    gainNode.gain.linearRampToValueAtTime(0.38, now + 0.10);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+
+    source.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(dest);
+
+    source.start(now);
+    source.stop(now + durationSec + 0.02);
+  }
+
+  public triggerCrowdCheer(): void {
+    this.triggerCrowdSurge('shot');
+  }
+
   public playFightImpact(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;

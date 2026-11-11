@@ -145,6 +145,7 @@ class OrganHeroApp {
         });
       },
     });
+    this.bindVisualHooks();
     this.hud = new HudController();
 
     this.screens = new ScreenModalManager({
@@ -371,6 +372,29 @@ class OrganHeroApp {
       onFightImpact: () => this.synth.playFightImpact(),
       onPenaltyWhistle: () => this.synth.playPenaltyWhistle(),
       onPeriodBuzzer: () => this.synth.playPeriodBuzzer(),
+      onPostHit: () => {
+        this.synth.playPostPing();
+      },
+      onGoalieSave: (isGlove) => {
+        if (isGlove) {
+          this.synth.playGloveCatchSnap();
+        } else {
+          this.synth.playPadSaveThud();
+        }
+      },
+      onCrowdGroan: () => {
+        this.synth.triggerCrowdGroan();
+      },
+      onCrowdCheer: () => {
+        this.synth.triggerCrowdCheer();
+      },
+    };
+  }
+
+  private bindVisualHooks(): void {
+    this.sim.visualHooks = {
+      onPostHit: (pos) => this.renderer.triggerPostHit(pos),
+      onGoalieSave: (pos, isGlove) => this.renderer.triggerGoalieSave(pos, isGlove),
     };
   }
 
@@ -392,6 +416,7 @@ class OrganHeroApp {
       this.sim.opposingOrganist = new OpposingOrganistController(campMatch.opposingOrganist);
     }
     this.bindAudioHooks();
+    this.bindVisualHooks();
     this.hasStartedMatch = true;
     this.isPaused = false;
     this.simAccumulatorSec = 0;
@@ -544,8 +569,10 @@ class OrganHeroApp {
     }
 
     if (!this.isPaused && this.hasStartedMatch && !portraitBlocked) {
+      this.sim.updateTimeDilation(rawDtSec);
       const fixedStep = 1 / 60;
-      this.simAccumulatorSec += rawDtSec * this.speedMultiplier;
+      this.simAccumulatorSec +=
+        rawDtSec * this.speedMultiplier * this.sim.getTimeDilation();
 
       while (this.simAccumulatorSec >= fixedStep) {
         this.simAccumulatorSec -= fixedStep;

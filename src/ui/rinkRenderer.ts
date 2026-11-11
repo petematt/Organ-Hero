@@ -38,6 +38,39 @@ interface CornerSnowFlake {
   alpha: number;
 }
 
+interface ImpactSpark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  color: string;
+  radius: number;
+  lifeSec: number;
+  maxLifeSec: number;
+}
+
+interface SnowSprayParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  alpha: number;
+  lifeSec: number;
+  maxLifeSec: number;
+}
+
+interface ShockwaveRing {
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  color: string;
+  lineWidth: number;
+  lifeSec: number;
+  maxLifeSec: number;
+}
+
 function easeInOutCubic(t: number): number {
   const x = clamp(t, 0, 1);
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -53,6 +86,14 @@ export class RinkRenderer {
   private camZoom: number = 1.0;
   private camFocusX: number = CENTER_X;
   private camFocusY: number = CENTER_Y;
+
+  // Failed shot & impact juice visual state
+  private impactSparks: ImpactSpark[] = [];
+  private snowSprayParticles: SnowSprayParticle[] = [];
+  private shockwaves: ShockwaveRing[] = [];
+  private impactShakeIntensity: number = 0;
+  private saveLingerTimerSec: number = 0;
+  private saveLingerFocusPos: Vec2 | null = null;
 
   // Intermission & Game-End on-ice summary state
   private callbacks: IceSummaryCallbacks | null = null;
@@ -163,9 +204,99 @@ export class RinkRenderer {
     this.zamboniProgress = 0;
     this.intermissionZoomBlend = 0;
     this.iceButtons = [];
+    this.impactSparks = [];
+    this.snowSprayParticles = [];
+    this.shockwaves = [];
+    this.impactShakeIntensity = 0;
+    this.saveLingerTimerSec = 0;
+    this.saveLingerFocusPos = null;
     this.clearIceWear();
     const viewport = document.getElementById('app-viewport');
     viewport?.classList.remove('ice-focus-mode');
+  }
+
+  public triggerPostHit(postPos: Vec2): void {
+    this.impactShakeIntensity = 6.0;
+    this.saveLingerTimerSec = 0.38;
+    this.saveLingerFocusPos = { ...postPos };
+
+    this.shockwaves.push({
+      x: postPos.x,
+      y: postPos.y,
+      radius: 4,
+      maxRadius: 38,
+      color: '#fef08a',
+      lineWidth: 3.5,
+      lifeSec: 0.28,
+      maxLifeSec: 0.28,
+    });
+
+    const baseAngle = postPos.x < CENTER_X ? 0 : Math.PI;
+    for (let i = 0; i < 16; i++) {
+      const spread = (Math.random() - 0.5) * Math.PI * 1.2;
+      const angle = baseAngle + spread;
+      const speed = 110 + Math.random() * 220;
+      this.impactSparks.push({
+        x: postPos.x + Math.cos(angle) * 4,
+        y: postPos.y + Math.sin(angle) * 4,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: i % 3 === 0 ? '#ffffff' : i % 3 === 1 ? '#facc15' : '#fb923c',
+        radius: 1.5 + Math.random() * 1.8,
+        lifeSec: 0.22 + Math.random() * 0.18,
+        maxLifeSec: 0.40,
+      });
+    }
+  }
+
+  public triggerGoalieSave(goaliePos: Vec2, isGlove: boolean): void {
+    this.impactShakeIntensity = isGlove ? 3.6 : 4.8;
+    this.saveLingerTimerSec = 0.42;
+    this.saveLingerFocusPos = { ...goaliePos };
+
+    this.shockwaves.push({
+      x: goaliePos.x,
+      y: goaliePos.y,
+      radius: 6,
+      maxRadius: isGlove ? 40 : 48,
+      color: isGlove ? '#38bdf8' : '#e2e8f0',
+      lineWidth: 3.0,
+      lifeSec: 0.30,
+      maxLifeSec: 0.30,
+    });
+
+    if (!isGlove) {
+      const sprayDirX = goaliePos.x < CENTER_X ? 1 : -1;
+      for (let i = 0; i < 22; i++) {
+        const spreadY = (Math.random() - 0.5) * 1.5;
+        const speed = 75 + Math.random() * 140;
+        this.snowSprayParticles.push({
+          x: goaliePos.x + sprayDirX * (8 + Math.random() * 6),
+          y: goaliePos.y + (Math.random() - 0.5) * 14,
+          vx: sprayDirX * speed * (0.6 + Math.random() * 0.5),
+          vy: spreadY * speed,
+          radius: 1.8 + Math.random() * 2.2,
+          alpha: 0.90,
+          lifeSec: 0.30 + Math.random() * 0.22,
+          maxLifeSec: 0.52,
+        });
+      }
+    } else {
+      for (let i = 0; i < 8; i++) {
+        const ang = (i * Math.PI * 2) / 8;
+        const spd = 45 + Math.random() * 65;
+        this.impactSparks.push({
+          x: goaliePos.x,
+          y: goaliePos.y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          color: i % 2 === 0 ? '#38bdf8' : '#fef08a',
+          radius: 2.0,
+          lifeSec: 0.20,
+          maxLifeSec: 0.20,
+        });
+      }
+    }
   }
 
   /**
@@ -385,20 +516,75 @@ export class RinkRenderer {
       Math.max(viewW / 580, viewH / 225)
     );
 
+    // Step failed-shot impact timers, particles, and shake
+    this.impactShakeIntensity = Math.max(
+      0,
+      this.impactShakeIntensity - realDtSec * 22
+    );
+    if (this.saveLingerTimerSec > 0) {
+      this.saveLingerTimerSec = Math.max(0, this.saveLingerTimerSec - realDtSec);
+      if (this.saveLingerTimerSec === 0) {
+        this.saveLingerFocusPos = null;
+      }
+    }
+
+    for (let i = this.impactSparks.length - 1; i >= 0; i--) {
+      const sp = this.impactSparks[i];
+      sp.lifeSec -= realDtSec;
+      if (sp.lifeSec <= 0) {
+        this.impactSparks.splice(i, 1);
+        continue;
+      }
+      sp.x += sp.vx * realDtSec;
+      sp.y += sp.vy * realDtSec;
+      sp.vx *= Math.pow(0.12, realDtSec);
+      sp.vy *= Math.pow(0.12, realDtSec);
+    }
+
+    for (let i = this.snowSprayParticles.length - 1; i >= 0; i--) {
+      const sn = this.snowSprayParticles[i];
+      sn.lifeSec -= realDtSec;
+      if (sn.lifeSec <= 0) {
+        this.snowSprayParticles.splice(i, 1);
+        continue;
+      }
+      sn.x += sn.vx * realDtSec;
+      sn.y += sn.vy * realDtSec;
+      sn.vx *= Math.pow(0.08, realDtSec);
+      sn.vy *= Math.pow(0.08, realDtSec);
+      sn.alpha = Math.max(0, sn.lifeSec / sn.maxLifeSec);
+    }
+
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const sw = this.shockwaves[i];
+      sw.lifeSec -= realDtSec;
+      if (sw.lifeSec <= 0) {
+        this.shockwaves.splice(i, 1);
+        continue;
+      }
+      const prog = 1 - sw.lifeSec / sw.maxLifeSec;
+      sw.radius = 6 + (sw.maxRadius - 6) * prog;
+    }
+
     // Compute active gameplay camera zoom & focus target
     let gameplayZoom = 1.0;
     let gameplayFocusX = CENTER_X;
     let gameplayFocusY = CENTER_Y;
 
     if (!this.isIceSummaryActive) {
-      if (sim.puck.inFlightShotFrom !== null && sim.puck.isScoringShot) {
-        gameplayZoom = 1.14;
-        const goalX =
-          sim.puck.inFlightShotFrom === 'home'
-            ? AWAY_GOAL_X - 85
-            : HOME_GOAL_X + 85;
-        gameplayFocusX = sim.puck.pos.x * 0.35 + goalX * 0.65;
-        gameplayFocusY = CENTER_Y + (sim.puck.pos.y - CENTER_Y) * 0.35;
+      const isShotInFlight = sim.puck.inFlightShotFrom !== null;
+      const isRecentSave = this.saveLingerTimerSec > 0;
+
+      if (isShotInFlight || isRecentSave) {
+        gameplayZoom = 1.18;
+        const targetPos = this.saveLingerFocusPos ?? sim.puck.pos;
+        const attackingHome =
+          sim.puck.inFlightShotFrom !== null
+            ? sim.puck.inFlightShotFrom === 'home'
+            : targetPos.x > CENTER_X;
+        const goalX = attackingHome ? AWAY_GOAL_X - 85 : HOME_GOAL_X + 85;
+        gameplayFocusX = targetPos.x * 0.35 + goalX * 0.65;
+        gameplayFocusY = CENTER_Y + (targetPos.y - CENTER_Y) * 0.35;
       } else if (sim.phase === 'GOAL_CELEBRATION' && sim.phaseTimerSec > 1.1) {
         gameplayZoom = 1.16;
         gameplayFocusX =
@@ -423,7 +609,7 @@ export class RinkRenderer {
       this.camFocusY += (gameplayFocusY - this.camFocusY) * lerpRate;
     }
 
-    // Screen shake punch right as the puck slams into the back of the net
+    // Screen shake punch right as the puck slams into the net OR save/post impact
     let shakeX = 0;
     let shakeY = 0;
     if (
@@ -434,6 +620,9 @@ export class RinkRenderer {
       const intensity = ((sim.phaseTimerSec - 1.9) / 0.7) * 6.5;
       shakeX = Math.sin(this.animTime * 95) * intensity;
       shakeY = Math.cos(this.animTime * 115) * intensity;
+    } else if (!this.isIceSummaryActive && this.impactShakeIntensity > 0.05) {
+      shakeX = Math.sin(this.animTime * 110) * this.impactShakeIntensity;
+      shakeY = Math.cos(this.animTime * 135) * this.impactShakeIntensity;
     }
 
     // Blend between normal gameplay scale/center and full-screen center-ice scale/center
@@ -500,6 +689,7 @@ export class RinkRenderer {
       this.drawPhaseBanner(ctx, sim);
       this.drawBrawlClouds(ctx, sim);
       this.drawGoalImpact(ctx, sim);
+      this.drawSaveAndPostImpacts(ctx);
       this.drawCallouts(ctx, sim);
     }
 
@@ -2265,6 +2455,50 @@ export class RinkRenderer {
       ctx.moveTo(ix + Math.cos(ang) * r1, iy + Math.sin(ang) * r1);
       ctx.lineTo(ix + Math.cos(ang) * r2, iy + Math.sin(ang) * r2);
       ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private drawSaveAndPostImpacts(ctx: CanvasRenderingContext2D): void {
+    if (
+      this.shockwaves.length === 0 &&
+      this.impactSparks.length === 0 &&
+      this.snowSprayParticles.length === 0
+    ) {
+      return;
+    }
+
+    ctx.save();
+
+    // 1. Expanding shockwave ripples
+    for (const sw of this.shockwaves) {
+      const alpha = Math.max(0, sw.lifeSec / sw.maxLifeSec);
+      ctx.strokeStyle = sw.color;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.lineWidth = sw.lineWidth * alpha;
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 2. Goalie pad snow spray / ice shavings
+    for (const sn of this.snowSprayParticles) {
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = sn.alpha * 0.90;
+      ctx.beginPath();
+      ctx.arc(sn.x, sn.y, sn.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Post hit & glove catch sparks
+    for (const sp of this.impactSparks) {
+      const alpha = Math.max(0, sp.lifeSec / sp.maxLifeSec);
+      ctx.fillStyle = sp.color;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, sp.radius, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
