@@ -1672,9 +1672,8 @@ export class MatchSimulation {
       y: (instigator.pos.y + victim.pos.y) * 0.5 - 28,
     };
     const brawlColor = instigator.team === 'home' ? '#38bdf8' : '#f43f5e';
-    const instigatorTeamName = instigator.team === 'home' ? 'HOME' : 'AWAY';
     this.spawnCallout(
-      `🥊 BRAWL! (${instigatorTeamName} PENALTY) 🥊`,
+      '🥊 BRAWL! 🥊',
       mid,
       brawlColor,
       3.0

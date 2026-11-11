@@ -42,7 +42,7 @@ export class OrganSynth {
         this.masterGain.connect(this.ctx.destination);
 
         this.organGain = this.ctx.createGain();
-        this.organGain.gain.value = 0.38;
+        this.organGain.gain.value = 0.98;
         this.organGain.connect(this.masterGain);
 
         this.sfxGain = this.ctx.createGain();
@@ -83,7 +83,7 @@ export class OrganSynth {
       lfo.start();
 
       this.crowdGain = ctx.createGain();
-      this.crowdGain.gain.value = 0.22;
+      this.crowdGain.gain.value = 0.10;
 
       this.crowdSurgeGain = ctx.createGain();
       this.crowdSurgeGain.gain.value = 1.0;
@@ -136,9 +136,9 @@ export class OrganSynth {
     }
 
     const norm = Math.max(0, Math.min(1, (crowdVolume ?? 50) / 100));
-    // Warm, resonant arena crowd roar — lively ambiance during active play and intermission
-    const targetGain = isPaused ? 0.06 : 0.20 + norm * 0.40;
-    const targetFreq = isPaused ? 380 : 500 + norm * 700;
+    // Warm arena crowd bed (~ -26 dBFS at 50%, ~ -22.5 dBFS at 100%) supporting the -13.5 dBFS organ
+    const targetGain = isPaused ? 0.035 : 0.085 + norm * 0.145;
+    const targetFreq = isPaused ? 360 : 480 + norm * 540;
 
     const now = ctx.currentTime;
     if (this.crowdGain && Math.abs(targetGain - this.lastCrowdTargetGain) > 0.001) {
@@ -229,7 +229,7 @@ export class OrganSynth {
     if (!ctx || !this.masterGain) return;
 
     const noteGain = ctx.createGain();
-    const peak = 0.22 * gainScale;
+    const peak = 0.60 * gainScale;
     noteGain.gain.setValueAtTime(0.001, startTime);
     noteGain.gain.linearRampToValueAtTime(peak, startTime + 0.025);
     noteGain.gain.setValueAtTime(peak * 0.85, startTime + Math.max(0.03, duration - 0.05));
@@ -382,23 +382,28 @@ export class OrganSynth {
     }
 
     for (const step of sequence) {
+      const chordCount = step.chord ? step.chord.length : 0;
+      const chordWeight = 0.55;
+      const polyNorm = 1 / Math.sqrt(1 + chordCount * chordWeight * chordWeight * 0.85);
       this.playOrganNote(
         step.freq,
         now + step.delaySec,
         step.durationSec,
         detune,
-        gainScale
+        gainScale * polyNorm
       );
       if (step.chord) {
-        for (const cFreq of step.chord) {
+        step.chord.forEach((cFreq, idx) => {
+          // 1.5ms micro-humanize stagger avoids constructive phase-0 crest spikes on dense chords
+          const voiceOffset = (idx + 1) * 0.0015;
           this.playOrganNote(
             cFreq,
-            now + step.delaySec,
-            step.durationSec,
-            detune,
-            gainScale * 0.65
+            now + step.delaySec + voiceOffset,
+            Math.max(0.05, step.durationSec - voiceOffset),
+            detune + (idx % 2 === 0 ? 1.5 : -1.5),
+            gainScale * chordWeight * polyNorm
           );
-        }
+        });
       }
     }
   }
@@ -446,15 +451,15 @@ export class OrganSynth {
     const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
 
     const now = ctx.currentTime + 0.01;
-    // Deep brass stadium foghorn blast (two pulses)
+    // Deep brass stadium foghorn blast (two pulses, matched to organ loudness)
     const freqs = [116.54, 146.83, 233.08]; // Bb2 + D3 + Bb3
     for (const pulseOffset of [0, 0.55]) {
       const dur = pulseOffset === 0 ? 0.45 : 0.85;
       const start = now + pulseOffset;
       const hornGain = ctx.createGain();
       hornGain.gain.setValueAtTime(0.001, start);
-      hornGain.gain.linearRampToValueAtTime(0.78, start + 0.03);
-      hornGain.gain.setValueAtTime(0.72, start + dur - 0.08);
+      hornGain.gain.linearRampToValueAtTime(0.29, start + 0.03);
+      hornGain.gain.setValueAtTime(0.27, start + dur - 0.08);
       hornGain.gain.exponentialRampToValueAtTime(0.001, start + dur);
       hornGain.connect(dest);
 
@@ -478,7 +483,7 @@ export class OrganSynth {
     const dur = 0.28;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.65, now + 0.015);
+    gain.gain.linearRampToValueAtTime(0.30, now + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
     gain.connect(dest);
 
@@ -592,7 +597,7 @@ export class OrganSynth {
       // Heavy visceral punch thud
       const thudGain = ctx.createGain();
       thudGain.gain.setValueAtTime(0.001, pStart);
-      thudGain.gain.linearRampToValueAtTime(0.85, pStart + 0.012);
+      thudGain.gain.linearRampToValueAtTime(0.68, pStart + 0.012);
       thudGain.gain.exponentialRampToValueAtTime(0.001, pStart + dur);
       thudGain.connect(dest);
 
@@ -607,7 +612,7 @@ export class OrganSynth {
       // Punch slap / glove crack
       const slapGain = ctx.createGain();
       slapGain.gain.setValueAtTime(0.001, pStart);
-      slapGain.gain.linearRampToValueAtTime(0.70, pStart + 0.005);
+      slapGain.gain.linearRampToValueAtTime(0.52, pStart + 0.005);
       slapGain.gain.exponentialRampToValueAtTime(0.001, pStart + 0.045);
       slapGain.connect(dest);
 
@@ -620,7 +625,7 @@ export class OrganSynth {
       slapOsc.stop(pStart + 0.055);
 
       // Meat impact crunch
-      this.playNoiseTransient(ctx, dest, pStart, 0.038, 1400, 0.65);
+      this.playNoiseTransient(ctx, dest, pStart, 0.038, 1400, 0.52);
     }
   }
 
@@ -639,7 +644,7 @@ export class OrganSynth {
     for (const b of bursts) {
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.001, b.start);
-      gain.gain.linearRampToValueAtTime(0.68, b.start + 0.015);
+      gain.gain.linearRampToValueAtTime(0.28, b.start + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.001, b.start + b.dur);
       gain.connect(dest);
 
@@ -667,12 +672,12 @@ export class OrganSynth {
     const dest = this.sfxGain ?? this.masterGain ?? ctx.destination;
 
     const now = ctx.currentTime + 0.008;
-    const dur = 2.5; // Full 2.5 second arena horn buzzer blast
+    const dur = 2.5; // Full 2.5 second arena horn buzzer blast (matched to organ loudness)
 
     const buzzerGain = ctx.createGain();
     buzzerGain.gain.setValueAtTime(0.001, now);
-    buzzerGain.gain.linearRampToValueAtTime(0.85, now + 0.03);
-    buzzerGain.gain.setValueAtTime(0.82, now + dur - 0.15);
+    buzzerGain.gain.linearRampToValueAtTime(0.21, now + 0.03);
+    buzzerGain.gain.setValueAtTime(0.195, now + dur - 0.15);
     buzzerGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
     buzzerGain.connect(dest);
 

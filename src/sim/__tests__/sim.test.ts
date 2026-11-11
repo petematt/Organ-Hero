@@ -629,14 +629,14 @@ describe('Determinism & Breakdown Attribution', () => {
     sim.startFight(passer, awayStriker);
     expect(fightImpacts).toBe(1);
     const homeBrawlCallout = sim.callouts.find((c) => c.text.includes('BRAWL'));
-    expect(homeBrawlCallout?.text).toBe('🥊 BRAWL! (HOME PENALTY) 🥊');
+    expect(homeBrawlCallout?.text).toBe('🥊 BRAWL! 🥊');
     expect(homeBrawlCallout?.color).toBe('#38bdf8');
 
     // Also verify Away instigator brawl callout
     sim.callouts = [];
     sim.startFight(awayStriker, passer);
     const awayBrawlCallout = sim.callouts.find((c) => c.text.includes('BRAWL'));
-    expect(awayBrawlCallout?.text).toBe('🥊 BRAWL! (AWAY PENALTY) 🥊');
+    expect(awayBrawlCallout?.text).toBe('🥊 BRAWL! 🥊');
     expect(awayBrawlCallout?.color).toBe('#f43f5e');
 
     // Simulate penalty box arrival after brawl

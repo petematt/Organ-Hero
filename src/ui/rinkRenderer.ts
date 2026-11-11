@@ -2425,7 +2425,6 @@ export class RinkRenderer {
 
       const instigator = f.isFightInstigator ? f : partner.isFightInstigator ? partner : f;
       const isHome = instigator.team === 'home';
-      const teamLabel = isHome ? 'HOME' : 'AWAY';
       const brawlColor = isHome ? '#38bdf8' : '#f43f5e';
       const dustColor = isHome ? 'rgba(56, 189, 248, 0.78)' : 'rgba(251, 113, 133, 0.78)';
 
@@ -2441,7 +2440,7 @@ export class RinkRenderer {
         ctx.fill();
       }
 
-      const brawlText = `💥 BRAWL! (${teamLabel} PENALTY) 💥`;
+      const brawlText = '💥 BRAWL! 💥';
       ctx.font = '800 13px "Chakra Petch", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
