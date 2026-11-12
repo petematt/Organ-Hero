@@ -10,6 +10,12 @@ export const CENTER_Y = RINK_HEIGHT / 2; // 212.5
 export const HOME_GOAL_X = 55;
 export const AWAY_GOAL_X = RINK_WIDTH - 55; // 945
 export const GOAL_HALF_WIDTH = 34;
+export const BLUE_LINE_HOME_X = 340;
+export const BLUE_LINE_AWAY_X = 660;
+
+export function isBehindOwnBlueLine(pos: Vec2, team: Team): boolean {
+  return team === 'home' ? pos.x < BLUE_LINE_HOME_X : pos.x > BLUE_LINE_AWAY_X;
+}
 
 export function dist(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -74,9 +80,10 @@ export function evalBezier(path: BezierPath, t: number): Vec2 {
 }
 
 /**
- * Computes goalie block rebound velocity directed into the corners / side boards,
- * away from the dangerous center slot (y = CENTER_Y).
- * The angle is between 34 and 46 degrees from the vertical goal line, deflecting towards the nearest boards.
+ * Computes goalie block rebound velocity.
+ * Features a high chance (55%) of knocking the puck straight up or down (90 degrees from the goal direction / along the goal line),
+ * and otherwise deflecting into the corners / side boards (30-48 degrees from the goal line),
+ * always steering away from the dangerous center slot (y = CENTER_Y).
  */
 export function computeReboundVelocity(
   goalieTeam: Team,
@@ -85,9 +92,14 @@ export function computeReboundVelocity(
   cfg: GameConfig,
   rng: SeededRNG
 ): Vec2 {
-  const outSpeed = Math.max(240, incomingSpeed * cfg.reboundSpeedRatio);
-  // Rebound angle: 34 to 46 degrees from the vertical goal line, kicking toward the corners
-  const angleDeg = rng ? rng.range(34, 46) : 40;
+  const outSpeed = Math.max(260, incomingSpeed * cfg.reboundSpeedRatio);
+
+  // High chance (55%) of knocking the puck straight up or down (90 degrees from the direction of the goal),
+  // otherwise kicking toward the corners / boards (30 to 48 degrees from the goal line).
+  const isVerticalKick = rng ? rng.rollAgainst(0.55) : true;
+  const angleDeg = isVerticalKick
+    ? (rng ? rng.range(0, 12) : 5)
+    : (rng ? rng.range(30, 48) : 40);
   const angleFromGoalLine = (angleDeg * Math.PI) / 180;
 
   // Horizontal direction: away from own net toward center ice

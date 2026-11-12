@@ -39,6 +39,7 @@ import {
   getOwnGoalPos,
   GOAL_HALF_WIDTH,
   HOME_GOAL_X,
+  isBehindOwnBlueLine,
   normalize,
   RINK_HEIGHT,
   RINK_WIDTH,
@@ -938,7 +939,21 @@ export class MatchSimulation {
 
         const ownGoal = getOwnGoalPos(p.team);
         const inDefensiveZone = dist(p.pos, ownGoal) < 240;
+        const behindBlueLine = isBehindOwnBlueLine(p.pos, p.team);
         const minPassPossessionTime = inDefensiveZone ? 0.05 : 0.25;
+
+        // High chance for defenders behind their blue line to clear the puck out of territory and chase it down
+        if (
+          behindBlueLine &&
+          p.possessionTimer >= 0.06 &&
+          p.passCheckTimer <= 0
+        ) {
+          if (this.rng.rollAgainst(0.60)) {
+            if (this.tryClearPuck(p)) {
+              continue;
+            }
+          }
+        }
 
         // Evaluate passing to an open / better-positioned teammate if passing is enabled
         if (
@@ -947,6 +962,17 @@ export class MatchSimulation {
           p.passCheckTimer <= 0
         ) {
           if (this.tryPassPuck(p)) {
+            continue;
+          }
+        }
+
+        // Fallback clearance if behind blue line and pass wasn't made
+        if (
+          behindBlueLine &&
+          p.possessionTimer >= 0.18 &&
+          p.passCheckTimer <= 0
+        ) {
+          if (this.tryClearPuck(p)) {
             continue;
           }
         }
@@ -1092,8 +1118,17 @@ export class MatchSimulation {
         const ownGoal = getOwnGoalPos(p.team);
         const isLooseInDefensiveZone =
           this.puck.carrierId === null && dist(this.puck.pos, ownGoal) < 240;
-        const skaterSpeed =
-          isLooseInDefensiveZone && !holdingGoalie ? maxSpeed * 1.25 : maxSpeed;
+        const isChasingForward =
+          this.puck.carrierId === null &&
+          !holdingGoalie &&
+          (p.team === 'home' ? dir.x > 0.15 : dir.x < -0.15);
+        const skaterSpeed = !holdingGoalie
+          ? isLooseInDefensiveZone
+            ? maxSpeed * 1.25
+            : isChasingForward
+            ? maxSpeed * 1.15
+            : maxSpeed
+          : maxSpeed;
         p.vel = { x: dir.x * skaterSpeed, y: dir.y * skaterSpeed };
       }
       p.pos.x += p.vel.x * dtSec;
@@ -1315,6 +1350,79 @@ export class MatchSimulation {
     striker.possessionTimer = receivedCleanPass ? this.cfg.maxPossessionSec * 0.45 : 0;
     striker.passCheckTimer = inDefensiveZone ? 0 : this.cfg.passCheckIntervalSec;
     striker.attackPath = createCurvedPathToGoal(striker.pos, striker.team, this.rng);
+  }
+
+  /**
+   * Evaluates and executes a defensive zone clearance ("dump out and chase").
+   * When a player is behind their own blue line, they chip/fire the puck down-ice
+   * into neutral or offensive territory and transition immediately into chase mode.
+   */
+  public tryClearPuck(carrier: PlayerEntity): boolean {
+    if (!isBehindOwnBlueLine(carrier.pos, carrier.team)) {
+      return false;
+    }
+
+    const dirX = carrier.team === 'home' ? 1 : -1;
+    // Angle clearance along boards or open ice
+    const targetY =
+      carrier.pos.y < CENTER_Y
+        ? this.rng.range(36, 120)
+        : this.rng.range(RINK_HEIGHT - 120, RINK_HEIGHT - 36);
+    const dir = normalize({
+      x: dirX * this.rng.range(1.6, 2.2),
+      y: (targetY - carrier.pos.y) / RINK_HEIGHT,
+    });
+
+    const clearSpeed = this.cfg.passSpeed * this.rng.range(1.05, 1.25);
+
+    carrier.mode = 'DEFENDING';
+    carrier.possessionTimer = 0;
+    carrier.passCheckTimer = this.cfg.passCheckIntervalSec;
+    carrier.attackPath = null;
+    carrier.collisionCooldown = 0.22; // brief follow-through so they don't immediately re-grab on frame 1, but can chase it right down
+    carrier.reactionTimer = 0.6;
+    carrier.reactionColor = '#38bdf8';
+
+    const launchOrigin = carrier.pos;
+    const launchOffset = this.cfg.skaterRadius + this.cfg.puckRadius + 4;
+    const launchPos = {
+      x: clamp(
+        launchOrigin.x + dir.x * launchOffset,
+        this.cfg.puckRadius + 4,
+        RINK_WIDTH - this.cfg.puckRadius - 4
+      ),
+      y: clamp(
+        launchOrigin.y + dir.y * launchOffset,
+        this.cfg.puckRadius + 4,
+        RINK_HEIGHT - this.cfg.puckRadius - 4
+      ),
+    };
+
+    this.puck.carrierId = null;
+    this.currentPossessor = null;
+    this.lastPossessor = carrier.team;
+    this.puck.inFlightShotFrom = null;
+    this.puck.isScoringShot = false;
+    this.puck.shotStartPos = null;
+    this.puck.shooterId = null;
+    this.puck.inFlightPassToId = null;
+    this.puck.inFlightPassFromId = carrier.id;
+    this.puck.pos = launchPos;
+    this.puck.vel = { x: dir.x * clearSpeed, y: dir.y * clearSpeed };
+    this.puck.trail = [{ ...launchPos }];
+
+    this.audioHooks.onPuckAction?.('pass');
+    this.events.push({
+      type: 'CLEAR',
+      period: this.period,
+      timeRemainingSec: this.periodTimeRemainingSec,
+      team: carrier.team,
+      playerId: carrier.id,
+      activeSongId: this.activeSong?.songId ?? null,
+      activeSongTarget: this.activeSong?.target ?? null,
+    });
+
+    return true;
   }
 
   /**

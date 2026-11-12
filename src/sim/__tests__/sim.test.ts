@@ -28,6 +28,9 @@ import {
   computeReboundVelocity,
   GOAL_HALF_WIDTH,
   HOME_GOAL_X,
+  BLUE_LINE_HOME_X,
+  BLUE_LINE_AWAY_X,
+  isBehindOwnBlueLine,
 } from '../physics';
 import { SeededRNG } from '../rng';
 
@@ -140,23 +143,33 @@ describe('Rink Physics & 60-Degree Rebound Vector', () => {
     expect(v1.x).toBeCloseTo(300 * Math.exp(-cfg.puckFrictionPerSec));
   });
 
-  it('redirects blocked shots into corners/boards away from the center line', () => {
-    const rng = new SeededRNG(10);
-    // Puck above center line (y = 150 < 212.5) saved by Home goalie -> should move +X (away from net) and -Y (toward top boards)
-    const vAbove = computeReboundVelocity('home', 150, 500, cfg, rng);
-    expect(vAbove.x).toBeGreaterThan(0);
-    expect(vAbove.y).toBeLessThan(0);
-    const angleAbove = (Math.atan2(Math.abs(vAbove.x), Math.abs(vAbove.y)) * 180) / Math.PI;
-    expect(angleAbove).toBeGreaterThanOrEqual(34);
-    expect(angleAbove).toBeLessThanOrEqual(46);
+  it('redirects blocked shots into corners/boards or straight up/down away from the center line', () => {
+    // Collect a sample of rebounds to verify both straight up/down and corner deflections occur
+    let sawVerticalRebound = false;
+    let sawCornerRebound = false;
 
-    // Puck below center line (y = 280 > 212.5) saved by Away goalie -> should move -X (away from net) and +Y (toward bottom boards)
-    const vBelow = computeReboundVelocity('away', 280, 500, cfg, rng);
-    expect(vBelow.x).toBeLessThan(0);
-    expect(vBelow.y).toBeGreaterThan(0);
-    const angleBelow = (Math.atan2(Math.abs(vBelow.x), Math.abs(vBelow.y)) * 180) / Math.PI;
-    expect(angleBelow).toBeGreaterThanOrEqual(34);
-    expect(angleBelow).toBeLessThanOrEqual(46);
+    for (let seed = 1; seed <= 30; seed++) {
+      const rng = new SeededRNG(seed);
+      // Puck above center line (y = 150 < 212.5) saved by Home goalie -> should move +X (away from net) and -Y (toward top boards)
+      const vAbove = computeReboundVelocity('home', 150, 500, cfg, rng);
+      expect(vAbove.x).toBeGreaterThan(0);
+      expect(vAbove.y).toBeLessThan(0);
+      const angleAbove = (Math.atan2(Math.abs(vAbove.x), Math.abs(vAbove.y)) * 180) / Math.PI;
+
+      if (angleAbove <= 15) {
+        sawVerticalRebound = true;
+      } else if (angleAbove >= 30 && angleAbove <= 50) {
+        sawCornerRebound = true;
+      }
+
+      // Puck below center line (y = 280 > 212.5) saved by Away goalie -> should move -X (away from net) and +Y (toward bottom boards)
+      const vBelow = computeReboundVelocity('away', 280, 500, cfg, rng);
+      expect(vBelow.x).toBeLessThan(0);
+      expect(vBelow.y).toBeGreaterThan(0);
+    }
+
+    expect(sawVerticalRebound).toBe(true);
+    expect(sawCornerRebound).toBe(true);
   });
 });
 
@@ -429,6 +442,43 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(passEvent?.playerId).toBe(homeS1.id);
     expect(sim.puck.inFlightPassFromId).toBe(homeS1.id);
     expect(sim.puck.inFlightPassToId).toBe(homeS2.id);
+  });
+
+  it('defending players behind their blue line clear the puck out of territory and chase it down', () => {
+    const sim = new MatchSimulation(cloneConfig(), 55);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+
+    // Position homeS1 behind Home's blue line (BLUE_LINE_HOME_X = 340)
+    expect(BLUE_LINE_HOME_X).toBe(340);
+    expect(BLUE_LINE_AWAY_X).toBe(660);
+    homeS1.pos = { x: 220, y: CENTER_Y };
+    homeS1.mode = 'DEFENDING';
+    expect(isBehindOwnBlueLine(homeS1.pos, homeS1.team)).toBe(true);
+
+    sim.gainPossession(homeS1);
+    expect(homeS1.mode).toBe('POSSESSING');
+
+    // Execute clearance
+    const cleared = sim.tryClearPuck(homeS1);
+    expect(cleared).toBe(true);
+
+    // Puck should now be loose and flying forward toward opponent ice
+    expect(sim.puck.carrierId).toBeNull();
+    expect(sim.puck.vel.x).toBeGreaterThan(300);
+
+    // Clearance event should be recorded
+    const clearEvent = sim.events.find((e) => e.type === 'CLEAR');
+    expect(clearEvent).toBeDefined();
+    expect(clearEvent?.playerId).toBe(homeS1.id);
+
+    // Clearing player should have transitioned to DEFENDING with brief cooldown to chase it down
+    expect(homeS1.mode).toBe('DEFENDING');
+    expect(homeS1.collisionCooldown).toBeLessThanOrEqual(0.25);
+
+    // Stepping simulation: players actively chase the loose puck down-ice
+    sim.step(1 / 60);
+    expect(homeS1.vel.x).toBeGreaterThan(0);
   });
 });
 

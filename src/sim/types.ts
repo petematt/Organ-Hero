@@ -140,6 +140,7 @@ export type MatchEventType =
   | 'SHOT'
   | 'SAVE'
   | 'PASS'
+  | 'CLEAR'
   | 'STEAL'
   | 'FIGHT'
   | 'PENALTY'
