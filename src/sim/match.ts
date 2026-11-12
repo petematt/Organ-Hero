@@ -390,6 +390,8 @@ export class MatchSimulation {
     this.periodTimeRemainingSec = this.cfg.periodDurationSec;
     this.activeCue = null;
     this.overtimeOvertureTriggeredThisPeriod = false;
+    this.silenceTimerSec = 0;
+    this.endActiveSong();
 
     // Restore stamina and clear all penalties / brawls / stuns between periods
     for (const p of this.players) {
@@ -403,6 +405,8 @@ export class MatchSimulation {
       p.fightPartnerId = null;
       p.isFightInstigator = false;
       p.collisionCooldown = 0;
+      p.reactionTimer = 0;
+      p.reactionColor = '#ffffff';
     }
 
     this.setupFaceoff();
@@ -465,6 +469,23 @@ export class MatchSimulation {
 
   public getSongCooldownRemainingSec(): number {
     return this.activeSong ? Math.max(0, this.activeSong.remainingSec) : 0;
+  }
+
+  /**
+   * Immediately terminates any active song effects, situational cues, rival organist
+   * songs, and skater song reactions, resetting player effective stats to baseline.
+   */
+  public endActiveSong(): void {
+    this.activeSong = null;
+    this.activeCue = null;
+    if (this.opposingOrganist) {
+      this.opposingOrganist.clearActiveSong();
+    }
+    for (const p of this.players) {
+      p.reactionTimer = 0;
+      p.reactionColor = '#ffffff';
+    }
+    this.updateEffectiveStats(0);
   }
 
   /**
@@ -767,6 +788,7 @@ export class MatchSimulation {
       } else {
         this.phase = 'PERIOD_END';
       }
+      this.endActiveSong();
     }
   }
 

@@ -71,10 +71,14 @@ export class OpposingOrganistController {
     }
   }
 
+  public clearActiveSong(): void {
+    this.activeSongId = null;
+    this.songRemainingSec = 0;
+  }
+
   public onPlayerCounterHit(sim: MatchSimulation): void {
     if (this.songRemainingSec > 0) {
-      this.songRemainingSec = 0;
-      this.activeSongId = null;
+      this.clearActiveSong();
       sim.spawnCallout(
         '★ ACOUSTIC DOMINANCE! RIVAL SILENCED! ★',
         { x: 380, y: 70 },

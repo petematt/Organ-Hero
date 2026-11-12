@@ -27,6 +27,7 @@ import {
   decayMoodOffset,
 } from '../formulas';
 import { MatchSimulation } from '../match';
+import { OpposingOrganistController } from '../opposingOrganist';
 import {
   applyPuckFriction,
   applySkaterSteering,
@@ -1866,7 +1867,153 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       expect(cover.x).toBeGreaterThan(ownGoal.x);
     });
   });
+
+  describe('Period End Song Clean-up (Issue #3)', () => {
+    it('clears active song, cooldown, and stat buffs when period 1 ends', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      sim.periodTimeRemainingSec = 2.0;
+      sim.phase = 'PLAYING';
+
+      // Record baseline focus before song
+      const homeStriker = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+      const baselineFocus = homeStriker.focus;
+
+      // Play 'charge' (duration 8s) with only 2s left in period 1
+      const active = sim.playSong('charge');
+      expect(active).not.toBeNull();
+      expect(sim.activeSong).not.toBeNull();
+      expect(sim.isOnCooldown()).toBe(true);
+      expect(sim.getSongCooldownRemainingSec()).toBeGreaterThan(5);
+      expect(homeStriker.focus).toBeGreaterThan(baselineFocus);
+      expect(homeStriker.reactionTimer).toBeGreaterThan(0);
+
+      // Step simulation past period end
+      sim.step(2.5);
+
+      expect(sim.phase).toBe('PERIOD_END');
+      expect(sim.periodTimeRemainingSec).toBe(0);
+      expect(sim.activeSong).toBeNull();
+      expect(sim.isOnCooldown()).toBe(false);
+      expect(sim.getSongCooldownRemainingSec()).toBe(0);
+      expect(homeStriker.focus).toBe(baselineFocus);
+      expect(homeStriker.reactionTimer).toBe(0);
+    });
+
+    it('starts next period with no carryover song buffs or cooldown locks (1 -> 2)', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      sim.periodTimeRemainingSec = 1.0;
+      sim.phase = 'PLAYING';
+
+      const homeStriker = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+      const baselineFocus = homeStriker.focus;
+
+      sim.playSong('charge');
+      sim.step(1.5);
+      expect(sim.phase).toBe('PERIOD_END');
+
+      // Intermission ends, period 2 starts
+      sim.startNextPeriod();
+      expect(sim.period).toBe(2);
+      expect(sim.activeSong).toBeNull();
+      expect(sim.isOnCooldown()).toBe(false);
+      expect(sim.getSongCooldownRemainingSec()).toBe(0);
+      expect(homeStriker.focus).toBe(baselineFocus);
+      expect(homeStriker.reactionTimer).toBe(0);
+
+      // Player can immediately play a fresh song in period 2
+      const p2Song = sim.playSong('charge');
+      expect(p2Song).not.toBeNull();
+      expect(sim.activeSong?.songId).toBe('charge');
+      expect(sim.isOnCooldown()).toBe(true);
+    });
+
+    it('clears active song and prevents carryover between period 2 and period 3', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      // Advance to period 2 with away team possessing puck so hold_the_line targets defending home team
+      sim.period = 2;
+      sim.periodTimeRemainingSec = 1.5;
+      sim.phase = 'PLAYING';
+      sim.currentPossessor = 'away';
+
+      const homeGoalie = sim.players.find((p) => p.team === 'home' && p.role === 'goalie')!;
+      const baselineFocus = homeGoalie.focus;
+
+      sim.playSong('hold_the_line');
+      expect(sim.activeSong?.songId).toBe('hold_the_line');
+      expect(homeGoalie.focus).toBeGreaterThan(baselineFocus);
+
+      // Step past end of period 2
+      sim.step(2.0);
+      expect(sim.phase).toBe('PERIOD_END');
+      expect(sim.activeSong).toBeNull();
+      expect(sim.isOnCooldown()).toBe(false);
+      expect(homeGoalie.focus).toBe(baselineFocus);
+
+      // Advance to period 3
+      sim.startNextPeriod();
+      expect(sim.period).toBe(3);
+      expect(sim.activeSong).toBeNull();
+      expect(sim.isOnCooldown()).toBe(false);
+      expect(homeGoalie.focus).toBe(baselineFocus);
+    });
+
+    it('clears opposing organist active song when period ends', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      const controller = new OpposingOrganistController({
+        name: 'Rival Ray',
+        title: 'Visiting Booth Virtuoso',
+        avatarColor: '#f43f5e',
+        playIntervalSec: 10,
+        favoredSongs: ['charge'],
+        tauntMessage: 'Loves loud fanfares.',
+      });
+      sim.opposingOrganist = controller;
+      controller.activeSongId = 'charge';
+      controller.songRemainingSec = 7.5;
+
+      sim.periodTimeRemainingSec = 0.5;
+      sim.phase = 'PLAYING';
+      sim.step(0.8);
+
+      expect(sim.phase).toBe('PERIOD_END');
+      expect(controller.activeSongId).toBeNull();
+      expect(controller.songRemainingSec).toBe(0);
+    });
+
+    it('clears active situational cues when period ends', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      sim.triggerCue('TEMPER_FLARING', 'grudge_toccata', 'both', 'FIGHT!');
+      expect(sim.activeCue).not.toBeNull();
+
+      sim.periodTimeRemainingSec = 0.5;
+      sim.phase = 'PLAYING';
+      sim.step(0.8);
+
+      expect(sim.phase).toBe('PERIOD_END');
+      expect(sim.activeCue).toBeNull();
+    });
+
+    it('endActiveSong resets activeSong, activeCue, rival song, and player stats immediately', () => {
+      const sim = new MatchSimulation(cloneConfig());
+      sim.phase = 'PLAYING';
+      sim.playSong('charge');
+      sim.triggerCue('TEMPER_FLARING', 'grudge_toccata', 'both', 'FIGHT!');
+
+      const homeStriker = sim.players.find((p) => p.team === 'home' && p.role === 'striker')!;
+      expect(sim.activeSong).not.toBeNull();
+      expect(sim.activeCue).not.toBeNull();
+      expect(homeStriker.reactionTimer).toBeGreaterThan(0);
+
+      sim.endActiveSong();
+
+      expect(sim.activeSong).toBeNull();
+      expect(sim.activeCue).toBeNull();
+      expect(sim.isOnCooldown()).toBe(false);
+      expect(homeStriker.reactionTimer).toBe(0);
+    });
+  });
 });
+
 
 
 

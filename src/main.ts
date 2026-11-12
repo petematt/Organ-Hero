@@ -299,6 +299,7 @@ class OrganHeroApp {
       this.isPaused = true;
       this.sim.phase = 'PERIOD_END';
       this.sim.periodTimeRemainingSec = 0;
+      this.sim.endActiveSong();
       if (!urlOpts.penalty) {
         const pHome = this.sim.players.find((p) => p.team === 'home');
         if (pHome) {
