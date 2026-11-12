@@ -162,4 +162,42 @@ describe('End-of-Game UI Improvements', () => {
     expect(contentEl.innerHTML).not.toContain('bribes-final-box');
     expect(contentEl.innerHTML).not.toContain('Under-The-Table Bribes');
   });
+
+  it('cleans up the intro modal (showStartSeatScreen) per UI specifications', () => {
+    const screens = new ScreenModalManager({
+      onTakeSeat: vi.fn(),
+      onStartMatchWithOrder: vi.fn(),
+      onContinueNextPeriod: vi.fn(),
+      onPlayAgainNewSeed: vi.fn(),
+      onResumeFromPause: vi.fn(),
+    });
+
+    screens.showStartSeatScreen();
+    const html = contentEl.innerHTML;
+
+    // 1. Only show the 2 songs the player has access to (Charge! Fanfare and Hold the Line)
+    expect(html).toContain('<strong>Charge! Fanfare</strong>');
+    expect(html).toContain('<strong>Hold the Line</strong>');
+    expect(html).not.toContain('Grudge Toccata');
+
+    // 2. Drop emoji/symbols and numbers in brackets from song cells
+    expect(html).not.toContain('[1]');
+    expect(html).not.toContain('[2]');
+    expect(html).not.toContain('[3]');
+    expect(html).not.toContain('♪');
+    expect(html).not.toContain('♫');
+    expect(html).not.toContain('♬');
+
+    // 3. Button text is just "Continue" with no emoji
+    expect(html).toContain('id="btn-take-seat"');
+    expect(html).not.toContain('🎹');
+    expect(html).not.toContain('TAP TO TAKE YOUR SEAT');
+    const btnMatch = html.match(/<button id="btn-take-seat"[^>]*>([\s\S]*?)<\/button>/);
+    expect(btnMatch).not.toBeNull();
+    expect(btnMatch![1].trim()).toBe('Continue');
+
+    // 4. Remove "Stadium pipe organ console"
+    expect(html.toLowerCase()).not.toContain('stadium pipe organ console');
+  });
 });
+

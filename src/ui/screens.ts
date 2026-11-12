@@ -113,14 +113,13 @@ export class ScreenModalManager {
   }
 
   /**
-   * 1. Initial "Tap to Take Your Seat" screen to unlock Web Audio on iOS/Android.
+   * 1. Initial intro screen to unlock Web Audio on iOS/Android.
    */
   public showStartSeatScreen(): void {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     this.contentEl.innerHTML = `
       <div class="modal-inner start-seat-modal">
-        <div class="modal-eyebrow">STADIUM PIPE ORGAN CONSOLE</div>
         <h2 class="modal-title">ORGAN MVP: AN ICE HOCKEY JOURNEY</h2>
         <p class="modal-lead">
           You sit high in the Organist's Perch overlooking a chaotic 3v3 hockey match.
@@ -130,21 +129,17 @@ export class ScreenModalManager {
         </p>
         <div class="seat-tips-grid">
           <div class="seat-tip">
-            <strong>♪ [1] Charge! Fanfare</strong>
+            <strong>Charge! Fanfare</strong>
             <span>Boosts Focus &amp; Aggression for the <em>possessing</em> (or last-touch) team.</span>
           </div>
           <div class="seat-tip">
-            <strong>♫ [2] Hold the Line</strong>
+            <strong>Hold the Line</strong>
             <span>Boosts Goalie &amp; Defense for the <em>defending</em> team.</span>
-          </div>
-          <div class="seat-tip">
-            <strong>♬ [3] Grudge Toccata</strong>
-            <span>Spikes Aggression &amp; drops Focus on <em>both</em> teams to spark brawls &amp; power plays.</span>
           </div>
         </div>
         <div class="modal-actions">
           <button id="btn-take-seat" class="primary-cta-btn" type="button">
-            🎹 TAP TO TAKE YOUR SEAT
+            Continue
           </button>
         </div>
       </div>
