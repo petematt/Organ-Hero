@@ -245,6 +245,12 @@ class OrganHeroApp {
         this.renderer.stepIceWear(this.sim, 1 / 60);
       }
       this.hud.update(this.sim);
+    } else if (urlOpts.screen === 'tipnote') {
+      // Debug: render the intermission offer modal directly (for screenshots)
+      const offers = generateIntermissionTips(1, 1, initialOrder, this.currentSeed, []);
+      if (offers.length > 0) {
+        this.screens.showIntermissionTipNote(offers[0], () => {}, () => {});
+      }
     } else if (urlOpts.screen === 'clipboard') {
       this.screens.showOrderClipboard(initialOrder, this.currentSeed);
     } else {
