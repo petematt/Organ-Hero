@@ -21,16 +21,21 @@ import {
 import { MatchSimulation } from '../match';
 import {
   applyPuckFriction,
+  applySkaterSteering,
   AWAY_GOAL_X,
   CENTER_Y,
   collidePuckWithBoards,
+  collidePuckWithGoalNets,
   collidePuckWithGoalPosts,
+  collideSkaterWithGoalNets,
   computeReboundVelocity,
+  createAttackRoute,
   GOAL_HALF_WIDTH,
   HOME_GOAL_X,
   BLUE_LINE_HOME_X,
   BLUE_LINE_AWAY_X,
   isBehindOwnBlueLine,
+  NET_DEPTH,
 } from '../physics';
 import { SeededRNG } from '../rng';
 
@@ -297,15 +302,15 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.puck.shotStartPos).not.toBeNull();
     expect(sim.homeScore).toBe(0);
 
-    // Step in small increments: while puck is at the outer crease (x < 953), goal must NOT be registered yet
+    // Step in small increments: while puck is at the outer crease (x < AWAY_GOAL_X + 8), goal must NOT be registered yet
     let sawInCreaseBeforeGoal = false;
     for (let i = 0; i < 90; i++) {
       sim.step(1 / 120);
-      if (sim.puck.pos.x > 900 && sim.puck.pos.x < 953 && sim.homeScore === 0) {
+      if (sim.puck.pos.x > AWAY_GOAL_X - sim.cfg.creaseRadius && sim.puck.pos.x < AWAY_GOAL_X + 8 && sim.homeScore === 0) {
         sawInCreaseBeforeGoal = true;
       }
       if (sim.homeScore === 1) {
-        expect(sim.puck.pos.x).toBeGreaterThanOrEqual(953);
+        expect(sim.puck.pos.x).toBeGreaterThanOrEqual(AWAY_GOAL_X + 8);
         break;
       }
     }
@@ -320,14 +325,14 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
     const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
 
-    // Place Home striker right at the Away crease/goalie (AWAY_GOAL_X = 945)
-    homeS1.pos = { x: 928, y: CENTER_Y };
-    // Place Away striker inside their own Away crease
-    awayS1.pos = { x: 925, y: CENTER_Y - 10 };
+    // Place Home striker in front of the Away crease/goalie
+    homeS1.pos = { x: AWAY_GOAL_X - 17, y: CENTER_Y };
+    // Place Away striker inside their own Away crease in front of net
+    awayS1.pos = { x: AWAY_GOAL_X - 20, y: CENTER_Y - 10 };
 
     // Place the loose puck right where homeS1 gets knocked back
     sim.puck.carrierId = null;
-    sim.puck.pos = { x: 894, y: CENTER_Y };
+    sim.puck.pos = { x: AWAY_GOAL_X - 51, y: CENTER_Y };
     sim.puck.vel = { x: 0, y: 0 };
 
     sim.step(1 / 60);
@@ -335,13 +340,13 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     // Home striker touched opposing crease/goalie -> knocked outside crease and STUNNED
     expect(homeS1.mode).toBe('STUNNED');
     expect(homeS1.stateTimer).toBeGreaterThan(1.0);
-    expect(Math.hypot(homeS1.pos.x - 945, homeS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
+    expect(Math.hypot(homeS1.pos.x - AWAY_GOAL_X, homeS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
       sim.cfg.creaseRadius + sim.cfg.skaterRadius
     );
 
     // Away striker in their own crease -> pushed outside crease without being stunned
     expect(awayS1.mode).not.toBe('STUNNED');
-    expect(Math.hypot(awayS1.pos.x - 945, awayS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
+    expect(Math.hypot(awayS1.pos.x - AWAY_GOAL_X, awayS1.pos.y - CENTER_Y)).toBeGreaterThanOrEqual(
       sim.cfg.creaseRadius + sim.cfg.skaterRadius - 1e-3
     );
 
@@ -395,9 +400,8 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     const sim = new MatchSimulation(cloneConfig(), 789);
     sim.phase = 'PLAYING';
     const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
-    const baseSpeed = computeSkateSpeed(homeS1.stamina, homeS1.aggression, sim.cfg);
 
-    // Puck loose in home defensive slot (HOME_GOAL_X = 55, dist < 240)
+    // Puck loose in home defensive slot (HOME_GOAL_X = 100, dist < 240)
     sim.puck.carrierId = null;
     sim.puck.pos = { x: 120, y: CENTER_Y };
     sim.puck.vel = { x: 0, y: 0 };
@@ -405,11 +409,15 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     homeS1.pos = { x: 200, y: CENTER_Y };
     homeS1.mode = 'DEFENDING';
 
-    sim.step(1 / 60);
+    // Step across frames to allow smooth momentum steering to accelerate to boosted speed
+    for (let i = 0; i < 60; i++) {
+      sim.step(1 / 60);
+    }
 
-    // Expected speed should be boosted by 1.25x
+    // Expected speed should be boosted by 1.25x with current stamina
+    const expectedSpeed = computeSkateSpeed(homeS1.stamina, homeS1.aggression, sim.cfg) * 1.25;
     const currentSpeed = Math.hypot(homeS1.vel.x, homeS1.vel.y);
-    expect(currentSpeed).toBeCloseTo(baseSpeed * 1.25, 1);
+    expect(currentSpeed).toBeCloseTo(expectedSpeed, 1);
   });
 
   it('defenders prioritize breakout pass when recovering puck in defensive slot', () => {
@@ -1373,6 +1381,82 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       expect(groanHookCalled).toBe(true);
       expect(visualSaveCalled).toBe(true);
       expect(sim.hitstopTimerSec).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Behind-The-Net Play, Net Cage Collisions & Skater Momentum', () => {
+    it('allows skaters to skate behind the goal line without triggering crease stun', () => {
+      const sim = new MatchSimulation(cloneConfig(), 501);
+      sim.phase = 'PLAYING';
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+
+      // Position home striker directly behind the away goal net (AWAY_GOAL_X = 900, behind is x > 900)
+      homeS1.pos = { x: AWAY_GOAL_X + 45, y: CENTER_Y };
+      homeS1.vel = { x: 0, y: -100 };
+      homeS1.mode = 'DEFENDING';
+
+      sim.step(1 / 60);
+
+      // Must remain in normal defending state without being stunned or knocked back
+      expect(homeS1.mode).toBe('DEFENDING');
+      expect(homeS1.stateTimer).toBe(0);
+    });
+
+    it('prevents skaters from clipping through the solid back of the net cage', () => {
+      // Home net back is at x = HOME_GOAL_X - NET_DEPTH = 100 - 24 = 76
+      const skaterRadius = 14;
+      const initialPos = { x: 74, y: CENTER_Y };
+      const vel = { x: 150, y: 0 }; // skating directly toward the back of the home net
+
+      const res = collideSkaterWithGoalNets(initialPos, vel, skaterRadius);
+
+      // Skater position should be clamped outside the back of the net
+      expect(res.pos.x).toBeLessThanOrEqual(HOME_GOAL_X - NET_DEPTH - skaterRadius);
+      expect(res.vel.x).toBeLessThanOrEqual(0); // forward velocity canceled
+    });
+
+    it('bounces loose pucks off the back of the goal net cage', () => {
+      const puckRadius = 5;
+      const initialPos = { x: 73, y: CENTER_Y };
+      const vel = { x: 200, y: 0 }; // loose puck flying into the back of the home net
+
+      const res = collidePuckWithGoalNets(initialPos, vel, puckRadius, 0.6);
+
+      expect(res.bounced).toBe(true);
+      expect(res.vel.x).toBeLessThan(0); // reflected backward away from the net
+      expect(res.pos.x).toBeLessThanOrEqual(HOME_GOAL_X - NET_DEPTH - puckRadius);
+    });
+
+    it('generates BEHIND_NET_LOOP attack route with waypoints circling behind the goal', () => {
+      const rng = new SeededRNG(1234);
+      // High focus favors wrap-around
+      let foundLoop = false;
+      for (let i = 0; i < 20; i++) {
+        const route = createAttackRoute({ x: 500, y: 100 }, 'home', rng, 0.9, 0.2);
+        if (route.archetype === 'BEHIND_NET_LOOP') {
+          foundLoop = true;
+          expect(route.waypoints.length).toBeGreaterThanOrEqual(3);
+          // For home team attacking away goal (AWAY_GOAL_X = 900), the loop apex must be behind the goal (x > 900)
+          const behindNetWaypoint = route.waypoints.find((wp) => wp.x > AWAY_GOAL_X);
+          expect(behindNetWaypoint).toBeDefined();
+          expect(behindNetWaypoint?.x).toBeGreaterThan(AWAY_GOAL_X + 25);
+          expect(route.shotTriggerDist).toBeLessThanOrEqual(100);
+          break;
+        }
+      }
+      expect(foundLoop).toBe(true);
+    });
+
+    it('preserves skater momentum and applies steering acceleration rather than instant velocity flipping', () => {
+      const currentVel = { x: 200, y: 0 };
+      const desiredVel = { x: -200, y: 0 }; // complete 180-degree turn
+      const dt = 1 / 60; // 16.6ms
+
+      const nextVel = applySkaterSteering(currentVel, desiredVel, dt, 8.5);
+
+      // Must NOT immediately flip to -200
+      expect(nextVel.x).toBeGreaterThan(0); // Still moving forward in the first frame!
+      expect(nextVel.x).toBeLessThan(200); // Decelerating toward target
     });
   });
 });

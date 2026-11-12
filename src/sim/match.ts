@@ -25,13 +25,17 @@ import {
 } from './formulas';
 import {
   applyPuckFriction,
+  applySkaterSteering,
   AWAY_GOAL_X,
   CENTER_X,
   CENTER_Y,
   clampSkaterToBoards,
   collidePuckWithBoards,
+  collidePuckWithGoalNets,
   collidePuckWithGoalPosts,
+  collideSkaterWithGoalNets,
   computeReboundVelocity,
+  createAttackRoute,
   createCurvedPathToGoal,
   dist,
   evalBezier,
@@ -200,6 +204,7 @@ export class MatchSimulation {
         isFightInstigator: false,
         collisionCooldown: 0,
         attackPath: null,
+        attackRoute: null,
         reactionTimer: 0,
         reactionColor: '#ffffff',
       });
@@ -223,6 +228,7 @@ export class MatchSimulation {
 
     for (const p of this.players) {
       p.attackPath = null;
+      p.attackRoute = null;
       p.possessionTimer = 0;
       p.passCheckTimer = 0;
       p.fightPartnerId = null;
@@ -977,20 +983,37 @@ export class MatchSimulation {
           }
         }
 
-        const t = clamp(p.possessionTimer / this.cfg.maxPossessionSec, 0, 1);
-        const lookAheadT = clamp(t + 0.18, 0, 1);
-        const targetPt = evalBezier(p.attackPath, lookAheadT);
+        if (!p.attackRoute) {
+          p.attackRoute = createAttackRoute(p.pos, p.team, this.rng, p.focus, p.aggression);
+        }
+        if (!p.attackPath) {
+          p.attackPath = createCurvedPathToGoal(p.pos, p.team, this.rng);
+        }
+
+        const route = p.attackRoute;
+        const currentTarget = route.waypoints[route.currentWaypointIndex];
+        const distToWaypoint = dist(p.pos, currentTarget);
+        if (
+          distToWaypoint < 32 &&
+          route.currentWaypointIndex < route.waypoints.length - 1
+        ) {
+          route.currentWaypointIndex++;
+        }
+        const activeTarget = route.waypoints[route.currentWaypointIndex];
         const dir = normalize({
-          x: targetPt.x - p.pos.x,
-          y: targetPt.y - p.pos.y,
+          x: activeTarget.x - p.pos.x,
+          y: activeTarget.y - p.pos.y,
         });
 
-        p.vel = { x: dir.x * maxSpeed, y: dir.y * maxSpeed };
+        const desiredVel = { x: dir.x * maxSpeed, y: dir.y * maxSpeed };
+        const agility = 8.5 + 3.0 * p.stamina;
+        p.vel = applySkaterSteering(p.vel, desiredVel, dtSec, agility);
         p.pos.x += p.vel.x * dtSec;
         p.pos.y += p.vel.y * dtSec;
         const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
-        p.pos = clamped.pos;
-        p.vel = clamped.vel;
+        const netClamped = collideSkaterWithGoalNets(clamped.pos, clamped.vel, this.cfg.skaterRadius);
+        p.pos = netClamped.pos;
+        p.vel = netClamped.vel;
 
         if (this.enforceCreaseAndGoalieZones(p)) {
           continue;
@@ -1007,7 +1030,8 @@ export class MatchSimulation {
             x: ownGoal.x - p.pos.x,
             y: ownGoal.y - p.pos.y,
           });
-          p.vel = { x: dirToOwn.x * maxSpeed, y: dirToOwn.y * maxSpeed };
+          const desiredOwnVel = { x: dirToOwn.x * maxSpeed, y: dirToOwn.y * maxSpeed };
+          p.vel = applySkaterSteering(p.vel, desiredOwnVel, dtSec, agility);
           p.pos.x += p.vel.x * dtSec;
           p.pos.y += p.vel.y * dtSec;
           p.reactionTimer = 1.0;
@@ -1057,9 +1081,14 @@ export class MatchSimulation {
           }
         }
 
+        const isRouteNearEnd = route.currentWaypointIndex >= route.waypoints.length - 1;
+        const reachedShotTrigger = isRouteNearEnd && distToGoal <= route.shotTriggerDist;
+        const fallbackShotTrigger = isRouteNearEnd && distToGoal <= this.cfg.minShotDistance;
+
         if (
           p.possessionTimer >= this.cfg.maxPossessionSec ||
-          distToGoal <= this.cfg.minShotDistance
+          reachedShotTrigger ||
+          fallbackShotTrigger
         ) {
           this.shootPuck(p);
         }
@@ -1093,13 +1122,17 @@ export class MatchSimulation {
         const carrier = this.players.find((pl) => pl.id === this.puck.carrierId);
         if (carrier) {
           if (carrier.team === p.team) {
-            // Teammate has possession: skate into a supporting offensive wing lane
-            const oppGoal = getOpponentGoalPos(p.team);
-            const wingY = carrier.pos.y < CENTER_Y ? CENTER_Y + 85 : CENTER_Y - 85;
-            targetPos = {
-              x: (carrier.pos.x + oppGoal.x) * 0.5,
-              y: wingY,
-            };
+            // Teammate has possession: skate into setup pass target (slot/backdoor) or supporting wing lane
+            if (carrier.attackRoute?.setupPassTarget) {
+              targetPos = carrier.attackRoute.setupPassTarget;
+            } else {
+              const oppGoal = getOpponentGoalPos(p.team);
+              const wingY = carrier.pos.y < CENTER_Y ? CENTER_Y + 85 : CENTER_Y - 85;
+              targetPos = {
+                x: (carrier.pos.x + oppGoal.x) * 0.5,
+                y: wingY,
+              };
+            }
           } else {
             // Opponent has possession: intercept carrier
             targetPos = carrier.pos;
@@ -1129,13 +1162,16 @@ export class MatchSimulation {
             ? maxSpeed * 1.15
             : maxSpeed
           : maxSpeed;
-        p.vel = { x: dir.x * skaterSpeed, y: dir.y * skaterSpeed };
+        const desiredVel = { x: dir.x * skaterSpeed, y: dir.y * skaterSpeed };
+        const agility = 8.5 + 3.0 * p.stamina;
+        p.vel = applySkaterSteering(p.vel, desiredVel, dtSec, agility);
       }
       p.pos.x += p.vel.x * dtSec;
       p.pos.y += p.vel.y * dtSec;
       const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
-      p.pos = clamped.pos;
-      p.vel = clamped.vel;
+      const netClamped = collideSkaterWithGoalNets(clamped.pos, clamped.vel, this.cfg.skaterRadius);
+      p.pos = netClamped.pos;
+      p.vel = netClamped.vel;
 
       // Enforce crease exclusion & opposing goalie stun BEFORE loose puck pickup
       if (this.enforceCreaseAndGoalieZones(p)) {
@@ -1187,6 +1223,12 @@ export class MatchSimulation {
         (pl) => pl.role === 'goalie' && pl.team === goalTeam
       );
 
+      const inFrontOfGoal =
+        goalTeam === 'home' ? p.pos.x >= HOME_GOAL_X - 2 : p.pos.x <= AWAY_GOAL_X + 2;
+      if (!inFrontOfGoal) {
+        continue;
+      }
+
       const dCrease = dist(p.pos, creaseCenter);
       const dGoalie = goalie ? dist(p.pos, goalie.pos) : Infinity;
 
@@ -1234,6 +1276,7 @@ export class MatchSimulation {
             );
             p.possessionTimer = 0;
             p.attackPath = null;
+            p.attackRoute = null;
             p.vel = { x: norm.x * 95, y: norm.y * 95 };
             this.spawnCallout('CREASE STUN!', p.pos, '#fb923c', 1.6);
           }
@@ -1349,6 +1392,7 @@ export class MatchSimulation {
     striker.mode = 'POSSESSING';
     striker.possessionTimer = receivedCleanPass ? this.cfg.maxPossessionSec * 0.45 : 0;
     striker.passCheckTimer = inDefensiveZone ? 0 : this.cfg.passCheckIntervalSec;
+    striker.attackRoute = createAttackRoute(striker.pos, striker.team, this.rng, striker.focus, striker.aggression);
     striker.attackPath = createCurvedPathToGoal(striker.pos, striker.team, this.rng);
   }
 
@@ -1379,6 +1423,7 @@ export class MatchSimulation {
     carrier.possessionTimer = 0;
     carrier.passCheckTimer = this.cfg.passCheckIntervalSec;
     carrier.attackPath = null;
+    carrier.attackRoute = null;
     carrier.collisionCooldown = 0.22; // brief follow-through so they don't immediately re-grab on frame 1, but can chase it right down
     carrier.reactionTimer = 0.6;
     carrier.reactionColor = '#38bdf8';
@@ -1562,6 +1607,7 @@ export class MatchSimulation {
     passer.possessionTimer = 0;
     passer.passCheckTimer = this.cfg.passCheckIntervalSec;
     passer.attackPath = null;
+    passer.attackRoute = null;
     passer.collisionCooldown = 0.45;
 
     const launchOffset =
@@ -1718,6 +1764,7 @@ export class MatchSimulation {
     striker.mode = 'DEFENDING';
     striker.possessionTimer = 0;
     striker.attackPath = null;
+    striker.attackRoute = null;
     striker.collisionCooldown = 0.55;
 
     const launchPos = {
@@ -1848,6 +1895,7 @@ export class MatchSimulation {
       );
       carrier.possessionTimer = 0;
       carrier.attackPath = null;
+      carrier.attackRoute = null;
       carrier.moodAggressionOffset += this.cfg.moodRobbedAggression;
       carrier.moodFocusOffset += this.cfg.moodRobbedFocus;
 
@@ -1904,6 +1952,7 @@ export class MatchSimulation {
     instigator.fightPunchCooldown = 0.35;
     instigator.vel = { x: 0, y: 0 };
     instigator.attackPath = null;
+    instigator.attackRoute = null;
 
     victim.mode = 'FIGHTING';
     victim.stateTimer = this.cfg.brawlDurationSec;
@@ -1911,6 +1960,7 @@ export class MatchSimulation {
     victim.isFightInstigator = false;
     victim.vel = { x: 0, y: 0 };
     victim.attackPath = null;
+    victim.attackRoute = null;
 
     // Pop puck loose
     this.puck.carrierId = null;
@@ -2085,6 +2135,16 @@ export class MatchSimulation {
         this.puck.inFlightPassFromId = null;
       }
 
+      // Net cage collision for loose pucks
+      const netBounced = collidePuckWithGoalNets(
+        this.puck.pos,
+        this.puck.vel,
+        this.cfg.puckRadius,
+        this.cfg.boardRestitution
+      );
+      this.puck.pos = netBounced.pos;
+      this.puck.vel = netBounced.vel;
+
       // If a loose puck drifts into either goalie-only crease, the goalie pokes it out
       const goalTeams: Team[] = ['home', 'away'];
       for (const goalTeam of goalTeams) {
@@ -2092,7 +2152,9 @@ export class MatchSimulation {
           x: goalTeam === 'home' ? HOME_GOAL_X : AWAY_GOAL_X,
           y: CENTER_Y,
         };
-        if (dist(this.puck.pos, creaseCenter) <= this.cfg.creaseRadius) {
+        const inFrontOfGoal =
+          goalTeam === 'home' ? this.puck.pos.x >= HOME_GOAL_X - 2 : this.puck.pos.x <= AWAY_GOAL_X + 2;
+        if (inFrontOfGoal && dist(this.puck.pos, creaseCenter) <= this.cfg.creaseRadius) {
           const rawDx = this.puck.pos.x - creaseCenter.x;
           const frontDx =
             goalTeam === 'home' ? Math.max(6, rawDx) : Math.min(-6, rawDx);

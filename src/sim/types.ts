@@ -48,6 +48,20 @@ export interface BezierPath {
   p2: Vec2;
 }
 
+export type AttackArchetype =
+  | 'DIRECT_SLOT'
+  | 'BEHIND_NET_LOOP'
+  | 'CORNER_CYCLE'
+  | 'WIDE_WING';
+
+export interface AttackRoute {
+  archetype: AttackArchetype;
+  waypoints: Vec2[];
+  currentWaypointIndex: number;
+  shotTriggerDist: number;
+  setupPassTarget?: Vec2;
+}
+
 export interface PlayerEntity {
   id: string;
   name: string;
@@ -85,6 +99,7 @@ export interface PlayerEntity {
   fightPunchCooldown?: number;
   collisionCooldown: number;
   attackPath: BezierPath | null;
+  attackRoute?: AttackRoute | null;
   penaltyTravelPath?: BezierPath | null;
   penaltyTravelProg?: number;
   penaltyTravelDurationSec?: number;

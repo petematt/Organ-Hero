@@ -2096,15 +2096,28 @@ export class RinkRenderer {
       if (inCorner) {
         this.cornerSnowLevel = Math.min(1.0, this.cornerSnowLevel + 0.0025);
       }
+
+      if (spd > 165 && Math.random() < 0.22) {
+        this.snowSprayParticles.push({
+          x: sx,
+          y: sy,
+          vx: -vx * 0.20 + (Math.random() - 0.5) * 45,
+          vy: -vy * 0.20 + (Math.random() - 0.5) * 45,
+          radius: 1.2 + Math.random() * 1.5,
+          alpha: 0.65,
+          lifeSec: 0.22 + Math.random() * 0.14,
+          maxLifeSec: 0.36,
+        });
+      }
     }
 
-    // 3. Periodic ambient fine hairline cuts across active zones
+    // 3. Periodic ambient fine hairline cuts across active zones (including behind nets)
     this.ambientScratchTimerSec += dt;
     if (this.ambientScratchTimerSec >= 0.18) {
       this.ambientScratchTimerSec = 0;
       const count = 1 + Math.floor(Math.random() * 3);
       for (let i = 0; i < count; i++) {
-        const rx = 120 + Math.random() * (RINK_WIDTH - 240);
+        const rx = 40 + Math.random() * (RINK_WIDTH - 80);
         const ry = 45 + Math.random() * (RINK_HEIGHT - 90);
         const angle = Math.random() * Math.PI * 2;
         const rlen = 6 + Math.random() * 16;

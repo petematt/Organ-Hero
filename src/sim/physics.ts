@@ -1,15 +1,16 @@
 import { GameConfig } from '../config';
 import { clamp, SeededRNG } from './rng';
-import { BezierPath, Team, Vec2 } from './types';
+import { AttackArchetype, AttackRoute, BezierPath, Team, Vec2 } from './types';
 
 export const RINK_WIDTH = 1000;
 export const RINK_HEIGHT = 425;
 export const RINK_CORNER_RADIUS = 70;
 export const CENTER_X = RINK_WIDTH / 2; // 500
 export const CENTER_Y = RINK_HEIGHT / 2; // 212.5
-export const HOME_GOAL_X = 55;
-export const AWAY_GOAL_X = RINK_WIDTH - 55; // 945
+export const HOME_GOAL_X = 100;
+export const AWAY_GOAL_X = RINK_WIDTH - 100; // 900
 export const GOAL_HALF_WIDTH = 34;
+export const NET_DEPTH = 24;
 export const BLUE_LINE_HOME_X = 340;
 export const BLUE_LINE_AWAY_X = 660;
 
@@ -64,6 +65,114 @@ export function createCurvedPathToGoal(
     p0: { x: startPos.x, y: startPos.y },
     p1: { x: midX, y: midY },
     p2,
+  };
+}
+
+/**
+ * Generates an attack route with one of 4 archetypes:
+ * - BEHIND_NET_LOOP: Drive deep into corner/wing, loop behind the goal, wrap around opposite post.
+ * - CORNER_CYCLE: Drive into deep corner boards, protect puck, dish centering feed to slot.
+ * - WIDE_WING: Flank down outer boards and cut across at 45 degrees.
+ * - DIRECT_SLOT: Direct power drive into the high/low slot.
+ */
+export function createAttackRoute(
+  startPos: Vec2,
+  team: Team,
+  rng: SeededRNG,
+  focus: number = 0.5,
+  aggression: number = 0.5
+): AttackRoute {
+  const oppGoal = getOpponentGoalPos(team);
+  const dirX = team === 'home' ? 1 : -1;
+
+  // Weight archetypes based on focus and aggression
+  const wrapWeight = 0.32 + focus * 0.15;
+  const cycleWeight = 0.20 + (1 - aggression) * 0.10;
+  const wingWeight = 0.18;
+  const slotWeight = 0.30 + aggression * 0.20;
+
+  const total = wrapWeight + cycleWeight + wingWeight + slotWeight;
+  const roll = rng.next() * total;
+
+  let archetype: AttackArchetype = 'DIRECT_SLOT';
+  if (roll < wrapWeight) {
+    archetype = 'BEHIND_NET_LOOP';
+  } else if (roll < wrapWeight + cycleWeight) {
+    archetype = 'CORNER_CYCLE';
+  } else if (roll < wrapWeight + cycleWeight + wingWeight) {
+    archetype = 'WIDE_WING';
+  } else {
+    archetype = 'DIRECT_SLOT';
+  }
+
+  const waypoints: Vec2[] = [];
+  let shotTriggerDist = 145;
+  let setupPassTarget: Vec2 | undefined;
+
+  const topSide = startPos.y < CENTER_Y;
+
+  switch (archetype) {
+    case 'BEHIND_NET_LOOP': {
+      // Loop behind the net and cut around to the opposite post (wrap-around)
+      const entryY = topSide ? 62 : RINK_HEIGHT - 62;
+      const exitY = topSide ? RINK_HEIGHT - 75 : 75;
+
+      waypoints.push(
+        // 1. Deep offensive wing entry
+        { x: clamp(oppGoal.x - dirX * 35, 45, RINK_WIDTH - 45), y: entryY },
+        // 2. Behind the net apex (comfortable wide clearance behind the cage)
+        { x: clamp(oppGoal.x + dirX * 45, 35, RINK_WIDTH - 35), y: CENTER_Y },
+        // 3. Wrap exit around far post
+        { x: clamp(oppGoal.x - dirX * 25, 45, RINK_WIDTH - 45), y: exitY },
+        // 4. Cut into slot for wrap shot or backdoor feed
+        { x: clamp(oppGoal.x - dirX * 65, 45, RINK_WIDTH - 45), y: exitY + (topSide ? -35 : 35) }
+      );
+      shotTriggerDist = 88;
+      setupPassTarget = { x: oppGoal.x - dirX * 90, y: exitY };
+      break;
+    }
+    case 'CORNER_CYCLE': {
+      // Carry into deep corner boards to draw defenders, setup centering feed
+      const cornerY = topSide ? 48 : RINK_HEIGHT - 48;
+      waypoints.push(
+        { x: clamp(oppGoal.x - dirX * 15, 45, RINK_WIDTH - 45), y: cornerY },
+        { x: clamp(oppGoal.x + dirX * 25, 35, RINK_WIDTH - 35), y: cornerY + (topSide ? 40 : -40) },
+        { x: clamp(oppGoal.x - dirX * 70, 45, RINK_WIDTH - 45), y: CENTER_Y + (topSide ? 35 : -35) }
+      );
+      shotTriggerDist = 125;
+      setupPassTarget = { x: oppGoal.x - dirX * 115, y: CENTER_Y };
+      break;
+    }
+    case 'WIDE_WING': {
+      // Wide board rush cutting sharply across the crease
+      const wingY = topSide ? 52 : RINK_HEIGHT - 52;
+      waypoints.push(
+        { x: clamp(CENTER_X + dirX * 80, 50, RINK_WIDTH - 50), y: wingY },
+        { x: clamp(oppGoal.x - dirX * 85, 45, RINK_WIDTH - 45), y: wingY },
+        { x: clamp(oppGoal.x - dirX * 48, 45, RINK_WIDTH - 45), y: CENTER_Y + (topSide ? -22 : 22) }
+      );
+      shotTriggerDist = 135;
+      break;
+    }
+    case 'DIRECT_SLOT':
+    default: {
+      // Direct power drive into the high or low danger slot
+      const slotY = clamp(CENTER_Y + rng.range(-32, 32), 100, RINK_HEIGHT - 100);
+      waypoints.push(
+        { x: clamp(oppGoal.x - dirX * 150, 45, RINK_WIDTH - 45), y: clamp(startPos.y, 95, RINK_HEIGHT - 95) },
+        { x: clamp(oppGoal.x - dirX * 80, 45, RINK_WIDTH - 45), y: slotY }
+      );
+      shotTriggerDist = 145;
+      break;
+    }
+  }
+
+  return {
+    archetype,
+    waypoints,
+    currentWaypointIndex: 0,
+    shotTriggerDist,
+    setupPassTarget,
   };
 }
 
@@ -274,5 +383,145 @@ export function collidePuckWithGoalPosts(
   }
 
   return { hit: false, postPos: null, pos, vel };
+}
+
+/**
+ * Applies steering acceleration/inertia to skater velocity instead of snapping instantly.
+ * Produces realistic turning arcs, preserves momentum around turns, and prevents stopping on a dime.
+ */
+export function applySkaterSteering(
+  currentVel: Vec2,
+  desiredVel: Vec2,
+  dtSec: number,
+  agility: number = 8.5
+): Vec2 {
+  const blend = 1 - Math.exp(-Math.max(1, agility) * Math.max(0, dtSec));
+  return {
+    x: currentVel.x + (desiredVel.x - currentVel.x) * blend,
+    y: currentVel.y + (desiredVel.y - currentVel.y) * blend,
+  };
+}
+
+/**
+ * Solid obstacle collision resolution for skaters against goal net cages.
+ * Keeps skaters from clipping through the back/sides of the nets when looping behind the goal.
+ */
+export function collideSkaterWithGoalNets(
+  pos: Vec2,
+  vel: Vec2,
+  radius: number
+): { pos: Vec2; vel: Vec2 } {
+  let x = pos.x;
+  let y = pos.y;
+  let vx = vel.x;
+  let vy = vel.y;
+
+  const nets = [
+    // Home net cage
+    { minX: HOME_GOAL_X - NET_DEPTH, maxX: HOME_GOAL_X, minY: CENTER_Y - GOAL_HALF_WIDTH, maxY: CENTER_Y + GOAL_HALF_WIDTH },
+    // Away net cage
+    { minX: AWAY_GOAL_X, maxX: AWAY_GOAL_X + NET_DEPTH, minY: CENTER_Y - GOAL_HALF_WIDTH, maxY: CENTER_Y + GOAL_HALF_WIDTH },
+  ];
+
+  for (const net of nets) {
+    const cx = clamp(x, net.minX, net.maxX);
+    const cy = clamp(y, net.minY, net.maxY);
+    const dx = x - cx;
+    const dy = y - cy;
+    const d = Math.hypot(dx, dy);
+
+    if (d < radius) {
+      if (d > 1e-5) {
+        const nx = dx / d;
+        const ny = dy / d;
+        x = cx + nx * radius;
+        y = cy + ny * radius;
+        const dot = vx * nx + vy * ny;
+        if (dot < 0) {
+          vx -= dot * nx;
+          vy -= dot * ny;
+        }
+      } else {
+        // Skater center is inside net bounding box: push outward toward shallowest edge
+        const leftDist = Math.abs(x - net.minX);
+        const rightDist = Math.abs(net.maxX - x);
+        const topDist = Math.abs(y - net.minY);
+        const botDist = Math.abs(net.maxY - y);
+        const minDist = Math.min(leftDist, rightDist, topDist, botDist);
+        if (minDist === leftDist) {
+          x = net.minX - radius;
+          if (vx > 0) vx = 0;
+        } else if (minDist === rightDist) {
+          x = net.maxX + radius;
+          if (vx < 0) vx = 0;
+        } else if (minDist === topDist) {
+          y = net.minY - radius;
+          if (vy > 0) vy = 0;
+        } else {
+          y = net.maxY + radius;
+          if (vy < 0) vy = 0;
+        }
+      }
+    }
+  }
+
+  return { pos: { x, y }, vel: { x: vx, y: vy } };
+}
+
+/**
+ * Physical collision between loose pucks and the goal net cage.
+ * Allows shots into the open front mouth to enter the net, but reflects pucks
+ * hitting the back or sides of the net structure.
+ */
+export function collidePuckWithGoalNets(
+  pos: Vec2,
+  vel: Vec2,
+  radius: number,
+  restitution: number = 0.55
+): { pos: Vec2; vel: Vec2; bounced: boolean } {
+  let x = pos.x;
+  let y = pos.y;
+  let vx = vel.x;
+  let vy = vel.y;
+  let bounced = false;
+
+  const nets = [
+    // Home net: open front mouth faces right (+x)
+    { minX: HOME_GOAL_X - NET_DEPTH, maxX: HOME_GOAL_X, minY: CENTER_Y - GOAL_HALF_WIDTH, maxY: CENTER_Y + GOAL_HALF_WIDTH, mouthSide: 'right' as const },
+    // Away net: open front mouth faces left (-x)
+    { minX: AWAY_GOAL_X, maxX: AWAY_GOAL_X + NET_DEPTH, minY: CENTER_Y - GOAL_HALF_WIDTH, maxY: CENTER_Y + GOAL_HALF_WIDTH, mouthSide: 'left' as const },
+  ];
+
+  for (const net of nets) {
+    const isEnteringMouth =
+      net.mouthSide === 'right'
+        ? (vx < 0 && x >= net.maxX - radius && y >= net.minY && y <= net.maxY)
+        : (vx > 0 && x <= net.minX + radius && y >= net.minY && y <= net.maxY);
+
+    if (isEnteringMouth) {
+      continue;
+    }
+
+    const cx = clamp(x, net.minX, net.maxX);
+    const cy = clamp(y, net.minY, net.maxY);
+    const dx = x - cx;
+    const dy = y - cy;
+    const d = Math.hypot(dx, dy);
+
+    if (d < radius && d > 1e-5) {
+      const nx = dx / d;
+      const ny = dy / d;
+      x = cx + nx * radius;
+      y = cy + ny * radius;
+      const dot = vx * nx + vy * ny;
+      if (dot < 0) {
+        vx = vx - (1 + restitution) * dot * nx;
+        vy = vy - (1 + restitution) * dot * ny;
+        bounced = true;
+      }
+    }
+  }
+
+  return { pos: { x, y }, vel: { x: vx, y: vy }, bounced };
 }
 
