@@ -365,6 +365,55 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.puck.carrierId).toBeNull();
   });
 
+  it('knocks a crease-stunned striker away from the goalie and prevents repeat stun loops when puck is in crease', () => {
+    const sim = new MatchSimulation(cloneConfig(), 920);
+    sim.phase = 'PLAYING';
+    const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+    const awayGoalie = sim.players.find((p) => p.role === 'goalie' && p.team === 'away')!;
+
+    // Move other strikers far away so they don't interfere
+    for (const p of sim.players) {
+      if (p.role === 'striker' && p.id !== 'home-s1') {
+        p.pos = { x: 150, y: 100 };
+      }
+    }
+
+    // Place loose puck sitting inside the Away crease so homeS1 wants it
+    sim.puck.carrierId = null;
+    sim.puck.pos = { x: AWAY_GOAL_X - 15, y: CENTER_Y };
+    sim.puck.vel = { x: 0, y: 0 };
+
+    // Intrude into the front of the Away crease
+    homeS1.pos = { x: AWAY_GOAL_X - 20, y: CENTER_Y };
+    homeS1.mode = 'DEFENDING';
+
+    sim.step(1 / 60);
+    expect(homeS1.mode).toBe('STUNNED');
+    const posRightAfterStun = homeS1.pos.x;
+    expect(posRightAfterStun).toBeLessThan(
+      AWAY_GOAL_X - (sim.cfg.creaseRadius + sim.cfg.skaterRadius + 10)
+    );
+
+    // Step through the stun duration: knockback velocity should slide homeS1 even further away from the goalie
+    for (let i = 0; i < 90; i++) {
+      sim.step(1 / 60);
+    }
+    expect(homeS1.pos.x).toBeLessThan(posRightAfterStun - 20);
+    expect(Math.hypot(homeS1.pos.x - awayGoalie.pos.x, homeS1.pos.y - awayGoalie.pos.y)).toBeGreaterThan(70);
+
+    // Wait until stun fully expires and step another 1.5s while the puck is STILL inside the crease:
+    // striker must hover outside the crease without getting stunned a second time!
+    while ((homeS1.mode as string) === 'STUNNED') {
+      sim.step(1 / 60);
+    }
+    for (let i = 0; i < 90; i++) {
+      sim.puck.pos = { x: AWAY_GOAL_X - 15, y: CENTER_Y };
+      sim.puck.vel = { x: 0, y: 0 };
+      sim.step(1 / 60);
+      expect(homeS1.mode).not.toBe('STUNNED');
+    }
+  });
+
   it('shooter follow-through collision cooldown prevents immediate re-grab of own rebound', () => {
     const sim = new MatchSimulation(cloneConfig(), 456);
     sim.phase = 'PLAYING';

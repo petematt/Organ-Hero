@@ -917,12 +917,14 @@ export class MatchSimulation {
       p.stamina = clamp(p.stamina - this.cfg.strikerStaminaDrainPerSec * dtSec, 0, 1);
 
       if (p.mode === 'STUNNED') {
-        p.vel = { x: p.vel.x * 0.85, y: p.vel.y * 0.85 };
+        const stunDecay = Math.exp(-3.2 * dtSec);
+        p.vel = { x: p.vel.x * stunDecay, y: p.vel.y * stunDecay };
         p.pos.x += p.vel.x * dtSec;
         p.pos.y += p.vel.y * dtSec;
         const clamped = clampSkaterToBoards(p.pos, p.vel, this.cfg.skaterRadius);
-        p.pos = clamped.pos;
-        p.vel = clamped.vel;
+        const netClamped = collideSkaterWithGoalNets(clamped.pos, clamped.vel, this.cfg.skaterRadius);
+        p.pos = netClamped.pos;
+        p.vel = netClamped.vel;
         this.enforceCreaseAndGoalieZones(p);
         p.stateTimer -= dtSec;
         if (p.stateTimer <= 0) {
@@ -1233,9 +1235,36 @@ export class MatchSimulation {
         }
       }
 
+      // Keep DEFENDING targetPos safely outside the front of the opposing goal crease so strikers
+      // hover at the crease edge instead of repeatedly diving into the goalie
+      const oppCreaseCenter = getOpponentGoalPos(p.team);
+      const targetInFrontOfOppGoal =
+        p.team === 'home'
+          ? targetPos.x <= AWAY_GOAL_X + 2
+          : targetPos.x >= HOME_GOAL_X - 2;
+      const safeCreaseStopDist = this.cfg.creaseRadius + this.cfg.skaterRadius + 10;
+      const distTargetToOppCrease = dist(targetPos, oppCreaseCenter);
+      if (targetInFrontOfOppGoal && distTargetToOppCrease < safeCreaseStopDist) {
+        const rawDx = targetPos.x - oppCreaseCenter.x;
+        const frontDx = p.team === 'home' ? Math.min(-8, rawDx) : Math.max(8, rawDx);
+        const rawDy = targetPos.y - oppCreaseCenter.y;
+        const outNorm = normalize({ x: frontDx, y: rawDy });
+        targetPos = {
+          x: oppCreaseCenter.x + outNorm.x * safeCreaseStopDist,
+          y: clamp(
+            oppCreaseCenter.y + outNorm.y * safeCreaseStopDist,
+            this.cfg.skaterRadius,
+            RINK_HEIGHT - this.cfg.skaterRadius
+          ),
+        };
+      }
+
       const toTargetDist = dist(p.pos, targetPos);
       if (holdingGoalie && toTargetDist < 8) {
         p.vel = { x: 0, y: 0 };
+      } else if (!holdingGoalie && toTargetDist < 4) {
+        const agility = 8.5 + 3.0 * p.stamina;
+        p.vel = applySkaterSteering(p.vel, { x: 0, y: 0 }, dtSec, agility);
       } else {
         const dir = normalize({
           x: targetPos.x - p.pos.x,
@@ -1325,38 +1354,51 @@ export class MatchSimulation {
       const dGoalie = goalie ? dist(p.pos, goalie.pos) : Infinity;
 
       if (dCrease < minCreaseDist || dGoalie < minGoalieDist) {
-        // Compute outward normal from crease center toward the ice in front of the goal
-        const rawDx = p.pos.x - creaseCenter.x;
+        // Compute outward normal away from goalie/crease toward the ice in front of the goal
+        const origin = goalie && dGoalie < minGoalieDist ? goalie.pos : creaseCenter;
+        const rawDx = p.pos.x - origin.x;
         const frontDx =
-          goalTeam === 'home' ? Math.max(6, rawDx) : Math.min(-6, rawDx);
-        const rawDy = p.pos.y - creaseCenter.y;
+          goalTeam === 'home' ? Math.max(8, rawDx) : Math.min(-8, rawDx);
+        const rawDy = p.pos.y - origin.y;
         const norm = normalize({ x: frontDx, y: rawDy });
 
         if (goalTeam !== p.team) {
-          // Opposing crease / opposing goalie contact -> knock back and STUN!
+          // Opposing crease / opposing goalie contact -> knock back away from goalie/crease and STUN!
+          const knockbackClearance = minCreaseDist + 14;
           p.pos = {
-            x: creaseCenter.x + norm.x * (minCreaseDist + 3),
+            x: creaseCenter.x + norm.x * knockbackClearance,
             y: clamp(
-              creaseCenter.y + norm.y * (minCreaseDist + 3),
+              creaseCenter.y + norm.y * knockbackClearance,
               this.cfg.skaterRadius,
               RINK_HEIGHT - this.cfg.skaterRadius
             ),
           };
+          // Ensure also strictly clear of goalie circle if goalie is near edge of crease
+          if (goalie && dist(p.pos, goalie.pos) < minGoalieDist + 10) {
+            p.pos = {
+              x: goalie.pos.x + norm.x * (minGoalieDist + 12),
+              y: clamp(
+                goalie.pos.y + norm.y * (minGoalieDist + 12),
+                this.cfg.skaterRadius,
+                RINK_HEIGHT - this.cfg.skaterRadius
+              ),
+            };
+          }
 
           if (this.puck.carrierId === p.id) {
             this.puck.carrierId = null;
             this.currentPossessor = null;
             this.puck.pos = {
-              x: creaseCenter.x + norm.x * (minCreaseDist + 8),
+              x: p.pos.x + norm.x * 12,
               y: clamp(
-                creaseCenter.y + norm.y * (minCreaseDist + 8),
+                p.pos.y + norm.y * 12,
                 this.cfg.puckRadius,
                 RINK_HEIGHT - this.cfg.puckRadius
               ),
             };
             this.puck.vel = {
-              x: norm.x * 160,
-              y: norm.y * 160,
+              x: norm.x * 180,
+              y: norm.y * 180,
             };
           }
 
@@ -1369,7 +1411,8 @@ export class MatchSimulation {
             p.possessionTimer = 0;
             p.attackPath = null;
             p.attackRoute = null;
-            p.vel = { x: norm.x * 95, y: norm.y * 95 };
+            // Knockback impulse slides the stunned striker visibly away from the goalie/crease
+            p.vel = { x: norm.x * 165, y: norm.y * 165 };
             this.spawnCallout('CREASE STUN!', p.pos, '#fb923c', 1.6);
           }
           return true;
