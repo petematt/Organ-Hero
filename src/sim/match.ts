@@ -158,7 +158,7 @@ export class MatchSimulation {
     };
 
     this.initPlayers();
-    this.setupFaceoff();
+    this.setupFaceoff(true);
     this.crowdSamples.push({ period: 1, volume: this.crowdVolume });
   }
 
@@ -221,7 +221,22 @@ export class MatchSimulation {
     }
   }
 
-  public setupFaceoff(): void {
+  public cancelFightsInProgress(): void {
+    for (const p of this.players) {
+      if (p.mode === 'FIGHTING') {
+        p.mode = 'DEFENDING';
+        p.stateTimer = 0;
+        p.fightPartnerId = null;
+        p.isFightInstigator = false;
+        p.fightPunchCooldown = undefined;
+        p.vel = { x: 0, y: 0 };
+      }
+    }
+  }
+
+  public setupFaceoff(isPeriodStart: boolean = false): void {
+    this.cancelFightsInProgress();
+
     this.puck.carrierId = null;
     this.puck.inFlightShotFrom = null;
     this.puck.isScoringShot = false;
@@ -235,6 +250,9 @@ export class MatchSimulation {
     this.currentPossessor = null;
     this.timeDilation = 1.0;
     this.hitstopTimerSec = 0;
+
+    this.phase = 'FACEOFF_COUNTDOWN';
+    this.phaseTimerSec = this.cfg.faceoffCountdownRealSec * 2; // 3 game seconds (~1.5s at 2x)
 
     for (const p of this.players) {
       p.attackPath = null;
@@ -255,13 +273,16 @@ export class MatchSimulation {
         p.stateTimer = 0;
         p.penaltyTravelPath = null;
         p.penaltyTravelProg = 0;
-        p.pos = { ...p.homeSpot };
-        p.vel = { x: 0, y: 0 };
+        if (isPeriodStart) {
+          p.pos = { ...p.homeSpot };
+          p.vel = { x: 0, y: 0 };
+          p.faceoffTravelPath = null;
+          p.faceoffTravelProg = 1;
+        } else {
+          this.beginFaceoffTravel(p);
+        }
       }
     }
-
-    this.phase = 'FACEOFF_COUNTDOWN';
-    this.phaseTimerSec = this.cfg.faceoffCountdownRealSec * 2; // 3 game seconds (~1.5s at 2x)
 
     if (this.homeScore <= this.awayScore && !this.activeCue) {
       const loadout = this.getActiveSongLoadout();
@@ -381,6 +402,92 @@ export class MatchSimulation {
     }
   }
 
+  private beginFaceoffTravel(p: PlayerEntity): void {
+    const p0: Vec2 = { x: p.pos.x, y: p.pos.y };
+    const p2: Vec2 = { ...p.homeSpot };
+    const dx = p2.x - p0.x;
+    const dy = p2.y - p0.y;
+    const chordDist = Math.hypot(dx, dy);
+
+    if (chordDist < 3) {
+      p.pos = { ...p2 };
+      p.vel = { x: 0, y: 0 };
+      p.faceoffTravelPath = null;
+      p.faceoffTravelProg = 1;
+      return;
+    }
+
+    // Natural curved Bezier path sweeping smoothly across the ice to the faceoff spot
+    const midX = (p0.x + p2.x) * 0.5;
+    const midY = (p0.y + p2.y) * 0.5;
+
+    // Perpendicular unit vector (-dy, dx)
+    const perpX = -dy / chordDist;
+    const perpY = dx / chordDist;
+
+    // Bow outward toward open center ice with slot-based variance
+    const bowMagnitude = clamp(chordDist * 0.22, 14, 55);
+    const towardCenterSign = midY < CENTER_Y ? 1 : -1;
+    const sign = (perpY * towardCenterSign >= 0 ? 1 : -1) * (p.id.endsWith('2') ? -0.85 : 1.0);
+
+    const ctrlX = clamp(midX + perpX * bowMagnitude * sign, 45, RINK_WIDTH - 45);
+    const ctrlY = clamp(midY + perpY * bowMagnitude * sign, 35, RINK_HEIGHT - 35);
+
+    p.faceoffTravelPath = { p0, p1: { x: ctrlX, y: ctrlY }, p2 };
+    p.faceoffTravelProg = 0;
+    p.faceoffTravelElapsedSec = 0;
+
+    // Stagger slightly by role/slot similarly to period walk-on
+    const totalCountdown =
+      this.phaseTimerSec > 0
+        ? this.phaseTimerSec
+        : this.cfg.faceoffCountdownRealSec * 2;
+    const staggerFraction =
+      p.role === 'goalie' ? 0.0 : p.id.endsWith('1') ? 0.05 : 0.10;
+    p.faceoffStaggerSec = staggerFraction * totalCountdown;
+    p.faceoffTravelDurationSec = totalCountdown * 0.82;
+  }
+
+  private updateFaceoffTravel(p: PlayerEntity, dtSec: number): void {
+    if (!p.faceoffTravelPath) return;
+
+    p.faceoffTravelElapsedSec = (p.faceoffTravelElapsedSec ?? 0) + dtSec;
+    const stagger = p.faceoffStaggerSec ?? 0;
+    if (p.faceoffTravelElapsedSec < stagger) {
+      p.vel = { x: 0, y: 0 };
+      return;
+    }
+
+    const activeElapsed = p.faceoffTravelElapsedSec - stagger;
+    const dur = Math.max(0.1, p.faceoffTravelDurationSec ?? 2.0);
+    const rawProg = clamp(activeElapsed / dur, 0, 1);
+    p.faceoffTravelProg = rawProg;
+
+    if (rawProg >= 1) {
+      p.pos = { ...p.faceoffTravelPath.p2 };
+      p.vel = { x: 0, y: 0 };
+      p.faceoffTravelPath = null;
+      return;
+    }
+
+    // Smooth ease-out cubic so skaters push off smoothly and glide cleanly onto their marks
+    const s = 1 - Math.pow(1 - rawProg, 3);
+    const omt = 1 - s;
+    const { p0, p1, p2 } = p.faceoffTravelPath;
+
+    const curPos: Vec2 = {
+      x: omt * omt * p0.x + 2 * omt * s * p1.x + s * s * p2.x,
+      y: omt * omt * p0.y + 2 * omt * s * p1.y + s * s * p2.y,
+    };
+
+    // Velocity derivative along curve for speed streak and skater facing orientation
+    const dx = 2 * omt * (p1.x - p0.x) + 2 * s * (p2.x - p1.x);
+    const dy = 2 * omt * (p1.y - p0.y) + 2 * s * (p2.y - p1.y);
+
+    p.pos = curPos;
+    p.vel = rawProg < 0.96 ? { x: dx * 0.75, y: dy * 0.75 } : { x: 0, y: 0 };
+  }
+
   public startNextPeriod(): void {
     if (this.period >= 3) {
       this.phase = 'MATCH_OVER';
@@ -400,6 +507,8 @@ export class MatchSimulation {
       p.stateTimer = 0;
       p.penaltyTravelPath = null;
       p.penaltyTravelProg = 0;
+      p.faceoffTravelPath = null;
+      p.faceoffTravelProg = 0;
       p.possessionTimer = 0;
       p.passCheckTimer = 0;
       p.fightPartnerId = null;
@@ -409,7 +518,7 @@ export class MatchSimulation {
       p.reactionColor = '#ffffff';
     }
 
-    this.setupFaceoff();
+    this.setupFaceoff(true);
   }
 
   public spawnCallout(text: string, pos: Vec2, color: string = '#f8fafc', durationSec: number = 2.2): void {
@@ -706,10 +815,19 @@ export class MatchSimulation {
       for (const p of this.players) {
         if (p.mode === 'PENALTY_BOX' && p.penaltyTravelPath) {
           this.updatePenaltyBoxTravel(p, dtSec);
+        } else if (p.faceoffTravelPath) {
+          this.updateFaceoffTravel(p, dtSec);
         }
       }
       this.phaseTimerSec -= dtSec;
       if (this.phaseTimerSec <= 0) {
+        for (const p of this.players) {
+          if (p.faceoffTravelPath) {
+            p.pos = { ...p.homeSpot };
+            p.vel = { x: 0, y: 0 };
+            p.faceoffTravelPath = null;
+          }
+        }
         this.phase = 'PLAYING';
         let angle = this.rng.range(0, Math.PI * 2);
         let nudgeSpeed = this.rng.range(45, 95);
@@ -782,6 +900,7 @@ export class MatchSimulation {
 
     // Check period end
     if (this.periodTimeRemainingSec <= 0) {
+      this.cancelFightsInProgress();
       this.audioHooks.onPeriodBuzzer?.();
       if (this.period >= 3) {
         this.phase = 'MATCH_OVER';
@@ -2498,6 +2617,7 @@ export class MatchSimulation {
     );
     this.audioHooks.onGoalHorn?.();
 
+    this.cancelFightsInProgress();
     this.phase = 'GOAL_CELEBRATION';
     this.phaseTimerSec = 2.6;
   }

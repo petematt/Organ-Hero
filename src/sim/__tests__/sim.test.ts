@@ -2012,6 +2012,124 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       expect(homeStriker.reactionTimer).toBe(0);
     });
   });
+
+  describe('faceoff natural movement and fight cancellation', () => {
+    it('moves players naturally to faceoff locations without teleporting on mid-game faceoff', () => {
+      const sim = new MatchSimulation(cloneConfig(), 8888);
+      sim.phase = 'PLAYING';
+
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+
+      // Position skaters far from their homeSpots (e.g. following goal mouth scramble)
+      homeS1.pos = { x: 120, y: 380 };
+      awayS1.pos = { x: 680, y: 80 };
+
+      const homeStartPos = { ...homeS1.pos };
+      const awayStartPos = { ...awayS1.pos };
+
+      sim.setupFaceoff();
+
+      // Skaters must NOT have instantly teleported to their homeSpot
+      expect(homeS1.pos.x).toBeCloseTo(homeStartPos.x, 1);
+      expect(homeS1.pos.y).toBeCloseTo(homeStartPos.y, 1);
+      expect(awayS1.pos.x).toBeCloseTo(awayStartPos.x, 1);
+      expect(awayS1.pos.y).toBeCloseTo(awayStartPos.y, 1);
+
+      expect(homeS1.faceoffTravelPath).toBeTruthy();
+      expect(awayS1.faceoffTravelPath).toBeTruthy();
+
+      // Advance through part of the countdown: players move smoothly toward spots
+      sim.step(0.4);
+      expect(homeS1.pos.x).not.toBeCloseTo(homeStartPos.x, 0);
+      expect(homeS1.pos.x).not.toBeCloseTo(homeS1.homeSpot.x, 0);
+      // Velocity is non-zero during the glide
+      expect(Math.hypot(homeS1.vel.x, homeS1.vel.y)).toBeGreaterThan(0);
+
+      expect(sim.phase).toBe('FACEOFF_COUNTDOWN');
+      while ((sim.phase as string) === 'FACEOFF_COUNTDOWN') {
+        sim.step(0.1);
+      }
+
+      expect(sim.phase).toBe('PLAYING');
+      expect(homeS1.pos.x).toBeCloseTo(homeS1.homeSpot.x, 2);
+      expect(homeS1.pos.y).toBeCloseTo(homeS1.homeSpot.y, 2);
+      expect(homeS1.vel.x).toBe(0);
+      expect(homeS1.vel.y).toBe(0);
+      expect(homeS1.faceoffTravelPath).toBeNull();
+    });
+
+    it('cancels any fight in progress when faceoff is initiated', () => {
+      const sim = new MatchSimulation(cloneConfig(), 8888);
+      sim.phase = 'PLAYING';
+
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+
+      awayS1.pos = { x: 300, y: 200 };
+      homeS1.pos = { x: 310, y: 205 };
+
+      sim.startFight(awayS1, homeS1);
+      expect(awayS1.mode).toBe('FIGHTING');
+      expect(homeS1.mode).toBe('FIGHTING');
+      expect(awayS1.fightPartnerId).toBe(homeS1.id);
+      expect(homeS1.fightPartnerId).toBe(awayS1.id);
+      expect(awayS1.isFightInstigator).toBe(true);
+
+      // Trigger faceoff while fight is actively underway
+      sim.setupFaceoff();
+
+      // Fight is cancelled: modes reset to DEFENDING, partner cleared, no penalty served
+      expect(awayS1.mode).toBe('DEFENDING');
+      expect(homeS1.mode).toBe('DEFENDING');
+      expect(awayS1.fightPartnerId).toBeNull();
+      expect(homeS1.fightPartnerId).toBeNull();
+      expect(awayS1.isFightInstigator).toBe(false);
+      expect(awayS1.fightPunchCooldown).toBeUndefined();
+
+      // Both players travel smoothly from their brawl spot to their faceoff spots
+      expect(awayS1.faceoffTravelPath).toBeTruthy();
+      expect(homeS1.faceoffTravelPath).toBeTruthy();
+    });
+
+    it('cancels fight in progress immediately when period ends', () => {
+      const sim = new MatchSimulation(cloneConfig(), 9999);
+      sim.phase = 'PLAYING';
+
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      sim.startFight(awayS1, homeS1);
+      expect(awayS1.mode).toBe('FIGHTING');
+
+      sim.periodTimeRemainingSec = 0.05;
+      sim.step(0.1);
+
+      expect(sim.phase).toBe('PERIOD_END');
+      expect(awayS1.mode).toBe('DEFENDING');
+      expect(homeS1.mode).toBe('DEFENDING');
+      expect(awayS1.fightPartnerId).toBeNull();
+      expect(homeS1.fightPartnerId).toBeNull();
+    });
+
+    it('does not move penalized players in penalty box to faceoff spots', () => {
+      const sim = new MatchSimulation(cloneConfig(), 1234);
+      sim.phase = 'PLAYING';
+
+      const penalized = sim.players.find((p) => p.id === 'away-s1')!;
+      penalized.mode = 'PENALTY_BOX';
+      penalized.stateTimer = 25;
+      const boxPos = sim.getPenaltyBoxPos(penalized.team, penalized.id);
+      penalized.pos = { ...boxPos };
+
+      sim.setupFaceoff();
+
+      // Penalized player remains in the box and does NOT glide to faceoff spot
+      expect(penalized.mode).toBe('PENALTY_BOX');
+      expect(penalized.faceoffTravelPath).toBeFalsy();
+      expect(penalized.pos.x).toBeCloseTo(boxPos.x, 2);
+      expect(penalized.pos.y).toBeCloseTo(boxPos.y, 2);
+    });
+  });
 });
 
 

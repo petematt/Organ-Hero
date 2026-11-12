@@ -103,6 +103,11 @@ export interface PlayerEntity {
   penaltyTravelPath?: BezierPath | null;
   penaltyTravelProg?: number;
   penaltyTravelDurationSec?: number;
+  faceoffTravelPath?: BezierPath | null;
+  faceoffTravelProg?: number;
+  faceoffTravelElapsedSec?: number;
+  faceoffTravelDurationSec?: number;
+  faceoffStaggerSec?: number;
 
   // Visual reaction timer on song tap
   reactionTimer: number;
