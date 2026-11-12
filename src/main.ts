@@ -89,6 +89,7 @@ class OrganHeroApp {
     this.renderer = new RinkRenderer(canvas, {
       onContinueNextPeriod: () => {
         this.sim.startNextPeriod();
+        this.renderer.beginPeriodSkateOn();
         this.isPaused = false;
         this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
       },
@@ -170,6 +171,7 @@ class OrganHeroApp {
       },
       onContinueNextPeriod: () => {
         this.sim.startNextPeriod();
+        this.renderer.beginPeriodSkateOn();
         this.isPaused = false;
         this.synth.setCrowdVolume(this.sim.crowdVolume, false);
       },
@@ -417,6 +419,7 @@ class OrganHeroApp {
     }
     this.bindAudioHooks();
     this.bindVisualHooks();
+    this.renderer.beginPeriodSkateOn();
     this.hasStartedMatch = true;
     this.isPaused = false;
     this.simAccumulatorSec = 0;

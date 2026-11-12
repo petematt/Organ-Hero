@@ -1,5 +1,5 @@
 import { evaluateOrder, getOrderById } from '../game/orders';
-import { doesSongAffectTeam, SONGS } from '../game/songs';
+import { doesSongAffectTeam, isSongValidOnIce, SONGS } from '../game/songs';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { MatchSimulation } from '../sim/match';
 import {
@@ -103,6 +103,11 @@ export class RinkRenderer {
   private intermissionZoomBlend: number = 0; // 0 = normal play view, 1 = full-screen center ice
   private skateOffStartPos: Map<string, Vec2> = new Map();
 
+  // Period start skate-on entrance state (players skate onto the ice from off-ice bench doors)
+  private isPeriodSkateOnActive: boolean = false;
+  private periodSkateOnElapsedSec: number = 0;
+  private readonly periodSkateOnDurationSec: number = 1.15;
+
   // Vertical drag scrolling on zoomed-in ice
   private iceScrollFocusY: number = 148;
   private iceScrollVelY: number = 0;
@@ -179,12 +184,25 @@ export class RinkRenderer {
     return this.isIceSummaryActive || this.isZamboniClearing;
   }
 
+  public isSkateOnEntranceActive(): boolean {
+    return this.isPeriodSkateOnActive;
+  }
+
+  /**
+   * Triggered at the start of each period so players skate onto the ice from off-ice bench doors.
+   */
+  public beginPeriodSkateOn(): void {
+    this.isPeriodSkateOnActive = true;
+    this.periodSkateOnElapsedSec = 0;
+  }
+
   /**
    * Triggered when a period ends (PERIOD_END) or the match ends (MATCH_OVER).
    * Players skate off the ice, UI above/below retracts, and camera zooms in on center ice.
    */
   public beginIceSummary(sim: MatchSimulation, tips?: TipOffer[]): void {
     this.isIceSummaryActive = true;
+    this.isPeriodSkateOnActive = false;
     this.isZamboniClearing = false;
     this.zamboniProgress = 0;
     this.summaryEnterElapsedSec = 0;
@@ -209,6 +227,8 @@ export class RinkRenderer {
    */
   public resetIceSummaryImmediate(): void {
     this.isIceSummaryActive = false;
+    this.isPeriodSkateOnActive = false;
+    this.periodSkateOnElapsedSec = 0;
     this.isZamboniClearing = false;
     this.zamboniProgress = 0;
     this.intermissionZoomBlend = 0;
@@ -503,6 +523,16 @@ export class RinkRenderer {
       }
     } else {
       this.intermissionZoomBlend = 0;
+      if (this.isPeriodSkateOnActive) {
+        if (sim.phase !== 'FACEOFF_COUNTDOWN') {
+          this.isPeriodSkateOnActive = false;
+        } else {
+          this.periodSkateOnElapsedSec += realDtSec;
+          if (this.periodSkateOnElapsedSec >= this.periodSkateOnDurationSec) {
+            this.isPeriodSkateOnActive = false;
+          }
+        }
+      }
     }
 
     // Compute normal play layout bounds between HUD and Organ Console
@@ -742,6 +772,74 @@ export class RinkRenderer {
         this.drawPlayer(ctx, tempPlayer, sim, false);
         ctx.restore();
       }
+      return;
+    }
+
+    if (this.isPeriodSkateOnActive && sim.phase === 'FACEOFF_COUNTDOWN') {
+      const rawProg = clamp(
+        this.periodSkateOnElapsedSec / this.periodSkateOnDurationSec,
+        0,
+        1
+      );
+
+      ctx.save();
+      this.roundedRinkPath(ctx);
+      ctx.clip();
+
+      const entranceItems: { player: PlayerEntity; alpha: number }[] = [];
+      for (const p of sim.players) {
+        // Stagger entrance slightly by role/slot so skaters file through the bench doors naturally
+        const stagger =
+          p.role === 'goalie' ? 0.0 : p.id.endsWith('1') ? 0.08 : 0.16;
+        const pRaw = clamp((rawProg - stagger) / (1 - stagger), 0, 1);
+        // Smooth ease-out cubic so skaters burst onto the ice and coast cleanly onto their marks
+        const s = 1 - Math.pow(1 - pRaw, 3);
+
+        const doorX =
+          p.team === 'home'
+            ? CENTER_X - (p.role === 'goalie' ? 74 : p.id.endsWith('1') ? 58 : 44)
+            : CENTER_X + (p.role === 'goalie' ? 74 : p.id.endsWith('1') ? 58 : 44);
+        const startPos: Vec2 = { x: doorX, y: RINK_HEIGHT + 30 };
+        const endPos: Vec2 = p.homeSpot;
+
+        // Curved control point sweeping out onto open ice before settling at faceoff/crease spot
+        const ctrlPos: Vec2 = {
+          x: startPos.x * 0.45 + endPos.x * 0.55,
+          y: Math.min(RINK_HEIGHT - 36, endPos.y + 85),
+        };
+
+        const omt = 1 - s;
+        const curPos: Vec2 = {
+          x: omt * omt * startPos.x + 2 * omt * s * ctrlPos.x + s * s * endPos.x,
+          y: omt * omt * startPos.y + 2 * omt * s * ctrlPos.y + s * s * endPos.y,
+        };
+
+        // Derivative for realistic speed-streak orientation while gliding onto the ice
+        const dx =
+          2 * omt * (ctrlPos.x - startPos.x) + 2 * s * (endPos.x - ctrlPos.x);
+        const dy =
+          2 * omt * (ctrlPos.y - startPos.y) + 2 * s * (endPos.y - ctrlPos.y);
+
+        const tempPlayer: PlayerEntity = {
+          ...p,
+          pos: curPos,
+          vel: pRaw < 0.96 ? { x: dx * 0.75, y: dy * 0.75 } : { x: 0, y: 0 },
+        };
+
+        const alpha = clamp(pRaw / 0.18, 0, 1);
+        entranceItems.push({ player: tempPlayer, alpha });
+      }
+
+      entranceItems.sort((a, b) => a.player.pos.y - b.player.pos.y);
+      for (const item of entranceItems) {
+        if (item.alpha <= 0.01) continue;
+        ctx.save();
+        ctx.globalAlpha = item.alpha;
+        this.drawPlayer(ctx, item.player, sim, item.alpha > 0.75);
+        ctx.restore();
+      }
+
+      ctx.restore();
       return;
     }
 
@@ -1925,13 +2023,6 @@ export class RinkRenderer {
     ctx.fill();
     ctx.clip();
 
-    // Active song subtle ice tint
-    if (sim.activeSong && !this.isIceSummaryActive) {
-      const songColor = SONGS[sim.activeSong.songId].color;
-      ctx.fillStyle = songColor + '16';
-      ctx.fillRect(0, 0, RINK_WIDTH, RINK_HEIGHT);
-    }
-
     // Goal lines (red, thin)
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.55)';
     ctx.lineWidth = 3;
@@ -2001,15 +2092,68 @@ export class RinkRenderer {
 
     ctx.restore();
 
-    // Outer rink boards border
+    // Outer rink boards border & pulsing stadium wall energy when a song is active
     ctx.save();
-    this.roundedRinkPath(ctx);
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 8;
-    ctx.stroke();
-    ctx.strokeStyle = '#f59e0b'; // Yellow kickplate highlight
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const activeSongValid =
+      sim.activeSong !== null &&
+      !this.isIceSummaryActive &&
+      isSongValidOnIce(sim.activeSong.songId, sim.players);
+
+    if (activeSongValid && sim.activeSong) {
+      const songColor = SONGS[sim.activeSong.songId].color;
+      // Fast rhythmic stadium pulse + secondary harmonic shimmer
+      const pulse = 0.5 + 0.5 * Math.sin(this.animTime * 9.5);
+      const shimmer = 0.5 + 0.5 * Math.sin(this.animTime * 19.0 + 1.1);
+      // Smoothly taper glow during the final 0.5s of the song
+      const fadeEnvelope = clamp(sim.activeSong.remainingSec / 0.5, 0, 1);
+
+      // 1. Wide outer atmospheric energy halo radiating from the stadium walls
+      ctx.save();
+      this.roundedRinkPath(ctx);
+      ctx.strokeStyle = songColor;
+      ctx.globalAlpha = (0.28 + 0.34 * pulse) * fadeEnvelope;
+      ctx.lineWidth = 14 + 8 * pulse;
+      ctx.shadowColor = songColor;
+      ctx.shadowBlur = 18 + 16 * pulse;
+      ctx.stroke();
+      ctx.restore();
+
+      // 2. Crisp stadium boards base
+      this.roundedRinkPath(ctx);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
+      // 3. Vibrant pulsing neon wall conduit along the boards
+      ctx.save();
+      this.roundedRinkPath(ctx);
+      ctx.strokeStyle = songColor;
+      ctx.globalAlpha = (0.72 + 0.28 * pulse) * fadeEnvelope;
+      ctx.lineWidth = 4.5 + 2.5 * pulse;
+      ctx.shadowColor = songColor;
+      ctx.shadowBlur = 10 + 10 * pulse;
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. Traveling high-energy plasma surges racing around the stadium perimeter
+      ctx.save();
+      this.roundedRinkPath(ctx);
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = (0.55 + 0.40 * shimmer) * fadeEnvelope;
+      ctx.lineWidth = 2.4;
+      ctx.setLineDash([48, 120]);
+      ctx.lineDashOffset = -this.animTime * 260;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      this.roundedRinkPath(ctx);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      ctx.strokeStyle = '#f59e0b'; // Yellow kickplate highlight
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -2053,7 +2197,7 @@ export class RinkRenderer {
   }
 
   private updateIceWear(sim: MatchSimulation, dt: number): void {
-    if (this.isIceSummaryActive || this.isZamboniClearing) return;
+    if (this.isIceSummaryActive || this.isZamboniClearing || this.isPeriodSkateOnActive) return;
 
     // 1. Match progress builds corner snow and ice shavings
     const periodDuration = Math.max(1, sim.cfg.periodDurationSec ?? 120);

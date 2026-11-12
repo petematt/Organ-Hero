@@ -1,6 +1,5 @@
 import { CampaignManager } from '../campaign/campaignState';
 import { TipOffer } from '../campaign/tips';
-import { evaluateOrder, getOrderById } from '../game/orders';
 import {
   getPowerPlayState,
   getSongTooltip,
@@ -21,13 +20,6 @@ export class HudController {
 
   private crowdPctEl = document.getElementById('crowd-pct')!;
   private crowdBarFillEl = document.getElementById('crowd-bar-fill')!;
-  private hudOrderTitleEl = document.getElementById('hud-order-title')!;
-  private hudOrderStatusEl = document.getElementById('hud-order-status')!;
-  private hudTipBoxEl = document.getElementById('hud-tip-box');
-  private hudTipTitleEl = document.getElementById('hud-tip-title');
-  private hudTipStatusEl = document.getElementById('hud-tip-status');
-
-  private edgeTintEl = document.getElementById('edge-tint')!;
 
   private musicStandButtonsEl = document.querySelector(
     '.music-stand-buttons'
@@ -74,7 +66,7 @@ export class HudController {
 
   public update(
     sim: MatchSimulation,
-    activeTips?: TipOffer[],
+    _activeTips?: TipOffer[],
     campaignMgr?: CampaignManager
   ): void {
     const loadout = sim.getActiveSongLoadout();
@@ -108,60 +100,6 @@ export class HudController {
         : crowdRounded <= 30
         ? 'crowd-low'
         : 'crowd-mid');
-
-    // Active Official Order Status
-    const orderDef = getOrderById(sim.orderId);
-    const evalRes = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: sim.phase === 'MATCH_OVER',
-    });
-
-    this.hudOrderTitleEl.textContent = orderDef.shortLabel;
-    this.hudOrderTitleEl.title = `${orderDef.title}: ${orderDef.description} (${evalRes.reason})`;
-
-    if (evalRes.liveStatus === 'ON_TRACK' || evalRes.liveStatus === 'PASSED') {
-      this.hudOrderStatusEl.textContent = 'OK';
-      this.hudOrderStatusEl.className = 'order-status-pill status-track';
-    } else if (evalRes.liveStatus === 'AT_RISK') {
-      this.hudOrderStatusEl.textContent = 'RISK';
-      this.hudOrderStatusEl.className = 'order-status-pill status-risk';
-    } else {
-      this.hudOrderStatusEl.textContent = 'FAIL';
-      this.hudOrderStatusEl.className = 'order-status-pill status-fail';
-    }
-
-    // Active Intermission Tip Status
-    const acceptedTip = activeTips?.find(
-      (t) => t.status === 'ACCEPTED' || t.status === 'PASSED'
-    );
-    if (acceptedTip && this.hudTipBoxEl && this.hudTipTitleEl && this.hudTipStatusEl) {
-      this.hudTipBoxEl.classList.remove('hidden');
-      this.hudTipTitleEl.textContent = acceptedTip.conditionDescription;
-      this.hudTipTitleEl.title = `${acceptedTip.senderName}: ${acceptedTip.flavorText} (${acceptedTip.liveProgressText})`;
-      if (acceptedTip.status === 'PASSED') {
-        this.hudTipStatusEl.textContent = `DONE (+$${acceptedTip.bribePayout})`;
-        this.hudTipStatusEl.className = 'tip-status-pill status-track';
-      } else {
-        this.hudTipStatusEl.textContent = `+$${acceptedTip.bribePayout}`;
-        this.hudTipStatusEl.className = 'tip-status-pill status-risk';
-      }
-    } else if (this.hudTipBoxEl) {
-      this.hudTipBoxEl.classList.add('hidden');
-    }
-
-    // Screen-edge tint while a song is active
-    if (sim.activeSong) {
-      const sDef = SONGS[sim.activeSong.songId];
-      const validNow = isSongValidOnIce(sim.activeSong.songId, sim.players);
-      this.edgeTintEl.style.boxShadow = validNow
-        ? `inset 0 0 36px ${sDef.color}55`
-        : 'none';
-    } else {
-      this.edgeTintEl.style.boxShadow = 'none';
-    }
 
     const pp = getPowerPlayState(sim.players);
 

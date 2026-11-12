@@ -429,13 +429,6 @@ body {
   touch-action: none;
 }
 
-.edge-tint {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  transition: box-shadow 0.25s ease;
-}
-
 /* Bottom Pipe Organ Music Stand Console — sleek single-row layout */
 .organ-console {
   position: relative;
@@ -477,10 +470,11 @@ body {
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   border: 2px solid #475569;
   color: var(--text-primary);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: space-between;
   gap: 2px;
   min-width: 0;
@@ -559,7 +553,9 @@ body {
 .song-btn-top {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -581,7 +577,6 @@ body {
 }
 
 .stale-badge {
-  margin-left: auto;
   background: #be123c;
   color: #fff;
   font-family: 'Chakra Petch', sans-serif;
@@ -595,6 +590,8 @@ body {
 .song-btn-desc {
   font-size: 10px;
   color: #cbd5e1;
+  width: 100%;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -603,7 +600,9 @@ body {
 .song-btn-target {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
+  width: 100%;
   font-size: 10px;
   color: #94a3b8;
   white-space: nowrap;

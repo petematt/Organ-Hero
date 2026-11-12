@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloneConfig } from '../../config';
 import { MatchSimulation } from '../match';
+import { RINK_HEIGHT } from '../physics';
+import { PlayerEntity } from '../types';
+import { SONGS } from '../../game/songs';
+import { HudController } from '../../ui/hud';
+import { RinkRenderer } from '../../ui/rinkRenderer';
 import { ScreenModalManager } from '../../ui/screens';
 import { TipOffer } from '../../campaign/tips';
 
@@ -236,5 +241,357 @@ describe('End-of-Game UI Improvements', () => {
     expect(btnMatch![1].trim()).toBe('Drop the puck');
   });
 });
+
+interface RecordedStroke {
+  strokeStyle: unknown;
+  shadowColor: string;
+  shadowBlur: number;
+  lineWidth: number;
+  globalAlpha: number;
+  lineDash: number[];
+}
+
+function createMockCanvasEnvironment() {
+  const strokes: RecordedStroke[] = [];
+
+  const createCtx = () => {
+    const stateStack: Array<{
+      strokeStyle: unknown;
+      fillStyle: unknown;
+      shadowColor: string;
+      shadowBlur: number;
+      lineWidth: number;
+      globalAlpha: number;
+      lineDash: number[];
+    }> = [];
+
+    const state = {
+      strokeStyle: '#000000' as unknown,
+      fillStyle: '#000000' as unknown,
+      shadowColor: 'transparent',
+      shadowBlur: 0,
+      lineWidth: 1,
+      globalAlpha: 1,
+      lineDash: [] as number[],
+      lineDashOffset: 0,
+      font: '12px sans-serif',
+      textAlign: 'left',
+      textBaseline: 'alphabetic',
+    };
+
+    const gradientStub = {
+      addColorStop: vi.fn(),
+    };
+
+    return new Proxy(state, {
+      get(target, prop: string) {
+        if (prop === 'save') {
+          return () => {
+            stateStack.push({
+              ...target,
+              lineDash: [...target.lineDash],
+            });
+          };
+        }
+        if (prop === 'restore') {
+          return () => {
+            const prev = stateStack.pop();
+            if (prev) {
+              Object.assign(target, prev);
+            }
+          };
+        }
+        if (prop === 'setLineDash') {
+          return (dash: number[]) => {
+            target.lineDash = [...dash];
+          };
+        }
+        if (prop === 'stroke') {
+          return () => {
+            strokes.push({
+              strokeStyle: target.strokeStyle,
+              shadowColor: target.shadowColor,
+              shadowBlur: target.shadowBlur,
+              lineWidth: target.lineWidth,
+              globalAlpha: target.globalAlpha,
+              lineDash: [...target.lineDash],
+            });
+          };
+        }
+        if (
+          prop === 'createLinearGradient' ||
+          prop === 'createRadialGradient'
+        ) {
+          return () => gradientStub;
+        }
+        if (prop === 'measureText') {
+          return (text: string) => ({ width: text.length * 7 });
+        }
+        if (prop in target) {
+          return (target as Record<string, unknown>)[prop];
+        }
+        return vi.fn();
+      },
+      set(target, prop: string, value: unknown) {
+        (target as Record<string, unknown>)[prop] = value;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+  };
+
+  const createCanvas = () =>
+    ({
+      width: 1280,
+      height: 720,
+      style: { width: '', height: '', cursor: '' },
+      parentElement: {
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 1280,
+          height: 720,
+        }),
+      },
+      getBoundingClientRect: () => ({
+        left: 0,
+        top: 0,
+        width: 1280,
+        height: 720,
+      }),
+      getContext: () => createCtx(),
+      addEventListener: vi.fn(),
+      setPointerCapture: vi.fn(),
+    }) as unknown as HTMLCanvasElement;
+
+  return { createCanvas, strokes };
+}
+
+describe('Game UI Cleanup', () => {
+  const fsMod = (
+    globalThis as unknown as {
+      process: {
+        getBuiltinModule: (name: string) => {
+          readFileSync: (filePath: string, encoding: string) => string;
+        };
+      };
+    }
+  ).process.getBuiltinModule('node:fs');
+  const indexHtml = fsMod.readFileSync('index.html', 'utf8');
+  const styleCss = fsMod.readFileSync('src/style.css', 'utf8');
+
+  it('removes the orders and tips callouts at the top of the screen and screen-edge tint from index.html', () => {
+    expect(indexHtml).not.toContain('id="hud-order-box"');
+    expect(indexHtml).not.toContain('id="hud-tip-box"');
+    expect(indexHtml).not.toContain('id="hud-order-title"');
+    expect(indexHtml).not.toContain('id="hud-tip-title"');
+    expect(indexHtml).not.toContain('id="edge-tint"');
+    expect(styleCss).not.toContain('.edge-tint');
+  });
+
+  it('updates HudController cleanly without orders/tips callouts or edge-tint DOM nodes', () => {
+    const elementMap = new Map<string, Record<string, unknown>>();
+    const makeDomNode = (): Record<string, unknown> => ({
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      title: '',
+      disabled: false,
+      style: { width: '', boxShadow: '', background: '' },
+      classList: {
+        add: vi.fn(),
+        remove: vi.fn(),
+        toggle: vi.fn(),
+        contains: vi.fn().mockReturnValue(false),
+      },
+      addEventListener: vi.fn(),
+      appendChild: vi.fn(),
+      querySelector: () => makeDomNode(),
+    });
+
+    (globalThis as unknown as { document: unknown }).document = {
+      getElementById: (id: string) => {
+        // Explicitly return null for removed elements to prove HudController never queries them
+        if (
+          id === 'hud-order-box' ||
+          id === 'hud-order-title' ||
+          id === 'hud-order-status' ||
+          id === 'hud-tip-box' ||
+          id === 'hud-tip-title' ||
+          id === 'hud-tip-status' ||
+          id === 'edge-tint'
+        ) {
+          return null;
+        }
+        if (!elementMap.has(id)) {
+          elementMap.set(id, makeDomNode());
+        }
+        return elementMap.get(id);
+      },
+      querySelector: () => makeDomNode(),
+      createElement: () => makeDomNode(),
+    };
+
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    sim.playSong('charge');
+    const hud = new HudController();
+
+    expect(() => hud.update(sim)).not.toThrow();
+  });
+
+  it('horizontally centers text and content inside song buttons in style.css', () => {
+    const songBtnBlock = styleCss.match(/\.song-btn\s*\{([\s\S]*?)\}/);
+    expect(songBtnBlock).not.toBeNull();
+    expect(songBtnBlock![1]).toContain('text-align: center');
+    expect(songBtnBlock![1]).toContain('align-items: center');
+
+    const songBtnTopBlock = styleCss.match(/\.song-btn-top\s*\{([\s\S]*?)\}/);
+    expect(songBtnTopBlock).not.toBeNull();
+    expect(songBtnTopBlock![1]).toContain('justify-content: center');
+
+    const songBtnDescBlock = styleCss.match(/\.song-btn-desc\s*\{([\s\S]*?)\}/);
+    expect(songBtnDescBlock).not.toBeNull();
+    expect(songBtnDescBlock![1]).toContain('text-align: center');
+
+    const songBtnTargetBlock = styleCss.match(/\.song-btn-target\s*\{([\s\S]*?)\}/);
+    expect(songBtnTargetBlock).not.toBeNull();
+    expect(songBtnTargetBlock![1]).toContain('justify-content: center');
+  });
+
+  it('pulses the stadium walls with glowing energy when a song is active', () => {
+    const { createCanvas, strokes } = createMockCanvasEnvironment();
+    (globalThis as unknown as { window: unknown }).window = {
+      devicePixelRatio: 1,
+      addEventListener: vi.fn(),
+    };
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: () => createCanvas(),
+      getElementById: () => ({
+        offsetHeight: 48,
+        classList: { add: vi.fn(), remove: vi.fn() },
+      }),
+    };
+
+    const renderer = new RinkRenderer(createCanvas());
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    sim.phase = 'PLAYING';
+
+    // Baseline without active song: no stadium wall shadow glow in song color
+    strokes.length = 0;
+    renderer.render(sim, 0.05);
+    const chargeColor = SONGS.charge.color;
+    const baselineGlowStrokes = strokes.filter(
+      (s) => s.shadowColor === chargeColor && s.shadowBlur > 0
+    );
+    expect(baselineGlowStrokes.length).toBe(0);
+
+    // Activate Charge! song: stadium walls emit pulsing neon glow & traveling surges
+    sim.playSong('charge');
+    strokes.length = 0;
+    renderer.render(sim, 0.12);
+
+    const activeGlowStrokes = strokes.filter(
+      (s) =>
+        s.strokeStyle === chargeColor &&
+        s.shadowColor === chargeColor &&
+        s.shadowBlur >= 10
+    );
+    expect(activeGlowStrokes.length).toBeGreaterThanOrEqual(2);
+
+    // Verify pulsing changes intensity over time
+    const firstBlur = activeGlowStrokes[0].shadowBlur;
+    strokes.length = 0;
+    renderer.render(sim, 0.18);
+    const nextGlowStrokes = strokes.filter(
+      (s) =>
+        s.strokeStyle === chargeColor &&
+        s.shadowColor === chargeColor &&
+        s.shadowBlur >= 10
+    );
+    expect(nextGlowStrokes[0].shadowBlur).not.toBeCloseTo(firstBlur, 3);
+  });
+
+  it('animates players skating onto the ice from off-ice when setting up for each period to start', () => {
+    const { createCanvas } = createMockCanvasEnvironment();
+    (globalThis as unknown as { window: unknown }).window = {
+      devicePixelRatio: 1,
+      addEventListener: vi.fn(),
+    };
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: () => createCanvas(),
+      getElementById: () => ({
+        offsetHeight: 48,
+        classList: { add: vi.fn(), remove: vi.fn() },
+      }),
+    };
+
+    const renderer = new RinkRenderer(createCanvas());
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    expect(sim.phase).toBe('FACEOFF_COUNTDOWN');
+
+    const drawnPositionsByFrame: Array<Map<string, { x: number; y: number }>> = [];
+    const origDrawPlayer = (
+      renderer as unknown as {
+        drawPlayer: (
+          ctx: CanvasRenderingContext2D,
+          p: PlayerEntity,
+          s: MatchSimulation,
+          showReactions: boolean
+        ) => void;
+      }
+    ).drawPlayer.bind(renderer);
+
+    vi.spyOn(
+      renderer as unknown as {
+        drawPlayer: (
+          ctx: CanvasRenderingContext2D,
+          p: PlayerEntity,
+          s: MatchSimulation,
+          showReactions: boolean
+        ) => void;
+      },
+      'drawPlayer'
+    ).mockImplementation((ctx, p, s, showReactions) => {
+      const currentMap = drawnPositionsByFrame[drawnPositionsByFrame.length - 1];
+      if (currentMap) {
+        currentMap.set(p.id, { x: p.pos.x, y: p.pos.y });
+      }
+      origDrawPlayer(ctx, p, s, showReactions);
+    });
+
+    renderer.beginPeriodSkateOn();
+    expect(renderer.isSkateOnEntranceActive()).toBe(true);
+
+    const homeGoalie = sim.players.find(
+      (p) => p.team === 'home' && p.role === 'goalie'
+    )!;
+
+    // Early frame (0.08s into period setup): skaters are entering from near/beyond bottom boards (y > homeSpot.y)
+    drawnPositionsByFrame.push(new Map());
+    renderer.render(sim, 0.08);
+    const earlyPositions = drawnPositionsByFrame[0];
+    const goalieEarly = earlyPositions.get(homeGoalie.id);
+    expect(goalieEarly).toBeDefined();
+    expect(goalieEarly!.y).toBeGreaterThan(RINK_HEIGHT - 40);
+    expect(goalieEarly!.y).toBeGreaterThan(homeGoalie.homeSpot.y + 100);
+
+    // Mid-entrance frame (0.55s total): skaters are gliding smoothly toward their faceoff spots
+    drawnPositionsByFrame.push(new Map());
+    renderer.render(sim, 0.47);
+    const midPositions = drawnPositionsByFrame[1];
+    const goalieMid = midPositions.get(homeGoalie.id)!;
+    expect(goalieMid.y).toBeLessThan(goalieEarly!.y);
+    expect(goalieMid.y).toBeGreaterThan(homeGoalie.homeSpot.y);
+
+    // Completion frame (> 1.15s total): entrance completes and players are settled at exact homeSpots
+    drawnPositionsByFrame.push(new Map());
+    renderer.render(sim, 0.7);
+    expect(renderer.isSkateOnEntranceActive()).toBe(false);
+    const finalPositions = drawnPositionsByFrame[2];
+    for (const p of sim.players) {
+      expect(finalPositions.get(p.id)).toEqual(p.homeSpot);
+    }
+  });
+});
+
 
 
