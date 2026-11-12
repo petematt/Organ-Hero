@@ -599,6 +599,126 @@ describe('Game UI Cleanup', () => {
       expect(finalPositions.get(p.id)).toEqual(p.homeSpot);
     }
   });
+
+  it('smoothly collapses the penalty box as players exit the ice when a period ends', () => {
+    const { createCanvas } = createMockCanvasEnvironment();
+    (globalThis as unknown as { window: unknown }).window = {
+      devicePixelRatio: 1,
+      addEventListener: vi.fn(),
+    };
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: () => createCanvas(),
+      getElementById: () => ({
+        offsetHeight: 48,
+        classList: { add: vi.fn(), remove: vi.fn() },
+      }),
+    };
+
+    const renderer = new RinkRenderer(createCanvas());
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    sim.phase = 'PLAYING';
+
+    const pHome = sim.players.find((p) => p.team === 'home')!;
+    pHome.mode = 'PENALTY_BOX';
+    pHome.stateTimer = 20;
+
+    // Render several frames during active play to expand the penalty box to 1.0
+    for (let i = 0; i < 15; i++) {
+      renderer.render(sim, 0.05);
+    }
+    expect(renderer.getPenaltyBoxExpand('home')).toBeCloseTo(1.0, 1);
+
+    // Period ends: trigger intermission ice summary
+    sim.phase = 'PERIOD_END';
+    sim.periodTimeRemainingSec = 0;
+    renderer.beginIceSummary(sim);
+
+    // At start of skate-off (0.0s), initial expansion is recorded
+    renderer.render(sim, 0.0);
+    expect(renderer.getPenaltyBoxExpand('home')).toBeCloseTo(1.0, 1);
+
+    // Halfway through skate-off (~0.475s of 0.95s duration), penalty box is halfway collapsed
+    renderer.render(sim, 0.475);
+    expect(renderer.getPenaltyBoxExpand('home')).toBeCloseTo(0.5, 1);
+
+    // At skate-off completion (0.95s total), penalty box is fully collapsed to 0
+    renderer.render(sim, 0.475);
+    expect(renderer.getPenaltyBoxExpand('home')).toBe(0);
+
+    // Stays collapsed for remaining intermission frames
+    renderer.render(sim, 0.5);
+    expect(renderer.getPenaltyBoxExpand('home')).toBe(0);
+  });
+
+  it('deactivates penalty alert styling and suppresses countdown timers during period end', () => {
+    const { createCanvas, strokes } = createMockCanvasEnvironment();
+    (globalThis as unknown as { window: unknown }).window = {
+      devicePixelRatio: 1,
+      addEventListener: vi.fn(),
+    };
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: () => createCanvas(),
+      getElementById: () => ({
+        offsetHeight: 48,
+        classList: { add: vi.fn(), remove: vi.fn() },
+      }),
+    };
+
+    const renderer = new RinkRenderer(createCanvas());
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    sim.phase = 'PLAYING';
+
+    const pHome = sim.players.find((p) => p.team === 'home')!;
+    pHome.mode = 'PENALTY_BOX';
+    pHome.stateTimer = 25;
+
+    // Normal play with active penalty: outer border gets alert glow
+    renderer.render(sim, 0.3);
+    const homeAlertColor = '#38bdf8';
+    const activeGlows = strokes.filter(
+      (s) => s.strokeStyle === homeAlertColor && s.shadowBlur > 0
+    );
+    expect(activeGlows.length).toBeGreaterThan(0);
+
+    // Now period ends
+    sim.phase = 'PERIOD_END';
+    renderer.beginIceSummary(sim);
+    strokes.length = 0;
+
+    // Render during intermission skate-off
+    renderer.render(sim, 0.2);
+    const periodEndGlows = strokes.filter(
+      (s) => s.strokeStyle === homeAlertColor && s.shadowBlur > 0
+    );
+    // Glow is deactivated during period end; border uses primary trim
+    expect(periodEndGlows.length).toBe(0);
+  });
+
+  it('resets penalty box collapse state on resetIceSummaryImmediate', () => {
+    const { createCanvas } = createMockCanvasEnvironment();
+    (globalThis as unknown as { window: unknown }).window = {
+      devicePixelRatio: 1,
+      addEventListener: vi.fn(),
+    };
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: () => createCanvas(),
+      getElementById: () => ({
+        offsetHeight: 48,
+        classList: { add: vi.fn(), remove: vi.fn() },
+      }),
+    };
+
+    const renderer = new RinkRenderer(createCanvas());
+    const sim = new MatchSimulation(cloneConfig(), 4242, 'home_wins');
+    sim.phase = 'PLAYING';
+    const pHome = sim.players.find((p) => p.team === 'home')!;
+    pHome.mode = 'PENALTY_BOX';
+    for (let i = 0; i < 10; i++) renderer.render(sim, 0.05);
+
+    renderer.resetIceSummaryImmediate();
+    expect(renderer.getPenaltyBoxExpand('home')).toBe(0);
+    expect(renderer.getPenaltyBoxExpand('away')).toBe(0);
+  });
 });
 
 

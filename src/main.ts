@@ -21,6 +21,7 @@ function parseUrlParams(): {
   steps: number | null;
   penalty: boolean;
   brawl: boolean;
+  period_end: boolean;
 } {
   const params = new URLSearchParams(window.location.search);
   const seedRaw = params.get('seed');
@@ -31,6 +32,7 @@ function parseUrlParams(): {
   const autostart = params.get('autostart') === '1';
   const penalty = params.get('penalty') === '1';
   const brawl = params.get('brawl') === '1';
+  const periodEnd = params.get('period_end') === '1';
   const screen = params.get('screen');
   return {
     seed: Number.isNaN(parsedSeed) ? null : parsedSeed,
@@ -40,6 +42,7 @@ function parseUrlParams(): {
     steps: Number.isNaN(parsedSteps) ? null : parsedSteps,
     penalty,
     brawl,
+    period_end: periodEnd,
   };
 }
 
@@ -285,6 +288,23 @@ class OrganHeroApp {
       if (pHome && pAway) {
         this.sim.startFight(pHome, pAway);
       }
+    }
+
+    if (urlOpts.period_end) {
+      this.screens.hide();
+      this.hasStartedMatch = true;
+      this.isPaused = true;
+      this.sim.phase = 'PERIOD_END';
+      this.sim.periodTimeRemainingSec = 0;
+      if (!urlOpts.penalty) {
+        const pHome = this.sim.players.find((p) => p.team === 'home');
+        if (pHome) {
+          pHome.mode = 'PENALTY_BOX';
+          pHome.stateTimer = 18;
+          pHome.pos = { x: 500 - 75 - 20, y: 28 };
+        }
+      }
+      this.renderer.beginIceSummary(this.sim, this.campaign.getActiveTips());
     }
 
     requestAnimationFrame((t) => this.loop(t));

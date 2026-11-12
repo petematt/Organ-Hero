@@ -137,10 +137,15 @@ export class RinkRenderer {
   private lastScreenCenterY: number = 0;
   private lastCssScale: number = 1;
   private penaltyBoxExpand: Record<Team, number> = { home: 0, away: 0 };
+  private penaltyBoxCollapseStart: Record<Team, number> = { home: 0, away: 0 };
 
   // Offscreen canvas used so the Zamboni's 2-loop path erases the on-ice stats like a real squeegee
   private summaryCanvas: HTMLCanvasElement;
   private summaryCtx: CanvasRenderingContext2D;
+
+  public getPenaltyBoxExpand(team: Team): number {
+    return this.penaltyBoxExpand[team];
+  }
 
   constructor(canvas: HTMLCanvasElement, callbacks?: IceSummaryCallbacks) {
     this.canvas = canvas;
@@ -214,6 +219,10 @@ export class RinkRenderer {
     this.iceScrollFocusY = 148;
     this.iceScrollVelY = 0;
     this.hoveredButtonId = null;
+    this.penaltyBoxCollapseStart = {
+      home: this.penaltyBoxExpand.home,
+      away: this.penaltyBoxExpand.away,
+    };
     if (tips) {
       this.activeTips = tips;
     }
@@ -237,6 +246,8 @@ export class RinkRenderer {
     this.isZamboniClearing = false;
     this.zamboniProgress = 0;
     this.intermissionZoomBlend = 0;
+    this.penaltyBoxExpand = { home: 0, away: 0 };
+    this.penaltyBoxCollapseStart = { home: 0, away: 0 };
     this.iceButtons = [];
     this.impactSparks = [];
     this.snowSprayParticles = [];
@@ -690,19 +701,33 @@ export class RinkRenderer {
       this.updateIceWear(sim, realDtSec);
     }
 
+    const isPeriodEnding =
+      this.isIceSummaryActive ||
+      sim.phase === 'PERIOD_END' ||
+      sim.phase === 'MATCH_OVER';
+
     for (const team of ['home', 'away'] as const) {
-      const hasPenalty = sim.players.some(
-        (p) => p.team === team && p.mode === 'PENALTY_BOX'
-      );
-      const target = hasPenalty ? 1 : 0;
-      if (realDtSec <= 0 || this.animTime <= 0.05) {
-        this.penaltyBoxExpand[team] = target;
+      if (this.isIceSummaryActive) {
+        // While players skate off the ice (0 to 0.95s), smoothly collapse penalty box in unison
+        const skateProg = clamp(this.summaryEnterElapsedSec / 0.95, 0, 1);
+        const startExpand = this.penaltyBoxCollapseStart[team];
+        this.penaltyBoxExpand[team] = startExpand * Math.max(0, 1 - skateProg);
       } else {
-        const rate = hasPenalty ? 9.0 : 7.0;
-        this.penaltyBoxExpand[team] +=
-          (target - this.penaltyBoxExpand[team]) * Math.min(1, realDtSec * rate);
-        if (Math.abs(target - this.penaltyBoxExpand[team]) < 0.005) {
+        const hasPenalty =
+          !isPeriodEnding &&
+          sim.players.some(
+            (p) => p.team === team && p.mode === 'PENALTY_BOX'
+          );
+        const target = hasPenalty ? 1 : 0;
+        if (realDtSec <= 0 || this.animTime <= 0.05) {
           this.penaltyBoxExpand[team] = target;
+        } else {
+          const rate = hasPenalty ? 9.0 : 7.0;
+          this.penaltyBoxExpand[team] +=
+            (target - this.penaltyBoxExpand[team]) * Math.min(1, realDtSec * rate);
+          if (Math.abs(target - this.penaltyBoxExpand[team]) < 0.005) {
+            this.penaltyBoxExpand[team] = target;
+          }
         }
       }
     }
@@ -2350,7 +2375,12 @@ export class RinkRenderer {
     ctx: CanvasRenderingContext2D,
     sim: MatchSimulation
   ): void {
-    if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
+    if (
+      this.isIceSummaryActive &&
+      (this.intermissionZoomBlend > 0.85 || this.summaryEnterElapsedSec >= 0.95)
+    ) {
+      return;
+    }
     ctx.save();
     // Top center penalty boxes: Home centered at 425, Away centered at 575
     const boxes: {
@@ -2379,10 +2409,17 @@ export class RinkRenderer {
       },
     ];
 
+    const isPeriodEnding =
+      this.isIceSummaryActive ||
+      sim.phase === 'PERIOD_END' ||
+      sim.phase === 'MATCH_OVER';
+
     for (const b of boxes) {
-      const hasPenalty = sim.players.some(
-        (p) => p.team === b.team && p.mode === 'PENALTY_BOX'
-      );
+      const hasPenalty =
+        !isPeriodEnding &&
+        sim.players.some(
+          (p) => p.team === b.team && p.mode === 'PENALTY_BOX'
+        );
       const expand = this.penaltyBoxExpand[b.team];
 
       // Collapsed empty bench: tiny 80x9 strip hugging the top boards; Expanded: 96x55 box
@@ -2449,7 +2486,13 @@ export class RinkRenderer {
     ctx: CanvasRenderingContext2D,
     sim: MatchSimulation
   ): void {
-    if (this.isIceSummaryActive && this.intermissionZoomBlend > 0.6) return;
+    if (
+      this.isIceSummaryActive ||
+      sim.phase === 'PERIOD_END' ||
+      sim.phase === 'MATCH_OVER'
+    ) {
+      return;
+    }
     const penalized = sim.players.filter((p) => p.mode === 'PENALTY_BOX');
     if (penalized.length === 0) return;
 
