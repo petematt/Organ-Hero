@@ -509,6 +509,22 @@ export class MatchSimulation {
         '#94a3b8',
         2.4
       );
+      if (stale) {
+        this.adjustCrowdVolume(this.cfg.staleCrowdPenalty);
+        this.audioHooks.onCrowdGroan?.();
+        this.spawnCallout('CROWD REDUCED! (STALE)', { x: CENTER_X, y: 96 }, '#fb7185', 2.6);
+      }
+    } else if (stale) {
+      this.adjustCrowdVolume(this.cfg.staleCrowdPenalty);
+      this.audioHooks.onCrowdGroan?.();
+      this.spawnCallout('CROWD REDUCED! (STALE)', { x: CENTER_X, y: 70 }, '#fb7185', 2.6);
+      if (cueHit) {
+        if (this.opposingOrganist && this.activeCue?.type === 'RIVAL_ORGANIST_ATTACK') {
+          this.opposingOrganist.onPlayerCounterHit(this);
+        }
+        this.activeCue = null;
+        this.spawnCallout('★ CUE HIT! ★', { x: CENTER_X, y: 44 }, '#facc15', 2.6);
+      }
     } else if (cueHit) {
       if (this.opposingOrganist && this.activeCue?.type === 'RIVAL_ORGANIST_ATTACK') {
         this.opposingOrganist.onPlayerCounterHit(this);
@@ -516,9 +532,6 @@ export class MatchSimulation {
       this.activeCue = null;
       this.adjustCrowdVolume(this.cfg.cueHitCrowdBoost);
       this.spawnCallout('★ CUE HIT! 2x EFFECT! ★', { x: CENTER_X, y: 70 }, '#facc15', 2.6);
-    } else if (stale) {
-      this.adjustCrowdVolume(this.cfg.staleCrowdPenalty);
-      this.spawnCallout('CROWD BORED! (STALE)', { x: CENTER_X, y: 70 }, '#fb7185', 2.6);
     } else {
       this.adjustCrowdVolume(this.cfg.songBaseCrowdBoost);
     }

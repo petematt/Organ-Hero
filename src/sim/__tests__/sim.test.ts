@@ -628,6 +628,10 @@ describe('Possession Targeting, Songs & Crowd Volume', () => {
 
   it('doubles effect and boosts crowd +15% on cue hit, halves effect and drops crowd -10% on stale repeat', () => {
     const sim = new MatchSimulation(cloneConfig(), 88);
+    let groanCount = 0;
+    sim.audioHooks.onCrowdGroan = () => {
+      groanCount++;
+    };
     sim.phase = 'PLAYING';
     const startCrowd = sim.crowdVolume;
 
@@ -637,12 +641,77 @@ describe('Possession Targeting, Songs & Crowd Volume', () => {
     expect(firstPlay.stale).toBe(false);
     expect(firstPlay.multiplier).toBe(2.0);
     expect(sim.crowdVolume).toBe(startCrowd + 15);
+    expect(groanCount).toBe(0);
 
     // Repeat same song immediately -> stale!
     const secondPlay = sim.playSong('charge');
     expect(secondPlay.stale).toBe(true);
-    expect(secondPlay.multiplier).toBe(0.5);
-    expect(sim.crowdVolume).toBe(startCrowd + 15 - 10);
+    expect(secondPlay.multiplier).toBe(0.5); // Halved effectiveness
+    expect(sim.crowdVolume).toBe(startCrowd + 15 - 10); // Crowd reduced
+    expect(groanCount).toBe(1);
+
+    // Callout verifies crowd reduced callout is spawned
+    const staleCallout = sim.callouts.find((c) => c.text === 'CROWD REDUCED! (STALE)');
+    expect(staleCallout).toBeDefined();
+
+    // Verify there is NO callout for halved song effectiveness
+    const halvedCallout = sim.callouts.find(
+      (c) => c.text.includes('0.5') || c.text.toLowerCase().includes('half')
+    );
+    expect(halvedCallout).toBeUndefined();
+  });
+
+  it('halves multiplier and reduces crowd -10% when playing a stale song on an active cue hit', () => {
+    const sim = new MatchSimulation(cloneConfig(), 88);
+    sim.phase = 'PLAYING';
+    sim.playSong('charge'); // First play -> sets lastPlayedSongId = 'charge'
+    const crowdAfterFirst = sim.crowdVolume;
+
+    // Now trigger cue matching 'charge' and replay 'charge' -> stale cue hit!
+    sim.triggerCue('BREAKAWAY', 'charge', 'home', 'BREAKAWAY!');
+    const staleCuePlay = sim.playSong('charge');
+
+    expect(staleCuePlay.stale).toBe(true);
+    expect(staleCuePlay.cueHit).toBe(true);
+    // Effectiveness is halved: 2.0 (cue) * 0.5 (stale) = 1.0
+    expect(staleCuePlay.multiplier).toBe(1.0);
+    // Crowd is penalized (-10%), NOT boosted (+15%)
+    expect(sim.crowdVolume).toBe(crowdAfterFirst - 10);
+
+    // Verify callouts: has crowd reduced callout, and does NOT claim '2x EFFECT!'
+    expect(sim.callouts.some((c) => c.text === 'CROWD REDUCED! (STALE)')).toBe(true);
+    expect(sim.callouts.some((c) => c.text.includes('2x EFFECT'))).toBe(false);
+    expect(sim.callouts.some((c) => c.text === '★ CUE HIT! ★')).toBe(true);
+  });
+
+  it('penalizes crowd and spawns CROWD REDUCED! (STALE) even when song is invalid on ice', () => {
+    const sim = new MatchSimulation(cloneConfig(), 88);
+    sim.phase = 'PLAYING';
+    // Power Play Polka without power play is invalid on ice
+    sim.playSong('power_play_polka');
+    const crowdAfterFirst = sim.crowdVolume;
+
+    // Replay power_play_polka -> stale and invalid on ice
+    const stalePlay = sim.playSong('power_play_polka');
+    expect(stalePlay.stale).toBe(true);
+    expect(stalePlay.multiplier).toBe(0.0);
+    expect(sim.crowdVolume).toBe(crowdAfterFirst - 10);
+    expect(sim.callouts.some((c) => c.text === 'NO POWER PLAY! (NO EFFECT)')).toBe(true);
+    expect(sim.callouts.some((c) => c.text === 'CROWD REDUCED! (STALE)')).toBe(true);
+  });
+
+  it('awards standard crowd boost and 1.0 multiplier when switching to a different (fresh) song', () => {
+    const sim = new MatchSimulation(cloneConfig(), 88);
+    sim.phase = 'PLAYING';
+    sim.playSong('charge');
+    const crowdAfterCharge = sim.crowdVolume;
+
+    // Play a different song -> fresh play!
+    const freshPlay = sim.playSong('hold_the_line');
+    expect(freshPlay.stale).toBe(false);
+    expect(freshPlay.multiplier).toBe(1.0);
+    expect(sim.crowdVolume).toBe(crowdAfterCharge + sim.cfg.songBaseCrowdBoost);
+    expect(sim.callouts.some((c) => c.text.includes('STALE'))).toBe(false);
   });
 
   it('decays crowd volume after 12 game seconds of silence', () => {

@@ -274,7 +274,7 @@ export function evaluateTip(
       if (goalsInPeriod > 0) {
         return {
           status: 'FAILED',
-          progressText: `${goalsInPeriod} goal(s) scored in Period ${target}.`,
+          progressText: `${goalsInPeriod} ${goalsInPeriod === 1 ? 'goal' : 'goals'} scored in Period ${target}.`,
           passed: false,
         };
       }

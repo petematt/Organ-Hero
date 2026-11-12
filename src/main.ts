@@ -22,6 +22,7 @@ function parseUrlParams(): {
   penalty: boolean;
   brawl: boolean;
   period_end: boolean;
+  stale: boolean;
 } {
   const params = new URLSearchParams(window.location.search);
   const seedRaw = params.get('seed');
@@ -33,6 +34,7 @@ function parseUrlParams(): {
   const penalty = params.get('penalty') === '1';
   const brawl = params.get('brawl') === '1';
   const periodEnd = params.get('period_end') === '1';
+  const stale = params.get('stale') === '1';
   const screen = params.get('screen');
   return {
     seed: Number.isNaN(parsedSeed) ? null : parsedSeed,
@@ -43,6 +45,7 @@ function parseUrlParams(): {
     penalty,
     brawl,
     period_end: periodEnd,
+    stale,
   };
 }
 
@@ -305,6 +308,17 @@ class OrganHeroApp {
         }
       }
       this.renderer.beginIceSummary(this.sim, this.campaign.getActiveTips());
+    }
+
+    if (urlOpts.stale) {
+      this.screens.hide();
+      this.hasStartedMatch = true;
+      this.isPaused = false;
+      this.sim.phase = 'PLAYING';
+      const songToPlay = this.sim.getActiveSongLoadout()[0] ?? 'charge';
+      this.sim.playSong(songToPlay);
+      this.sim.playSong(songToPlay);
+      this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
     }
 
     requestAnimationFrame((t) => this.loop(t));
