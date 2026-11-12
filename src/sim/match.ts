@@ -12,15 +12,18 @@ import {
 import {
   composeEffectiveStat,
   computeCritSaveChance,
+  computeDefensiveCoverTarget,
   computeFightChance,
   computeGoalChance,
   computeGoalieBlockChance,
+  computeOffensiveSpreadTarget,
   computePassAccuracy,
   computePassTendency,
   computeRedirectLatency,
   computeShooterAccuracy,
   computeSkateSpeed,
   computeStealChance,
+  computeSwarmTendency,
   decayMoodOffset,
 } from './formulas';
 import {
@@ -1097,6 +1100,9 @@ export class MatchSimulation {
 
       // DEFENDING mode
       let targetPos: Vec2 = this.puck.pos;
+      const ownGoal = getOwnGoalPos(p.team);
+      const oppGoal = getOpponentGoalPos(p.team);
+      const teamDirX = p.team === 'home' ? 1 : -1;
 
       if (holdingGoalie) {
         if (holdingGoalie.team !== p.team) {
@@ -1122,20 +1128,107 @@ export class MatchSimulation {
         const carrier = this.players.find((pl) => pl.id === this.puck.carrierId);
         if (carrier) {
           if (carrier.team === p.team) {
-            // Teammate has possession: skate into setup pass target (slot/backdoor) or supporting wing lane
-            if (carrier.attackRoute?.setupPassTarget) {
-              targetPos = carrier.attackRoute.setupPassTarget;
+            // OFFENSE: Teammate has possession -> spread out to opposite flank / weak side, waiting for a pass
+            targetPos = computeOffensiveSpreadTarget(
+              carrier.pos,
+              oppGoal,
+              p.aggression,
+              carrier.attackRoute?.setupPassTarget
+            );
+          } else {
+            // DEFENSE: Opponent has possession -> partition into Primary Presser vs Secondary Man-Marker
+            const teammateDefenders = this.players.filter(
+              (pl) =>
+                pl.team === p.team &&
+                pl.role === 'striker' &&
+                pl.id !== p.id &&
+                pl.mode === 'DEFENDING'
+            );
+            const otherDefender = teammateDefenders[0];
+
+            let isPrimaryPresser = true;
+            if (otherDefender) {
+              const myDistToCarrier = dist(p.pos, carrier.pos);
+              const otherDistToCarrier = dist(otherDefender.pos, carrier.pos);
+              // The defender closer to the carrier is the primary presser
+              isPrimaryPresser = myDistToCarrier <= otherDistToCarrier;
+            }
+
+            if (isPrimaryPresser) {
+              // Primary Presser: directly challenge and intercept the puck carrier
+              targetPos = carrier.pos;
             } else {
-              const oppGoal = getOpponentGoalPos(p.team);
-              const wingY = carrier.pos.y < CENTER_Y ? CENTER_Y + 85 : CENTER_Y - 85;
+              // Secondary Cover: cover the off-puck offensive player, or swarm if aggression causes a discipline breakdown
+              const swarmChance = computeSwarmTendency(p.aggression, p.focus);
+              const shouldSwarm = this.rng.rollAgainst(swarmChance);
+
+              if (shouldSwarm) {
+                // High aggression: abandon man-marking and double-team the puck carrier!
+                targetPos = carrier.pos;
+              } else {
+                // Disciplined: cover the off-puck attacker and deny the passing lane
+                const offPuckAttacker = this.players.find(
+                  (pl) =>
+                    pl.team === carrier.team &&
+                    pl.role === 'striker' &&
+                    pl.id !== carrier.id
+                );
+
+                if (offPuckAttacker) {
+                  targetPos = computeDefensiveCoverTarget(offPuckAttacker.pos, ownGoal);
+                } else {
+                  // No off-puck attacker (e.g. in box): protect the high slot in front of own net
+                  targetPos = {
+                    x: ownGoal.x + teamDirX * 110,
+                    y: CENTER_Y,
+                  };
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // LOOSE PUCK: Avoid both teammates running on top of each other
+        const teammateStriker = this.players.find(
+          (pl) =>
+            pl.team === p.team &&
+            pl.role === 'striker' &&
+            pl.id !== p.id &&
+            pl.mode === 'DEFENDING'
+        );
+
+        let isPrimaryChaser = true;
+        if (teammateStriker) {
+          const myDistToPuck = dist(p.pos, this.puck.pos);
+          const teammateDistToPuck = dist(teammateStriker.pos, this.puck.pos);
+          isPrimaryChaser = myDistToPuck <= teammateDistToPuck;
+        }
+
+        if (isPrimaryChaser) {
+          targetPos = this.puck.pos;
+        } else {
+          // Secondary teammate: check aggression discipline
+          const swarmChance = computeSwarmTendency(p.aggression, p.focus);
+          const shouldSwarm = this.rng.rollAgainst(swarmChance);
+
+          if (shouldSwarm) {
+            // Aggressive puck-hunger: both rush the loose puck
+            targetPos = this.puck.pos;
+          } else {
+            // Disciplined support: fan out to provide passing support or defensive coverage
+            const inDefensiveZone = dist(this.puck.pos, ownGoal) < 240;
+            if (inDefensiveZone) {
               targetPos = {
-                x: (carrier.pos.x + oppGoal.x) * 0.5,
-                y: wingY,
+                x: ownGoal.x + teamDirX * 110,
+                y: CENTER_Y,
+              };
+            } else {
+              const weakSideY = this.puck.pos.y < CENTER_Y ? CENTER_Y + 75 : CENTER_Y - 75;
+              targetPos = {
+                x: clamp(this.puck.pos.x - teamDirX * 80, 55, RINK_WIDTH - 55),
+                y: weakSideY,
               };
             }
-          } else {
-            // Opponent has possession: intercept carrier
-            targetPos = carrier.pos;
           }
         }
       }
@@ -1148,7 +1241,6 @@ export class MatchSimulation {
           x: targetPos.x - p.pos.x,
           y: targetPos.y - p.pos.y,
         });
-        const ownGoal = getOwnGoalPos(p.team);
         const isLooseInDefensiveZone =
           this.puck.carrierId === null && dist(this.puck.pos, ownGoal) < 240;
         const isChasingForward =

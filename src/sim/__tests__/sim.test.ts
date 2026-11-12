@@ -7,15 +7,18 @@ import { OrganSynth } from '../../audio/organSynth';
 import {
   composeEffectiveStat,
   computeCritSaveChance,
+  computeDefensiveCoverTarget,
   computeFightChance,
   computeGoalChance,
   computeGoalieBlockChance,
+  computeOffensiveSpreadTarget,
   computePassAccuracy,
   computePassTendency,
   computeRedirectLatency,
   computeShooterAccuracy,
   computeSkateSpeed,
   computeStealChance,
+  computeSwarmTendency,
   decayMoodOffset,
 } from '../formulas';
 import { MatchSimulation } from '../match';
@@ -1457,6 +1460,139 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       // Must NOT immediately flip to -200
       expect(nextVel.x).toBeGreaterThan(0); // Still moving forward in the first frame!
       expect(nextVel.x).toBeLessThan(200); // Decelerating toward target
+    });
+  });
+
+  describe('Anti-Swarming Tactics & Role Partitioning', () => {
+    it('spreads the supporting offensive striker out across the ice when teammate has possession', () => {
+      const sim = new MatchSimulation(cloneConfig(), 444);
+      sim.phase = 'PLAYING';
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+
+      // Position carrier homeS1 on the top wing
+      homeS1.pos = { x: 500, y: 100 };
+      sim.gainPossession(homeS1);
+
+      // Position supporting striker homeS2
+      homeS2.pos = { x: 450, y: 150 };
+      homeS2.mode = 'DEFENDING';
+
+      // Step simulation
+      sim.step(1 / 60);
+
+      // Supporting striker must steer toward the opposite/weak-side flank (y > CENTER_Y)
+      expect(homeS2.vel.y).toBeGreaterThan(0);
+
+      // Step more frames: spacing between teammates must widen, not cluster
+      for (let i = 0; i < 60; i++) {
+        sim.step(1 / 60);
+      }
+      const separation = Math.hypot(homeS2.pos.x - homeS1.pos.x, homeS2.pos.y - homeS1.pos.y);
+      expect(separation).toBeGreaterThan(120);
+      expect(homeS2.pos.y).toBeGreaterThan(CENTER_Y);
+    });
+
+    it('partitions defenders: closest defender pressures carrier while secondary defender covers off-puck striker', () => {
+      const sim = new MatchSimulation(cloneConfig(), 101);
+      sim.phase = 'PLAYING';
+
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+      const awayS2 = sim.players.find((p) => p.id === 'away-s2')!;
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+
+      // Away S1 has puck at top wing
+      awayS1.pos = { x: 400, y: 80 };
+      sim.gainPossession(awayS1);
+
+      // Away S2 is off-puck attacker on bottom wing
+      awayS2.pos = { x: 350, y: 340 };
+      awayS2.mode = 'DEFENDING';
+
+      // Home S1 is closer to Away S1 (primary presser)
+      homeS1.pos = { x: 300, y: 90 };
+      homeS1.mode = 'DEFENDING';
+
+      // Home S2 is disciplined (low aggression, high focus) and positioned lower down (secondary cover)
+      homeS2.pos = { x: 250, y: 300 };
+      homeS2.mode = 'DEFENDING';
+      homeS2.baseAggression = 0.05;
+      homeS2.aggression = 0.05;
+      homeS2.baseFocus = 0.95;
+      homeS2.focus = 0.95;
+
+      sim.step(1 / 60);
+
+      // Primary presser (homeS1) targets carrier (awayS1 at top wing, y ≈ 80)
+      expect(homeS1.vel.x).toBeGreaterThan(0); // moving toward x=400
+      expect(homeS1.vel.y).toBeLessThanOrEqual(5);
+
+      // Secondary defender (homeS2) covers off-puck attacker (awayS2 at bottom wing, y ≈ 340), NOT the carrier at y=80
+      expect(homeS2.vel.y).toBeGreaterThan(0); // moving toward y=340
+      expect(homeS2.pos.y).toBeGreaterThan(200);
+    });
+
+    it('increases swarm probability with high aggression', () => {
+      const disciplinedSwarm = computeSwarmTendency(0.10, 0.90);
+      const aggressiveSwarm = computeSwarmTendency(0.90, 0.10);
+
+      expect(disciplinedSwarm).toBeLessThan(0.20);
+      expect(aggressiveSwarm).toBeGreaterThan(0.70);
+    });
+
+    it('spaces out secondary teammate on loose pucks when disciplined', () => {
+      const sim = new MatchSimulation(cloneConfig(), 888);
+      sim.phase = 'PLAYING';
+
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      const homeS2 = sim.players.find((p) => p.id === 'home-s2')!;
+
+      // Puck loose near center ice top
+      sim.puck.carrierId = null;
+      sim.puck.pos = { x: 500, y: 90 };
+      sim.puck.vel = { x: 0, y: 0 };
+
+      // Home S1 is closer (x=450, y=95) -> primary chaser
+      homeS1.pos = { x: 450, y: 95 };
+      homeS1.mode = 'DEFENDING';
+
+      // Home S2 is disciplined (low aggression, high focus)
+      homeS2.pos = { x: 380, y: 120 };
+      homeS2.mode = 'DEFENDING';
+      homeS2.baseAggression = 0.05;
+      homeS2.aggression = 0.05;
+      homeS2.baseFocus = 0.95;
+      homeS2.focus = 0.95;
+
+      sim.step(1 / 60);
+
+      // Primary chaser heads directly for puck at y=90
+      expect(homeS1.vel.x).toBeGreaterThan(0);
+
+      // Disciplined secondary teammate fans out to the weak side (y > CENTER_Y) rather than crowding top
+      expect(homeS2.vel.y).toBeGreaterThan(0);
+    });
+
+    it('computeOffensiveSpreadTarget positions supporting striker on weak side with wide spacing', () => {
+      const carrierTop = { x: 500, y: 100 };
+      const oppGoal = { x: 760, y: 200 };
+      const target = computeOffensiveSpreadTarget(carrierTop, oppGoal, 0.2);
+      expect(target.y).toBeGreaterThan(CENTER_Y);
+      expect(target.x).toBeGreaterThan(carrierTop.x);
+
+      // Setup target override
+      const setup = { x: 620, y: 280 };
+      expect(computeOffensiveSpreadTarget(carrierTop, oppGoal, 0.5, setup)).toEqual(setup);
+    });
+
+    it('computeDefensiveCoverTarget positions secondary defender between attacker and goal', () => {
+      const attacker = { x: 550, y: 320 };
+      const ownGoal = { x: 40, y: 200 };
+      const cover = computeDefensiveCoverTarget(attacker, ownGoal);
+      // Cover position should be between attacker and goal along X
+      expect(cover.x).toBeLessThan(attacker.x);
+      expect(cover.x).toBeGreaterThan(ownGoal.x);
     });
   });
 });

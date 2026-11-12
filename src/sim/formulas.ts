@@ -1,5 +1,7 @@
 import { GameConfig } from '../config';
+import { CENTER_Y, RINK_HEIGHT, RINK_WIDTH } from './physics';
 import { clamp } from './rng';
+import { Vec2 } from './types';
 
 /**
  * Computes effective stat = clamp(baseline + moodOffset + songModifier, 0, 1).
@@ -167,5 +169,71 @@ export function computeCritSaveChance(
     0,
     1
   );
+}
+
+/**
+ * Computes the probability [0.08, 0.88] that a secondary defender abandons man-marking
+ * to recklessly swarm the puck carrier. High aggression elevates swarm probability;
+ * high focus increases discipline.
+ */
+export function computeSwarmTendency(aggression: number, focus: number): number {
+  return clamp(
+    clamp(aggression, 0, 1) * 0.95 - clamp(focus, 0, 1) * 0.35 + 0.10,
+    0.08,
+    0.88
+  );
+}
+
+/**
+ * Computes an open-ice supporting position for an off-puck offensive teammate.
+ * Spreads to the weak-side wing/flank or trailing slot opposite the puck carrier.
+ * Lower aggression maintains wider spacing and patient pass-readiness;
+ * higher aggression pulls the player closer to the slot for net drives.
+ */
+export function computeOffensiveSpreadTarget(
+  carrierPos: Vec2,
+  oppGoalPos: Vec2,
+  aggression: number,
+  setupTarget?: Vec2
+): Vec2 {
+  if (setupTarget) {
+    return { ...setupTarget };
+  }
+
+  const isCarrierTop = carrierPos.y < CENTER_Y;
+  // Position on the opposite side of the rink (weak side)
+  const baseWeakSideY = isCarrierTop ? CENTER_Y + 95 : CENTER_Y - 95;
+  // Aggression pulls slightly toward center slot (for net crashing/rebounds) vs staying wide
+  const targetY = clamp(
+    baseWeakSideY * (1 - 0.25 * clamp(aggression, 0, 1)) + CENTER_Y * (0.25 * clamp(aggression, 0, 1)),
+    45,
+    RINK_HEIGHT - 45
+  );
+
+  // X position: advance alongside or slightly behind the attack rush
+  const dirX = oppGoalPos.x > carrierPos.x ? 1 : -1;
+  const advanceDist = 70 + (1 - clamp(aggression, 0, 1)) * 40;
+  const targetX = clamp(
+    carrierPos.x + dirX * advanceDist * 0.65,
+    55,
+    RINK_WIDTH - 55
+  );
+
+  return { x: targetX, y: targetY };
+}
+
+/**
+ * Computes the defensive coverage position for the secondary defender.
+ * Shadows the off-puck offensive player, positioning between that player and own goal / pass lane.
+ */
+export function computeDefensiveCoverTarget(
+  offPuckAttackerPos: Vec2,
+  ownGoalPos: Vec2
+): Vec2 {
+  // Shadow off-puck attacker, biased 65% toward the attacker and 35% toward protecting own goal line
+  return {
+    x: clamp(offPuckAttackerPos.x * 0.65 + ownGoalPos.x * 0.35, 45, RINK_WIDTH - 45),
+    y: clamp(offPuckAttackerPos.y * 0.85 + CENTER_Y * 0.15, 45, RINK_HEIGHT - 45),
+  };
 }
 
