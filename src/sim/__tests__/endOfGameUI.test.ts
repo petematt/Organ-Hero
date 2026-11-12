@@ -199,5 +199,42 @@ describe('End-of-Game UI Improvements', () => {
     // 4. Remove "Stadium pipe organ console"
     expect(html.toLowerCase()).not.toContain('stadium pipe organ console');
   });
+
+  it('cleans up the official orders modal (showOrderClipboard) per UI specifications', () => {
+    const onStartMatchWithOrder = vi.fn();
+    const screens = new ScreenModalManager({
+      onTakeSeat: vi.fn(),
+      onStartMatchWithOrder,
+      onContinueNextPeriod: vi.fn(),
+      onPlayAgainNewSeed: vi.fn(),
+      onResumeFromPause: vi.fn(),
+    });
+
+    screens.showOrderClipboard('home_wins', 4242);
+    const html = contentEl.innerHTML;
+
+    // 1. Remove "pre-match management directive" and seed information line
+    expect(html.toLowerCase()).not.toContain('pre-match management directive');
+    expect(html.toLowerCase()).not.toContain('seed #');
+    expect(html).not.toContain('4242');
+
+    // 2. Title changed to "Commissioner's Official Orders" with no emoji
+    expect(html).toContain(`<h2 class="modal-title">Commissioner's Official Orders</h2>`);
+    expect(html).not.toContain('📋');
+
+    // 3. Drop the "switch directive" section
+    expect(html.toLowerCase()).not.toContain('switch directive');
+    expect(html).not.toContain('order-picker-section');
+    expect(html).not.toContain('order-option-btn');
+
+    // 4. Update button to "Drop the puck" with no emoji and no parenthetical
+    expect(html).toContain('id="btn-drop-puck"');
+    expect(html).not.toContain('🏒');
+    expect(html).not.toContain('(START PERIOD 1)');
+    const btnMatch = html.match(/<button id="btn-drop-puck"[^>]*>([\s\S]*?)<\/button>/);
+    expect(btnMatch).not.toBeNull();
+    expect(btnMatch![1].trim()).toBe('Drop the puck');
+  });
 });
+
 

@@ -1,7 +1,6 @@
 import {
   evaluateOrder,
   getOrderById,
-  OFFICIAL_ORDERS,
 } from '../game/orders';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { SONGS } from '../game/songs';
@@ -155,105 +154,64 @@ export class ScreenModalManager {
    */
   public showOrderClipboard(
     assignedOrderId: OrderId,
-    seed: number,
+    _seed?: number,
     campaignMatch?: MatchScheduleEntry | null,
     officialRepPct?: number
   ): void {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
-    let selectedId: OrderId = assignedOrderId;
 
-    const renderClipboard = () => {
-      const currentOrder = getOrderById(selectedId);
-      const optionsHtml = OFFICIAL_ORDERS.map(
-        (o) => `
-          <button
-            type="button"
-            class="order-option-btn ${o.id === selectedId ? 'selected' : ''}"
-            data-order-id="${o.id}"
-          >
-            <div class="order-opt-top">
-              <strong>${o.title}</strong>
-              ${
-                o.id === assignedOrderId
-                  ? '<span class="assigned-pill">ASSIGNED</span>'
-                  : ''
-              }
-            </div>
-            <div class="order-opt-desc">${o.description}</div>
-          </button>
-        `
-      ).join('');
+    const currentOrder = getOrderById(assignedOrderId);
 
-      const campaignHeaderHtml = campaignMatch
-        ? `
-          <div class="campaign-match-banner" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
-              <span>MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
-              <span style="color: ${officialRepPct !== undefined && officialRepPct < 75 ? '#fb7185' : '#4ade80'}">JOB SECURITY: ${officialRepPct ?? 100}%</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-              <div style="font-size: 16px; font-weight: 800; color: #f8fafc;">
-                <span style="color: #38bdf8">${campaignMatch.homeTeam.shortName}</span>
-                <span style="color: #64748b; font-size: 13px; margin: 0 4px;">vs</span>
-                <span style="color: ${campaignMatch.awayTeam.primaryColor}">${campaignMatch.awayTeam.name}</span>
-              </div>
-              <div style="font-size: 13px; font-weight: 800; color: #facc15;">
-                SALARY: $${Math.round(campaignMatch.baseSalary * campaignMatch.payoutMultiplier)}
-              </div>
-            </div>
-            ${
-              campaignMatch.hasOpposingOrganist && campaignMatch.opposingOrganist
-                ? `<div style="margin-top: 6px; font-size: 11px; color: #fb7185; background: rgba(244,63,94,0.12); padding: 4px 8px; border-radius: 4px; border-left: 3px solid #f43f5e;">
-                    ⚠️ OPPOSING ORGANIST: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
-                   </div>`
-                : ''
-            }
+    const campaignHeaderHtml = campaignMatch
+      ? `
+        <div class="campaign-match-banner" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
+            <span>MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
+            <span style="color: ${officialRepPct !== undefined && officialRepPct < 75 ? '#fb7185' : '#4ade80'}">JOB SECURITY: ${officialRepPct ?? 100}%</span>
           </div>
-        `
-        : '';
-
-      this.contentEl.innerHTML = `
-        <div class="modal-inner clipboard-modal">
-          <div class="modal-eyebrow">PRE-MATCH MANAGEMENT DIRECTIVE • SEED #${seed}</div>
-          <h2 class="modal-title">📋 OFFICIAL ORDERS</h2>
-          ${campaignHeaderHtml}
-          <div class="active-order-spotlight">
-            <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
-            <div class="spotlight-title">${currentOrder.title}</div>
-            <div class="spotlight-desc">${currentOrder.description}</div>
-          </div>
-          <div class="order-picker-section">
-            <div class="picker-heading">Switch Directive (For Testing):</div>
-            <div class="order-options-list">
-              ${optionsHtml}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+            <div style="font-size: 16px; font-weight: 800; color: #f8fafc;">
+              <span style="color: #38bdf8">${campaignMatch.homeTeam.shortName}</span>
+              <span style="color: #64748b; font-size: 13px; margin: 0 4px;">vs</span>
+              <span style="color: ${campaignMatch.awayTeam.primaryColor}">${campaignMatch.awayTeam.name}</span>
+            </div>
+            <div style="font-size: 13px; font-weight: 800; color: #facc15;">
+              SALARY: $${Math.round(campaignMatch.baseSalary * campaignMatch.payoutMultiplier)}
             </div>
           </div>
-          <div class="modal-actions">
-            <button id="btn-drop-puck" class="primary-cta-btn" type="button">
-              🏒 DROP THE PUCK (START PERIOD 1)
-            </button>
-          </div>
-        </div>
-      `;
-
-      this.contentEl.querySelectorAll('.order-option-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const id = (btn as HTMLElement).dataset.orderId as OrderId;
-          if (id) {
-            selectedId = id;
-            renderClipboard();
+          ${
+            campaignMatch.hasOpposingOrganist && campaignMatch.opposingOrganist
+              ? `<div style="margin-top: 6px; font-size: 11px; color: #fb7185; background: rgba(244,63,94,0.12); padding: 4px 8px; border-radius: 4px; border-left: 3px solid #f43f5e;">
+                  ⚠️ OPPOSING ORGANIST: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
+                 </div>`
+              : ''
           }
-        });
-      });
+        </div>
+      `
+      : '';
 
-      document.getElementById('btn-drop-puck')?.addEventListener('click', () => {
-        this.hide();
-        this.callbacks.onStartMatchWithOrder(selectedId);
-      });
-    };
+    this.contentEl.innerHTML = `
+      <div class="modal-inner clipboard-modal">
+        <h2 class="modal-title">Commissioner's Official Orders</h2>
+        ${campaignHeaderHtml}
+        <div class="active-order-spotlight">
+          <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
+          <div class="spotlight-title">${currentOrder.title}</div>
+          <div class="spotlight-desc">${currentOrder.description}</div>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-drop-puck" class="primary-cta-btn" type="button">
+            Drop the puck
+          </button>
+        </div>
+      </div>
+    `;
 
-    renderClipboard();
+    document.getElementById('btn-drop-puck')?.addEventListener('click', () => {
+      this.hide();
+      this.callbacks.onStartMatchWithOrder(assignedOrderId);
+    });
   }
 
   private renderSparklineSvg(values: number[]): string {
