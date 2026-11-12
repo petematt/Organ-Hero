@@ -1,4 +1,4 @@
-import { evaluateOrder, getOrderById } from '../game/orders';
+import { evaluateOrder, getOrderDisplay } from '../game/orders';
 import { doesSongAffectTeam, isSongValidOnIce, SONGS } from '../game/songs';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { MatchSimulation } from '../sim/match';
@@ -117,6 +117,7 @@ export class RinkRenderer {
   private hoveredButtonId: string | null = null;
   private iceButtons: IceButton[] = [];
   private activeTips: TipOffer[] = [];
+  private matchPayout: { base: number; bonus: number } | null = null;
 
   // Zamboni big-eraser & camera pullback state
   private isZamboniClearing: boolean = false;
@@ -174,6 +175,10 @@ export class RinkRenderer {
 
   public setCallbacks(callbacks: IceSummaryCallbacks): void {
     this.callbacks = callbacks;
+  }
+
+  public setMatchPayout(payout: { base: number; bonus: number } | null): void {
+    this.matchPayout = payout;
   }
 
   public setActiveTips(tips: TipOffer[]): void {
@@ -959,14 +964,11 @@ export class RinkRenderer {
     sim: MatchSimulation
   ): void {
     const pStats = buildStatsSummary(sim.events, sim.crowdSamples, sim.period);
-    const orderDef = getOrderById(sim.orderId);
-    const orderEval = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: false,
-    });
+    const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
+    const orderEval = evaluateOrder(
+      sim.orderId,
+      sim.getOrderEvaluationSnapshot(false)
+    );
 
     const bx = CENTER_X - 166;
     const bw = 332;
@@ -1207,14 +1209,11 @@ export class RinkRenderer {
     const p2 = buildStatsSummary(sim.events, sim.crowdSamples, 2);
     const p3 = buildStatsSummary(sim.events, sim.crowdSamples, 3);
 
-    const orderDef = getOrderById(sim.orderId);
-    const orderEval = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: true,
-    });
+    const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
+    const orderEval = evaluateOrder(
+      sim.orderId,
+      sim.getOrderEvaluationSnapshot(true)
+    );
 
     const acceptedTips = this.activeTips.filter(
       (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
@@ -1402,6 +1401,17 @@ export class RinkRenderer {
       bx + 20,
       curY + 14
     );
+
+    if (this.matchPayout) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#facc15';
+      ctx.font = '700 7.5px "Chakra Petch", sans-serif';
+      ctx.fillText(
+        `BASE +$${this.matchPayout.base} • BONUS ${this.matchPayout.bonus > 0 ? '+$' + this.matchPayout.bonus : '$0'}`,
+        bx + bw - 20,
+        curY + 14
+      );
+    }
 
     ctx.fillStyle = '#f8fafc';
     ctx.font = '600 7.5px "Inter", sans-serif';

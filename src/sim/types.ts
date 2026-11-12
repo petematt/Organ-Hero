@@ -176,6 +176,10 @@ export interface MatchEvent {
   songId?: SongId;
   cueHit?: boolean;
   stale?: boolean;
+  /** GOAL events: true when scored by the team on the power play. */
+  isPowerPlayGoal?: boolean;
+  /** FIGHT events: true when every striker on the ice is fighting at once. */
+  isLineBrawl?: boolean;
 }
 
 export type MatchPhase =
@@ -190,4 +194,6 @@ export type OrderId =
   | 'blood_on_ice'
   | 'clean_sheet'
   | 'blowout'
-  | 'bring_the_noise';
+  | 'bring_the_noise'
+  | 'no_repeat_songs'
+  | 'comeback_win';

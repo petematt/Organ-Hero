@@ -1,6 +1,7 @@
 import {
   evaluateOrder,
-  getOrderById,
+  getOrderDisplay,
+  resolveOrderTargetTeam,
 } from '../game/orders';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { SONGS } from '../game/songs';
@@ -155,14 +156,18 @@ export class ScreenModalManager {
    */
   public showOrderClipboard(
     assignedOrderId: OrderId,
-    _seed?: number,
+    seed?: number,
     campaignMatch?: MatchScheduleEntry | null,
     officialRepPct?: number
   ): void {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
 
-    const currentOrder = getOrderById(assignedOrderId);
+    const targetTeam = resolveOrderTargetTeam(assignedOrderId, seed ?? 0);
+    const currentOrder = getOrderDisplay(assignedOrderId, targetTeam);
+    const teamBadge = currentOrder.usesRandomTeam
+      ? `<span class="assigned-pill" style="margin-left: 8px;">${targetTeam === 'away' ? 'AWAY TEAM' : 'HOME TEAM'}</span>`
+      : '';
 
     const campaignHeaderHtml = campaignMatch
       ? `
@@ -178,7 +183,7 @@ export class ScreenModalManager {
               <span style="color: ${campaignMatch.awayTeam.primaryColor}">${campaignMatch.awayTeam.name}</span>
             </div>
             <div style="font-size: 13px; font-weight: 800; color: #facc15;">
-              SALARY: $${Math.round(campaignMatch.baseSalary * campaignMatch.payoutMultiplier)}
+              BASE PAY: $${campaignMatch.baseSalary} • ORDER BONUS: +$${campaignMatch.orderBonus}
             </div>
           </div>
           ${
@@ -198,7 +203,7 @@ export class ScreenModalManager {
         ${campaignHeaderHtml}
         <div class="active-order-spotlight">
           <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
-          <div class="spotlight-title">${currentOrder.title}</div>
+          <div class="spotlight-title">${currentOrder.title}${teamBadge}</div>
           <div class="spotlight-desc">${currentOrder.description}</div>
         </div>
         <div class="modal-actions">
@@ -243,14 +248,8 @@ export class ScreenModalManager {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const pStats = buildStatsSummary(sim.events, sim.crowdSamples, sim.period);
-    const orderDef = getOrderById(sim.orderId);
-    const orderEval = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: false,
-    });
+    const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
+    const orderEval = evaluateOrder(sim.orderId, sim.getOrderEvaluationSnapshot(false));
 
     const statusBadgeClass =
       orderEval.liveStatus === 'ON_TRACK'
@@ -338,14 +337,8 @@ export class ScreenModalManager {
     const p2 = buildStatsSummary(sim.events, sim.crowdSamples, 2);
     const p3 = buildStatsSummary(sim.events, sim.crowdSamples, 3);
 
-    const orderDef = getOrderById(sim.orderId);
-    const orderEval = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: true,
-    });
+    const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
+    const orderEval = evaluateOrder(sim.orderId, sim.getOrderEvaluationSnapshot(true));
 
     const acceptedTips = activeTips.filter(
       (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
@@ -476,14 +469,8 @@ export class ScreenModalManager {
   ): void {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
-    const orderDef = getOrderById(sim.orderId);
-    const orderEval = evaluateOrder(sim.orderId, {
-      homeGoals: sim.homeScore,
-      awayGoals: sim.awayScore,
-      totalFights: sim.getTotalFights(),
-      averageCrowdVolume: sim.getAverageCrowdVolume(),
-      isMatchOver: sim.phase === 'MATCH_OVER',
-    });
+    const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
+    const orderEval = evaluateOrder(sim.orderId, sim.getOrderEvaluationSnapshot(sim.phase === 'MATCH_OVER'));
     const orderStatusPill =
       orderEval.liveStatus === 'ON_TRACK'
         ? '<span class="order-status-pill status-track">ON TRACK</span>'

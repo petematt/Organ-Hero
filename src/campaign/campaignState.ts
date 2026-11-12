@@ -14,6 +14,7 @@ export interface CampaignMatchRecord {
   officialOrderId: string;
   officialOrderPassed: boolean;
   baseSalaryEarned: number;
+  orderBonusEarned?: number;
   tipsOffered: number;
   tipsPassed: number;
   tipEarnings: number;
@@ -147,10 +148,13 @@ export class CampaignManager {
     }
   }
 
-  public acceptTip(tipId: string): void {
+  public acceptTip(tipId: string, currentPeriod?: number): void {
     const tip = this.currentActiveTips.find((t) => t.id === tipId);
     if (tip) {
       tip.status = 'ACCEPTED';
+      if (currentPeriod !== undefined && tip.acceptedAtPeriod === undefined) {
+        tip.acceptedAtPeriod = currentPeriod;
+      }
     }
   }
 

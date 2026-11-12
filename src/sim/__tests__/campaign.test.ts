@@ -74,7 +74,12 @@ describe('Phase 2A: Campaign Core Architecture', () => {
     // Championship
     expect(schedule[16].tier).toBe('CHAMPIONSHIP');
     expect(schedule[16].hasOpposingOrganist).toBe(true); // Match 17
-    expect(schedule[16].payoutMultiplier).toBe(4.0);
+    expect(schedule[16].baseSalary).toBe(4000);
+    expect(schedule[16].orderBonus).toBe(6000);
+    for (const m of schedule) {
+      expect(m.baseSalary).toBeGreaterThan(0);
+      expect(m.orderBonus).toBeGreaterThan(0);
+    }
   });
 
   it('builds unique team rosters for match simulation with distinct player stats', () => {
@@ -571,3 +576,120 @@ describe('Phase 2E: Post-Season Climax, Qualification Gates & Season End', () =>
 });
 
 
+
+describe('Directive & Shady Order Update', () => {
+  const baseTip = (evaluatorId: string, extra: Partial<TipOffer> = {}): TipOffer => ({
+    id: 't',
+    senderName: 's',
+    senderTitle: 't',
+    flavorText: 'f',
+    bribePayout: 100,
+    unofficialRepDelta: 1,
+    conditionDescription: 'c',
+    scope: 'FULL_MATCH',
+    status: 'ACCEPTED',
+    evaluatorId,
+    liveProgressText: '',
+    conflictsWithOfficial: false,
+    ...extra,
+  });
+  const ctx = (over: Partial<Parameters<typeof evaluateTip>[1]> = {}) => ({
+    period: 3,
+    homeScore: 0,
+    awayScore: 0,
+    events: [] as MatchEvent[],
+    players: [] as any,
+    isMatchOver: false,
+    ...over,
+  });
+  const ev = (type: MatchEvent['type'], period: number, extra: Partial<MatchEvent> = {}): MatchEvent => ({
+    type,
+    period,
+    timeRemainingSec: 10,
+    activeSongId: null,
+    activeSongTarget: null,
+    ...extra,
+  });
+
+  it('offers Barnburner variants by Street Cred level', () => {
+    const ids = (lvl: number) => {
+      const all = new Set<string>();
+      for (let seed = 0; seed < 40; seed++) {
+        for (const p of [1, 2] as const) {
+          generateIntermissionTips(p, lvl, 'home_wins', seed).forEach((t) => all.add(t.evaluatorId));
+        }
+      }
+      return all;
+    };
+    const l1 = ids(1);
+    const l3 = ids(3);
+    const l5 = ids(5);
+    expect(l1.has('over_under_5')).toBe(true);
+    expect(l1.has('barnburner_8') || l1.has('barnburner_12')).toBe(false);
+    expect(l3.has('barnburner_8')).toBe(true);
+    expect(l3.has('over_under_5') || l3.has('barnburner_12')).toBe(false);
+    expect(l5.has('barnburner_12')).toBe(true);
+    expect(l5.has('over_under_5') || l5.has('barnburner_8')).toBe(false);
+  });
+
+  it('evaluates barnburner thresholds', () => {
+    expect(evaluateTip(baseTip('barnburner_8'), ctx({ homeScore: 4, awayScore: 3, isMatchOver: true })).passed).toBe(false);
+    expect(evaluateTip(baseTip('barnburner_8'), ctx({ homeScore: 4, awayScore: 4, isMatchOver: true })).passed).toBe(true);
+    expect(evaluateTip(baseTip('barnburner_12'), ctx({ homeScore: 6, awayScore: 5, isMatchOver: true })).passed).toBe(false);
+    expect(evaluateTip(baseTip('barnburner_12'), ctx({ homeScore: 6, awayScore: 6, isMatchOver: true })).passed).toBe(true);
+  });
+
+  it('evaluates goalie_saves_10', () => {
+    const saves = (n: number, team: 'home' | 'away') =>
+      Array.from({ length: n }, () => ev('SAVE', 1, { team }));
+    expect(evaluateTip(baseTip('goalie_saves_10'), ctx({ events: [...saves(6, 'home'), ...saves(6, 'away')], isMatchOver: true })).passed).toBe(false);
+    expect(evaluateTip(baseTip('goalie_saves_10'), ctx({ events: saves(10, 'away') })).status).toBe('PASSED');
+  });
+
+  it('evaluates scoreless_period (fail on goal, pass at period end)', () => {
+    const tip = baseTip('scoreless_period', { targetPeriod: 2 });
+    expect(evaluateTip(tip, ctx({ period: 1 })).status).toBe('ACCEPTED');
+    expect(evaluateTip(tip, ctx({ period: 2, events: [ev('GOAL', 1, { team: 'home' })] })).status).toBe('ACCEPTED');
+    expect(evaluateTip(tip, ctx({ period: 2, events: [ev('GOAL', 2, { team: 'home' })] })).status).toBe('FAILED');
+    expect(evaluateTip(tip, ctx({ period: 2, isPeriodEnd: true })).status).toBe('PASSED');
+    const tip3 = baseTip('scoreless_period', { targetPeriod: 3 });
+    expect(evaluateTip(tip3, ctx({ period: 3, isMatchOver: true })).status).toBe('PASSED');
+  });
+
+  it('evaluates all_strikers_fighting', () => {
+    const strikers = (modes: string[]) => modes.map((mode) => ({ role: 'striker', mode })) as any;
+    expect(evaluateTip(baseTip('all_strikers_fighting'), ctx({ players: strikers(['FIGHTING', 'FIGHTING', 'FIGHTING', 'DEFENDING']) })).passed).toBe(false);
+    expect(evaluateTip(baseTip('all_strikers_fighting'), ctx({ players: strikers(['FIGHTING', 'FIGHTING', 'FIGHTING', 'FIGHTING']) })).passed).toBe(true);
+    expect(evaluateTip(baseTip('all_strikers_fighting'), ctx({ events: [ev('FIGHT', 2, { isLineBrawl: true })] })).passed).toBe(true);
+  });
+
+  it('evaluates power_play_goals_2', () => {
+    const pp = (n: number) => Array.from({ length: n }, () => ev('GOAL', 1, { team: 'home', isPowerPlayGoal: true }));
+    expect(evaluateTip(baseTip('power_play_goals_2'), ctx({ events: pp(1), isMatchOver: true })).passed).toBe(false);
+    expect(evaluateTip(baseTip('power_play_goals_2'), ctx({ events: pp(2) })).status).toBe('PASSED');
+  });
+
+  it('evaluates shave_spread_1 for away team target', () => {
+    const tip = baseTip('shave_spread_1', { targetTeam: 'away' });
+    expect(evaluateTip(tip, ctx({ homeScore: 1, awayScore: 2, isMatchOver: true })).passed).toBe(true);
+    expect(evaluateTip(tip, ctx({ homeScore: 2, awayScore: 1, isMatchOver: true })).passed).toBe(false);
+  });
+
+  it('MatchSimulation stamps power play goals and line brawls, and builds order snapshots', () => {
+    const sim = new MatchSimulation(cloneConfig(), 7, 'clean_sheet');
+    const strikers = sim.players.filter((p) => p.role === 'striker');
+    const [a, b, c, d] = [
+      strikers.find((p) => p.team === 'home')!,
+      strikers.filter((p) => p.team === 'home')[1],
+      strikers.find((p) => p.team === 'away')!,
+      strikers.filter((p) => p.team === 'away')[1],
+    ];
+    sim.startFight(a, c);
+    expect(sim.events.at(-1)?.isLineBrawl).toBe(false);
+    sim.startFight(b, d);
+    expect(sim.events.at(-1)?.isLineBrawl).toBe(true);
+    const snap = sim.getOrderEvaluationSnapshot();
+    expect(snap.totalFights).toBe(2);
+    expect(snap.targetTeam).toBe(sim.orderTargetTeam);
+  });
+});

@@ -67,6 +67,10 @@ import {
   Vec2,
 } from './types';
 import { OpposingOrganistController } from './opposingOrganist';
+import {
+  OrderEvaluationSnapshot,
+  resolveOrderTargetTeam,
+} from '../game/orders';
 
 export interface MatchAudioHooks {
   onWhistle?: () => void;
@@ -91,6 +95,8 @@ export class MatchSimulation {
   public cfg: GameConfig;
   public rng: SeededRNG;
   public orderId: OrderId;
+  /** Subject team of the Official Directive (always 'home' for home_wins). */
+  public orderTargetTeam: Team;
   public audioHooks: MatchAudioHooks = {};
   public visualHooks: MatchVisualHooks = {};
   public timeDilation: number = 1.0;
@@ -133,6 +139,7 @@ export class MatchSimulation {
     this.cfg = cfg;
     this.rng = new SeededRNG(seed);
     this.orderId = orderId;
+    this.orderTargetTeam = resolveOrderTargetTeam(orderId, seed);
     this.periodTimeRemainingSec = cfg.periodDurationSec;
     this.crowdVolume = cfg.initialCrowdVolume;
 
@@ -579,6 +586,39 @@ export class MatchSimulation {
 
   public getTotalFights(): number {
     return this.events.filter((e) => e.type === 'FIGHT').length;
+  }
+
+  public getStalePlays(): number {
+    return this.events.filter((e) => e.type === 'SONG_PLAYED' && e.stale).length;
+  }
+
+  /**
+   * Snapshot of everything evaluateOrder needs, for live HUD and final scoring.
+   */
+  public getOrderEvaluationSnapshot(
+    isMatchOver: boolean = this.phase === 'MATCH_OVER'
+  ): OrderEvaluationSnapshot {
+    let homeAfterP2 = 0;
+    let awayAfterP2 = 0;
+    for (const e of this.events) {
+      if (e.type === 'GOAL' && e.period <= 2) {
+        if (e.team === 'home') homeAfterP2++;
+        else if (e.team === 'away') awayAfterP2++;
+      }
+    }
+    return {
+      homeGoals: this.homeScore,
+      awayGoals: this.awayScore,
+      totalFights: this.getTotalFights(),
+      averageCrowdVolume: this.getAverageCrowdVolume(),
+      isMatchOver,
+      targetTeam: this.orderTargetTeam,
+      stalePlays: this.getStalePlays(),
+      period: this.period,
+      isPeriodEnd: this.phase === 'PERIOD_END',
+      homeGoalsAfterP2: homeAfterP2,
+      awayGoalsAfterP2: awayAfterP2,
+    };
   }
 
   /**
@@ -2144,6 +2184,9 @@ export class MatchSimulation {
       timeRemainingSec: this.periodTimeRemainingSec,
       team: instigator.team,
       playerId: instigator.id,
+      isLineBrawl: this.players
+        .filter((p) => p.role === 'striker')
+        .every((p) => p.mode === 'FIGHTING'),
       activeSongId: this.activeSong?.songId ?? null,
       activeSongTarget: this.activeSong?.target ?? null,
     });
@@ -2394,6 +2437,10 @@ export class MatchSimulation {
       timeRemainingSec: this.periodTimeRemainingSec,
       team: attackingTeam,
       playerId: this.puck.shooterId ?? undefined,
+      isPowerPlayGoal: (() => {
+        const pp = getPowerPlayState(this.players);
+        return pp.isPowerPlay && pp.powerPlayTeam === attackingTeam;
+      })(),
       activeSongId: this.activeSong?.songId ?? null,
       activeSongTarget: this.activeSong?.target ?? null,
     });

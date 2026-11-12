@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { cloneConfig, DEFAULT_CONFIG } from '../../config';
-import { evaluateOrder } from '../../game/orders';
+import {
+  evaluateOrder,
+  getOrderById,
+  getOrderDisplay,
+  resolveOrderTargetTeam,
+} from '../../game/orders';
 import { resolveSongTarget } from '../../game/songs';
 import { buildStatsSummary } from '../../game/stats';
 import { OrganSynth } from '../../audio/organSynth';
@@ -690,7 +695,7 @@ describe('Official Orders & Tie Handling', () => {
       evaluateOrder('blood_on_ice', {
         homeGoals: 0,
         awayGoals: 0,
-        totalFights: 3,
+        totalFights: 5,
         averageCrowdVolume: 50,
         isMatchOver: true,
       }).passed
@@ -698,7 +703,7 @@ describe('Official Orders & Tie Handling', () => {
 
     expect(
       evaluateOrder('blowout', {
-        homeGoals: 4,
+        homeGoals: 5,
         awayGoals: 2,
         totalFights: 2,
         averageCrowdVolume: 50,
@@ -711,9 +716,104 @@ describe('Official Orders & Tie Handling', () => {
         homeGoals: 0,
         awayGoals: 2,
         totalFights: 0,
-        averageCrowdVolume: 65,
+        averageCrowdVolume: 80,
         isMatchOver: true,
       }).passed
+    ).toBe(true);
+  });
+});
+
+describe('Updated Official Directives', () => {
+  const snap = (over: Partial<Parameters<typeof evaluateOrder>[1]>) => ({
+    homeGoals: 0,
+    awayGoals: 0,
+    totalFights: 0,
+    averageCrowdVolume: 50,
+    isMatchOver: true,
+    ...over,
+  });
+
+  it('uses new thresholds for fights, blowout margin and crowd volume', () => {
+    expect(evaluateOrder('blood_on_ice', snap({ totalFights: 4 })).passed).toBe(false);
+    expect(evaluateOrder('blood_on_ice', snap({ totalFights: 5 })).passed).toBe(true);
+    expect(evaluateOrder('blowout', snap({ homeGoals: 4, awayGoals: 2 })).passed).toBe(false);
+    expect(evaluateOrder('blowout', snap({ homeGoals: 4, awayGoals: 1 })).passed).toBe(true);
+    expect(evaluateOrder('bring_the_noise', snap({ averageCrowdVolume: 79 })).passed).toBe(false);
+    expect(evaluateOrder('bring_the_noise', snap({ averageCrowdVolume: 80 })).passed).toBe(true);
+    expect(getOrderById('clean_sheet').title).toBe('Family Night');
+  });
+
+  it('home_wins is always Home; team directives honor targetTeam', () => {
+    expect(
+      evaluateOrder('home_wins', snap({ homeGoals: 1, awayGoals: 2, targetTeam: 'away' })).passed
+    ).toBe(false);
+    expect(
+      evaluateOrder('blowout', snap({ homeGoals: 0, awayGoals: 3, targetTeam: 'away' })).passed
+    ).toBe(true);
+    expect(
+      evaluateOrder('clean_sheet', snap({ homeGoals: 0, awayGoals: 2, targetTeam: 'away' })).passed
+    ).toBe(true);
+    expect(
+      evaluateOrder('clean_sheet', snap({ homeGoals: 2, awayGoals: 0, targetTeam: 'away' })).passed
+    ).toBe(false);
+  });
+
+  it('resolveOrderTargetTeam is deterministic, Home for home_wins, and mixes teams otherwise', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      expect(resolveOrderTargetTeam('home_wins', seed)).toBe('home');
+      expect(resolveOrderTargetTeam('blood_on_ice', seed)).toBe('home');
+      expect(resolveOrderTargetTeam('blowout', seed)).toBe(resolveOrderTargetTeam('blowout', seed));
+    }
+    for (const id of ['clean_sheet', 'blowout', 'no_repeat_songs', 'comeback_win'] as const) {
+      const teams = new Set(Array.from({ length: 60 }, (_, s) => resolveOrderTargetTeam(id, s)));
+      expect(teams.has('home')).toBe(true);
+      expect(teams.has('away')).toBe(true);
+    }
+    expect(getOrderDisplay('blowout', 'away').description).toContain('Away Team');
+  });
+
+  it('no_repeat_songs fails immediately on a repeat and requires a win', () => {
+    expect(
+      evaluateOrder('no_repeat_songs', snap({ homeGoals: 2, awayGoals: 1, stalePlays: 0 })).passed
+    ).toBe(true);
+    const live = evaluateOrder(
+      'no_repeat_songs',
+      snap({ homeGoals: 2, awayGoals: 1, stalePlays: 1, isMatchOver: false })
+    );
+    expect(live.liveStatus).toBe('FAILED');
+    expect(
+      evaluateOrder('no_repeat_songs', snap({ homeGoals: 1, awayGoals: 1 })).passed
+    ).toBe(false);
+  });
+
+  it('comeback_win needs a deficit after P2 and a win by the end', () => {
+    const base = { period: 3, homeGoalsAfterP2: 0, awayGoalsAfterP2: 1 };
+    expect(
+      evaluateOrder('comeback_win', snap({ ...base, homeGoals: 2, awayGoals: 1 })).passed
+    ).toBe(true);
+    expect(
+      evaluateOrder('comeback_win', snap({ ...base, homeGoals: 1, awayGoals: 1 })).passed
+    ).toBe(false);
+    // Led after P2 -> never a comeback, even with a win
+    expect(
+      evaluateOrder(
+        'comeback_win',
+        snap({ period: 3, homeGoalsAfterP2: 1, awayGoalsAfterP2: 0, homeGoals: 2, awayGoals: 0 })
+      ).passed
+    ).toBe(false);
+    // Live in P1/P2
+    expect(
+      evaluateOrder('comeback_win', snap({ period: 2, isMatchOver: false, homeGoals: 0, awayGoals: 1 })).liveStatus
+    ).toBe('ON_TRACK');
+    expect(
+      evaluateOrder('comeback_win', snap({ period: 2, isMatchOver: false, homeGoals: 1, awayGoals: 1 })).liveStatus
+    ).toBe('AT_RISK');
+    // Away target
+    expect(
+      evaluateOrder(
+        'comeback_win',
+        snap({ period: 3, targetTeam: 'away', homeGoalsAfterP2: 2, awayGoalsAfterP2: 1, homeGoals: 2, awayGoals: 3 })
+      ).passed
     ).toBe(true);
   });
 });

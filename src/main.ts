@@ -409,6 +409,7 @@ class OrganHeroApp {
   private startNewMatch(seed: number, orderId: OrderId): void {
     this.currentSeed = seed;
     this.currentMatchRecorded = false;
+    this.renderer.setMatchPayout(null);
     this.campaign.clearActiveTips();
     this.renderer.resetIceSummaryImmediate();
 
@@ -600,23 +601,30 @@ class OrganHeroApp {
                 this.campaign.getState().unofficialRepLevel,
                 this.sim.orderId,
                 this.currentSeed,
-                this.campaign.getOfferedTipEvaluatorIds()
+                this.campaign.getOfferedTipEvaluatorIds(),
+                this.sim.orderTargetTeam
               );
               if (offers.length > 0) {
                 this.campaign.addTipOffers(offers);
-                setTimeout(() => {
+                const nextPeriodNum = this.sim.period + 1;
+                const presentOffer = (idx: number): void => {
+                  const offer = offers[idx];
+                  if (!offer) return;
                   this.screens.showIntermissionTipNote(
-                    offers[0],
+                    offer,
                     () => {
-                      this.campaign.acceptTip(offers[0].id);
+                      this.campaign.acceptTip(offer.id, nextPeriodNum);
                       this.hud.update(this.sim, this.campaign.getActiveTips());
+                      presentOffer(idx + 1);
                     },
                     () => {
-                      this.campaign.declineTip(offers[0].id);
+                      this.campaign.declineTip(offer.id);
                       this.hud.update(this.sim, this.campaign.getActiveTips());
+                      presentOffer(idx + 1);
                     }
                   );
-                }, 1000);
+                };
+                setTimeout(() => presentOffer(0), 1000);
               }
             } else if (this.sim.phase === 'MATCH_OVER' && !this.currentMatchRecorded) {
               this.currentMatchRecorded = true;
@@ -627,23 +635,18 @@ class OrganHeroApp {
                 events: this.sim.events,
                 players: this.sim.players,
                 isMatchOver: true,
+                isPeriodEnd: false,
               });
               const campMatch = this.campaign.getCurrentMatch();
               if (campMatch) {
-                const evalRes = evaluateOrder(this.sim.orderId, {
-                  homeGoals: this.sim.homeScore,
-                  awayGoals: this.sim.awayScore,
-                  totalFights: this.sim.events.filter(
-                    (e) => e.type === 'FIGHT'
-                  ).length,
-                  averageCrowdVolume:
-                    this.sim.crowdSamples.reduce((a, b) => a + b.volume, 0) /
-                    (this.sim.crowdSamples.length || 1),
-                  isMatchOver: true,
-                });
-                const baseSalary = evalRes.passed
-                  ? Math.round(campMatch.baseSalary * campMatch.payoutMultiplier)
-                  : 0;
+                const evalRes = evaluateOrder(
+                  this.sim.orderId,
+                  this.sim.getOrderEvaluationSnapshot(true)
+                );
+                // Base salary is guaranteed; the bonus rewards completing the directive.
+                const baseSalary = campMatch.baseSalary;
+                const orderBonus = evalRes.passed ? campMatch.orderBonus : 0;
+                this.renderer.setMatchPayout({ base: baseSalary, bonus: orderBonus });
                 const { count: tipsPassed, earnings: tipEarnings } =
                   this.campaign.getCompletedTipsCountAndEarnings();
                 this.campaign.recordMatchEnd({
@@ -652,10 +655,11 @@ class OrganHeroApp {
                   officialOrderId: this.sim.orderId,
                   officialOrderPassed: evalRes.passed,
                   baseSalaryEarned: baseSalary,
+                  orderBonusEarned: orderBonus,
                   tipsOffered: this.campaign.getActiveTips().length,
                   tipsPassed,
                   tipEarnings,
-                  totalEarnings: baseSalary + tipEarnings,
+                  totalEarnings: baseSalary + orderBonus + tipEarnings,
                 });
               }
             }
@@ -672,6 +676,7 @@ class OrganHeroApp {
         events: this.sim.events,
         players: this.sim.players,
         isMatchOver: this.sim.phase === 'MATCH_OVER',
+        isPeriodEnd: this.sim.phase === 'PERIOD_END',
       });
       this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
       this.renderer.setActiveTips(this.campaign.getActiveTips());
