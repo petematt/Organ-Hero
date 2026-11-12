@@ -1535,22 +1535,52 @@ export class MatchSimulation {
    * Evaluates and executes a defensive zone clearance ("dump out and chase").
    * When a player is behind their own blue line, they chip/fire the puck down-ice
    * into neutral or offensive territory and transition immediately into chase mode.
+   * Skips clearing if:
+   * 1. There are no active opposing strikers on the ice (e.g., all in the penalty box / fighting).
+   * 2. The carrier is already the closest active striker on the ice to the opposing goal (open breakaway ice).
    */
   public tryClearPuck(carrier: PlayerEntity): boolean {
     if (!isBehindOwnBlueLine(carrier.pos, carrier.team)) {
       return false;
     }
 
+    // 1. Do not clear if there are no active opposing strikers on the ice (e.g. both in penalty box)
+    const activeOpposingStrikers = this.players.filter(
+      (p) =>
+        p.role === 'striker' &&
+        p.team !== carrier.team &&
+        p.mode !== 'PENALTY_BOX' &&
+        p.mode !== 'FIGHTING'
+    );
+    if (activeOpposingStrikers.length === 0) {
+      return false;
+    }
+
+    // 2. Do not clear if the carrier is already the active striker closest to the opposing goal
+    const oppGoal = getOpponentGoalPos(carrier.team);
+    const carrierDistToOppGoal = dist(carrier.pos, oppGoal);
+    const activeOtherStrikers = this.players.filter(
+      (p) =>
+        p.role === 'striker' &&
+        p.id !== carrier.id &&
+        p.mode !== 'PENALTY_BOX' &&
+        p.mode !== 'FIGHTING'
+    );
+    const someoneCloserToOppGoal = activeOtherStrikers.some(
+      (p) => dist(p.pos, oppGoal) < carrierDistToOppGoal - 1e-3
+    );
+    if (!someoneCloserToOppGoal) {
+      return false;
+    }
+
+    // 3. Clear in a varied down-range direction (±12° to ±52° off horizontal) so pucks bank off boards or angle across ice
     const dirX = carrier.team === 'home' ? 1 : -1;
-    // Angle clearance along boards or open ice
-    const targetY =
-      carrier.pos.y < CENTER_Y
-        ? this.rng.range(36, 120)
-        : this.rng.range(RINK_HEIGHT - 120, RINK_HEIGHT - 36);
-    const dir = normalize({
-      x: dirX * this.rng.range(1.6, 2.2),
-      y: (targetY - carrier.pos.y) / RINK_HEIGHT,
-    });
+    const angleDeg = this.rng.sign() * this.rng.range(12, 52);
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const dir = {
+      x: dirX * Math.cos(angleRad),
+      y: Math.sin(angleRad),
+    };
 
     const clearSpeed = this.cfg.passSpeed * this.rng.range(1.05, 1.25);
 

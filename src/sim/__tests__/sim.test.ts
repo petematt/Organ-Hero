@@ -504,7 +504,7 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     expect(sim.puck.inFlightPassToId).toBe(homeS2.id);
   });
 
-  it('defending players behind their blue line clear the puck out of territory and chase it down', () => {
+  it('defending players behind their blue line clear the puck out of territory in varied down-range angles and chase it down', () => {
     const sim = new MatchSimulation(cloneConfig(), 55);
     sim.phase = 'PLAYING';
     const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
@@ -519,13 +519,17 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     sim.gainPossession(homeS1);
     expect(homeS1.mode).toBe('POSSESSING');
 
-    // Execute clearance
+    // Execute clearance (default away strikers are at x = 595, closer to Away goal than homeS1)
     const cleared = sim.tryClearPuck(homeS1);
     expect(cleared).toBe(true);
 
-    // Puck should now be loose and flying forward toward opponent ice
+    // Puck should now be loose and flying forward with a meaningful off-axis lateral component (not straight down the ice)
     expect(sim.puck.carrierId).toBeNull();
-    expect(sim.puck.vel.x).toBeGreaterThan(300);
+    expect(sim.puck.vel.x).toBeGreaterThan(250);
+    const angleOffHorizontalDeg =
+      (Math.atan2(Math.abs(sim.puck.vel.y), Math.abs(sim.puck.vel.x)) * 180) / Math.PI;
+    expect(angleOffHorizontalDeg).toBeGreaterThanOrEqual(12 - 1e-3);
+    expect(angleOffHorizontalDeg).toBeLessThanOrEqual(52 + 1e-3);
 
     // Clearance event should be recorded
     const clearEvent = sim.events.find((e) => e.type === 'CLEAR');
@@ -539,6 +543,55 @@ describe('Striker State Machine, Fights, Uncapped Penalty Box & Shots', () => {
     // Stepping simulation: players actively chase the loose puck down-ice
     sim.step(1 / 60);
     expect(homeS1.vel.x).toBeGreaterThan(0);
+
+    // Verify variety of up/down down-range angles across seeds
+    let sawUpwardClear = false;
+    let sawDownwardClear = false;
+    for (let s = 1; s <= 25; s++) {
+      const sSim = new MatchSimulation(cloneConfig(), s * 17);
+      sSim.phase = 'PLAYING';
+      const carrier = sSim.players.find((p) => p.id === 'home-s1')!;
+      carrier.pos = { x: 220, y: CENTER_Y };
+      sSim.gainPossession(carrier);
+      expect(sSim.tryClearPuck(carrier)).toBe(true);
+      if (sSim.puck.vel.y < -80) sawUpwardClear = true;
+      if (sSim.puck.vel.y > 80) sawDownwardClear = true;
+    }
+    expect(sawUpwardClear).toBe(true);
+    expect(sawDownwardClear).toBe(true);
+  });
+
+  it('does not clear the puck if no opposing strikers are active or if the carrier is already closest to the opposing goal', () => {
+    // Case 1: Both opposing strikers in the penalty box -> do NOT clear
+    const simNoOpp = new MatchSimulation(cloneConfig(), 101);
+    simNoOpp.phase = 'PLAYING';
+    const homeS1 = simNoOpp.players.find((p) => p.id === 'home-s1')!;
+    homeS1.pos = { x: 220, y: CENTER_Y };
+    for (const p of simNoOpp.players) {
+      if (p.team === 'away' && p.role === 'striker') {
+        p.mode = 'PENALTY_BOX';
+        p.stateTimer = 25;
+      }
+    }
+    simNoOpp.gainPossession(homeS1);
+    expect(simNoOpp.tryClearPuck(homeS1)).toBe(false);
+    expect(simNoOpp.puck.carrierId).toBe(homeS1.id);
+
+    // Case 2: Opposing strikers active, but carrier is already the player closest to the opposing goal -> do NOT clear
+    const simClosest = new MatchSimulation(cloneConfig(), 102);
+    simClosest.phase = 'PLAYING';
+    const carrier = simClosest.players.find((p) => p.id === 'home-s1')!;
+    carrier.pos = { x: 310, y: CENTER_Y }; // behind Home blue line (340), dist to Away goal (900) = 590
+    for (const p of simClosest.players) {
+      if (p.role === 'striker' && p.id !== carrier.id) {
+        // All other strikers are deeper in Home's zone (further from Away goal than carrier)
+        p.pos = { x: 180, y: p.team === 'home' ? 120 : 300 };
+        p.mode = 'DEFENDING';
+      }
+    }
+    simClosest.gainPossession(carrier);
+    expect(simClosest.tryClearPuck(carrier)).toBe(false);
+    expect(simClosest.puck.carrierId).toBe(carrier.id);
   });
 });
 
