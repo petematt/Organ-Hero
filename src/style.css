@@ -888,6 +888,15 @@ body {
   margin-bottom: 12px;
 }
 
+.seat-repertoire-heading {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: #f8fafc;
+  margin-bottom: 6px;
+}
+
 .seat-tips-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

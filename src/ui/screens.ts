@@ -126,6 +126,7 @@ export class ScreenModalManager {
           and play the right stadium organ song at the right moment to shift player moods,
           ignite brawls, and fulfill management's Official Orders.
         </p>
+        <h3 class="seat-repertoire-heading">Your organ repertoire</h3>
         <div class="seat-tips-grid">
           <div class="seat-tip">
             <strong>Charge! Fanfare</strong>

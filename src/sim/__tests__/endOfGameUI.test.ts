@@ -203,6 +203,14 @@ describe('End-of-Game UI Improvements', () => {
 
     // 4. Remove "Stadium pipe organ console"
     expect(html.toLowerCase()).not.toContain('stadium pipe organ console');
+
+    // 5. Show "Your organ repertoire" heading after game description and before song tiles
+    const leadIdx = html.indexOf('class="modal-lead"');
+    const headingIdx = html.indexOf('<h3 class="seat-repertoire-heading">Your organ repertoire</h3>');
+    const tilesIdx = html.indexOf('class="seat-tips-grid"');
+    expect(leadIdx).toBeGreaterThan(-1);
+    expect(headingIdx).toBeGreaterThan(leadIdx);
+    expect(tilesIdx).toBeGreaterThan(headingIdx);
   });
 
   it('cleans up the official orders modal (showOrderClipboard) per UI specifications', () => {
