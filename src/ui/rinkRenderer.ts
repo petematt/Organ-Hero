@@ -14,12 +14,13 @@ import {
 } from '../sim/physics';
 import { clamp } from '../sim/rng';
 import { PlayerEntity, Team, Vec2 } from '../sim/types';
+import { TipOffer } from '../campaign/tips';
 
 export interface IceSummaryCallbacks {
   onContinueNextPeriod: () => void;
   onPlayAgainNewSeed: () => void;
-  onPlayAgainSameSeed: () => void;
-  onChangeOrder: () => void;
+  onPlayAgainSameSeed?: () => void;
+  onChangeOrder?: () => void;
   onOpenShop?: () => void;
 }
 
@@ -110,6 +111,7 @@ export class RinkRenderer {
   private dragTotalDistPx: number = 0;
   private hoveredButtonId: string | null = null;
   private iceButtons: IceButton[] = [];
+  private activeTips: TipOffer[] = [];
 
   // Zamboni big-eraser & camera pullback state
   private isZamboniClearing: boolean = false;
@@ -169,6 +171,10 @@ export class RinkRenderer {
     this.callbacks = callbacks;
   }
 
+  public setActiveTips(tips: TipOffer[]): void {
+    this.activeTips = tips;
+  }
+
   public isSummaryOrZamboniActive(): boolean {
     return this.isIceSummaryActive || this.isZamboniClearing;
   }
@@ -177,7 +183,7 @@ export class RinkRenderer {
    * Triggered when a period ends (PERIOD_END) or the match ends (MATCH_OVER).
    * Players skate off the ice, UI above/below retracts, and camera zooms in on center ice.
    */
-  public beginIceSummary(sim: MatchSimulation): void {
+  public beginIceSummary(sim: MatchSimulation, tips?: TipOffer[]): void {
     this.isIceSummaryActive = true;
     this.isZamboniClearing = false;
     this.zamboniProgress = 0;
@@ -185,6 +191,9 @@ export class RinkRenderer {
     this.iceScrollFocusY = 148;
     this.iceScrollVelY = 0;
     this.hoveredButtonId = null;
+    if (tips) {
+      this.activeTips = tips;
+    }
 
     this.skateOffStartPos.clear();
     for (const p of sim.players) {
@@ -1109,101 +1118,97 @@ export class RinkRenderer {
       isMatchOver: true,
     });
 
+    const acceptedTips = this.activeTips.filter(
+      (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
+    );
+
     const bx = CENTER_X - 166;
     const bw = 332;
 
-    ctx.fillStyle = 'rgba(11, 20, 34, 0.86)';
+    const startY = 38;
+    const scoreH = 28;
+    const statsTableH = 76;
+    const organImpactH = 46;
+    const orderH = 38;
+    const bribeH = acceptedTips.length > 0 ? 18 + acceptedTips.length * 22 : 0;
+    const continueBtnH = 32;
+
+    const totalCardH =
+      22 +
+      scoreH +
+      6 +
+      statsTableH +
+      5 +
+      organImpactH +
+      6 +
+      orderH +
+      6 +
+      (acceptedTips.length > 0 ? bribeH + 6 : 0) +
+      continueBtnH +
+      10;
+
+    // Background Card
+    ctx.fillStyle = 'rgba(11, 20, 34, 0.88)';
     ctx.strokeStyle = orderEval.passed
       ? 'rgba(74, 222, 128, 0.75)'
       : 'rgba(248, 113, 113, 0.75)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(bx, 38, bw, 350, 10);
+    ctx.roundRect(bx, startY, bw, totalCardH, 10);
     ctx.fill();
     ctx.stroke();
 
-    // Eyebrow & Drag Hint
+    // 1. Eyebrow (No seed number) & Drag Hint
     ctx.fillStyle = '#facc15';
     ctx.font = '700 7.5px "Chakra Petch", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(
-      `FINAL BUZZER • SEED #${sim.rng.initialSeed}`,
-      bx + 12,
-      52
-    );
+    ctx.fillText('FINAL BUZZER', bx + 12, startY + 14);
 
     ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(bx + bw - 92, 44, 80, 13, 6);
+    ctx.roundRect(bx + bw - 92, startY + 6, 80, 13, 6);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#bae6fd';
     ctx.font = '700 6.5px "Chakra Petch", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('⇅ DRAG TO SCROLL', bx + bw - 52, 52.5);
+    ctx.fillText('⇅ DRAG TO SCROLL', bx + bw - 52, startY + 14.5);
 
-    // Main Result Title
-    ctx.fillStyle = orderEval.passed ? '#4ade80' : '#f87171';
-    ctx.font = '700 13.5px "Chakra Petch", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(
-      orderEval.passed
-        ? '✅ OFFICIAL ORDER COMPLETED!'
-        : '❌ OFFICIAL ORDER FAILED',
-      bx + 12,
-      69
-    );
+    let curY = startY + 22;
 
-    // Order Banner (y = 75..98)
-    ctx.fillStyle = orderEval.passed
-      ? 'rgba(34, 197, 94, 0.18)'
-      : 'rgba(239, 68, 68, 0.18)';
-    ctx.strokeStyle = orderEval.passed ? '#4ade80' : '#f87171';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(bx + 12, 75, bw - 24, 22, 5);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '600 7.8px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(
-      `${orderDef.title}: ${orderEval.reason}`,
-      bx + 18,
-      88.5
-    );
-
-    // Final Score Banner (y = 102..130)
+    // SECTION 1: Final Score
     ctx.fillStyle = 'rgba(6, 11, 20, 0.9)';
     ctx.strokeStyle = '#334155';
     ctx.beginPath();
-    ctx.roundRect(bx + 12, 102, bw - 24, 28, 6);
+    ctx.roundRect(bx + 12, curY, bw - 24, scoreH, 6);
     ctx.fill();
     ctx.stroke();
 
     ctx.textAlign = 'center';
     ctx.font = '700 11px "Chakra Petch", sans-serif';
     ctx.fillStyle = '#60a5fa';
-    ctx.fillText(`HOME  ${sim.homeScore}`, CENTER_X - 62, 119.5);
+    ctx.fillText(`HOME  ${sim.homeScore}`, CENTER_X - 62, curY + 17.5);
     ctx.fillStyle = '#fde047';
     ctx.font = '700 8px "Chakra Petch", sans-serif';
     ctx.fillText(
       sim.homeScore === sim.awayScore ? 'TIE' : 'FINAL',
       CENTER_X,
-      119
+      curY + 17
     );
     ctx.fillStyle = '#f87171';
     ctx.font = '700 11px "Chakra Petch", sans-serif';
-    ctx.fillText(`${sim.awayScore}  AWAY`, CENTER_X + 62, 119.5);
+    ctx.fillText(`${sim.awayScore}  AWAY`, CENTER_X + 62, curY + 17.5);
 
-    // Per-Period Summary Table (y = 135..220)
+    curY += scoreH + 6;
+
+    // SECTION 2: Period / Final Stats Box
+    // 2a. Per-Period Summary Table
     ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
     ctx.strokeStyle = '#334155';
     ctx.beginPath();
-    ctx.roundRect(bx + 12, 135, bw - 24, 84, 6);
+    ctx.roundRect(bx + 12, curY, bw - 24, statsTableH, 6);
     ctx.fill();
     ctx.stroke();
 
@@ -1220,7 +1225,7 @@ export class RinkRenderer {
     ctx.font = '700 7.2px "Chakra Petch", sans-serif';
     ctx.textAlign = 'center';
     for (let i = 0; i < headers.length; i++) {
-      ctx.fillText(headers[i], cols[i], 147);
+      ctx.fillText(headers[i], cols[i], curY + 12);
     }
 
     const drawTableRow = (
@@ -1246,47 +1251,128 @@ export class RinkRenderer {
       }
     };
 
-    drawTableRow('P1', p1, 162, false);
-    drawTableRow('P2', p2, 177, false);
-    drawTableRow('P3', p3, 192, false);
-    drawTableRow(
-      'TOT',
-      totalStats,
-      209,
-      true,
-      sim.getAverageCrowdVolume()
-    );
+    drawTableRow('P1', p1, curY + 26, false);
+    drawTableRow('P2', p2, curY + 40, false);
+    drawTableRow('P3', p3, curY + 54, false);
+    drawTableRow('TOT', totalStats, curY + 68, true, sim.getAverageCrowdVolume());
 
-    // Full-Match Organ Impact Box (y = 224..294)
+    curY += statsTableH + 5;
+
+    // 2b. Full-Match Organ Impact Box
     ctx.fillStyle = 'rgba(30, 41, 59, 0.78)';
     ctx.strokeStyle = '#475569';
     ctx.beginPath();
-    ctx.roundRect(bx + 12, 224, bw - 24, 70, 6);
+    ctx.roundRect(bx + 12, curY, bw - 24, organImpactH, 6);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#fde047';
-    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.font = '700 8px "Chakra Petch", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('🎹 FULL-MATCH ORGAN IMPACT', bx + 20, 237);
+    ctx.fillText('🎹 FULL-MATCH ORGAN IMPACT', bx + 20, curY + 13);
 
     ctx.fillStyle = '#e2e8f0';
-    ctx.font = '500 7.5px "Inter", sans-serif';
-    const lines = [
-      ...totalStats.impactLines.slice(0, 3),
-      `Cue Hits: ${totalStats.cueHits} ★  •  Stale Repeats: ${totalStats.stalePlays}`,
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(`• ${lines[i]}`, bx + 20, 250 + i * 12);
+    ctx.font = '500 7.2px "Inter", sans-serif';
+    ctx.fillText(
+      `• Cue Hits: ${totalStats.cueHits} ★  •  Stale Repeats: ${totalStats.stalePlays}`,
+      bx + 20,
+      curY + 26
+    );
+    const impactLine = totalStats.impactLines[0] || 'Organ resonated across the arena';
+    ctx.fillText(`• ${impactLine}`, bx + 20, curY + 38);
+
+    curY += organImpactH + 6;
+
+    // SECTION 3: Official Orders
+    ctx.fillStyle = orderEval.passed
+      ? 'rgba(34, 197, 94, 0.18)'
+      : 'rgba(239, 68, 68, 0.18)';
+    ctx.strokeStyle = orderEval.passed ? '#4ade80' : '#f87171';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx + 12, curY, bw - 24, orderH, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = orderEval.passed ? '#4ade80' : '#f87171';
+    ctx.font = '700 8.5px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      orderEval.passed
+        ? '✅ OFFICIAL ORDER COMPLETED'
+        : '❌ OFFICIAL ORDER FAILED',
+      bx + 20,
+      curY + 14
+    );
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '600 7.5px "Inter", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `${orderDef.title}: ${orderEval.reason}`,
+      bx + 20,
+      curY + 28
+    );
+
+    curY += orderH + 6;
+
+    // SECTION 4: Bribes (if any taken)
+    if (acceptedTips.length > 0) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx + 12, curY, bw - 24, bribeH, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fde047';
+      ctx.font = '700 8px "Chakra Petch", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        `💰 UNDER-THE-TABLE BRIBES (${acceptedTips.length} TAKEN)`,
+        bx + 20,
+        curY + 12
+      );
+
+      for (let i = 0; i < acceptedTips.length; i++) {
+        const tip = acceptedTips[i];
+        const rowY = curY + 24 + i * 22;
+        const passed = tip.status === 'PASSED';
+        const failed = tip.status === 'FAILED';
+
+        // Sender + Title
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '700 7.5px "Inter", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${tip.senderName} (${tip.senderTitle})`, bx + 20, rowY);
+
+        // Status pill text
+        ctx.textAlign = 'right';
+        ctx.font = '700 7.5px "Chakra Petch", sans-serif';
+        ctx.fillStyle = passed ? '#4ade80' : failed ? '#f87171' : '#facc15';
+        const statusText = passed
+          ? `PASSED (+$${tip.bribePayout})`
+          : failed
+          ? 'FAILED ($0)'
+          : `IN PROGRESS (+$${tip.bribePayout})`;
+        ctx.fillText(statusText, bx + bw - 20, rowY);
+
+        // Condition description
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '500 6.8px "Inter", sans-serif';
+        ctx.fillText(tip.conditionDescription, bx + 20, rowY + 9);
+      }
+
+      curY += bribeH + 6;
     }
 
-    // Action Buttons on the Ice (y = 300..378)
-    const btnNewSeed: IceButton = {
-      id: 'play-again-new-seed',
-      label: this.callbacks?.onOpenShop
-        ? '🏆 ADVANCE TO ORGAN LOFT & SHOP (SEND ZAMBONI)'
-        : '🔄 PLAY AGAIN — NEW SEED (SEND ZAMBONI)',
-      rect: { x: bx + 12, y: 302, w: bw - 24, h: 34 },
+    // SECTION 5: Final Section - Continue Button
+    const continueBtn: IceButton = {
+      id: 'game-over-continue',
+      label: 'Continue',
+      rect: { x: bx + 12, y: curY, w: bw - 24, h: continueBtnH },
       primary: true,
       onClick: () => {
         this.startZamboniSweep(() => {
@@ -1299,35 +1385,8 @@ export class RinkRenderer {
       },
     };
 
-    const halfW = (bw - 30) * 0.5;
-    const btnSameSeed: IceButton = {
-      id: 'play-again-same-seed',
-      label: `🔁 REPLAY SEED #${sim.rng.initialSeed}`,
-      rect: { x: bx + 12, y: 342, w: halfW, h: 32 },
-      primary: false,
-      onClick: () => {
-        this.startZamboniSweep(() => {
-          this.callbacks?.onPlayAgainSameSeed();
-        });
-      },
-    };
-
-    const btnChangeOrder: IceButton = {
-      id: 'change-order',
-      label: '📋 CHANGE ORDER',
-      rect: { x: bx + 18 + halfW, y: 342, w: halfW, h: 32 },
-      primary: false,
-      onClick: () => {
-        this.startZamboniSweep(() => {
-          this.callbacks?.onChangeOrder();
-        });
-      },
-    };
-
-    this.iceButtons.push(btnNewSeed, btnSameSeed, btnChangeOrder);
-    for (const b of this.iceButtons) {
-      this.drawIceButton(ctx, b);
-    }
+    this.iceButtons.push(continueBtn);
+    this.drawIceButton(ctx, continueBtn);
   }
 
   private drawIceButton(ctx: CanvasRenderingContext2D, btn: IceButton): void {

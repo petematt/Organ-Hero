@@ -611,6 +611,14 @@ class OrganHeroApp {
               }
             } else if (this.sim.phase === 'MATCH_OVER' && !this.currentMatchRecorded) {
               this.currentMatchRecorded = true;
+              this.campaign.evaluateActiveTips({
+                period: this.sim.period,
+                homeScore: this.sim.homeScore,
+                awayScore: this.sim.awayScore,
+                events: this.sim.events,
+                players: this.sim.players,
+                isMatchOver: true,
+              });
               const campMatch = this.campaign.getCurrentMatch();
               if (campMatch) {
                 const evalRes = evaluateOrder(this.sim.orderId, {
@@ -642,7 +650,7 @@ class OrganHeroApp {
                 });
               }
             }
-            this.renderer.beginIceSummary(this.sim);
+            this.renderer.beginIceSummary(this.sim, this.campaign.getActiveTips());
             break;
           }
         }
@@ -657,6 +665,7 @@ class OrganHeroApp {
         isMatchOver: this.sim.phase === 'MATCH_OVER',
       });
       this.hud.update(this.sim, this.campaign.getActiveTips(), this.campaign);
+      this.renderer.setActiveTips(this.campaign.getActiveTips());
     }
 
     this.renderer.render(this.sim, rawDtSec);

@@ -22,9 +22,9 @@ export interface ScreenCallbacks {
   onTakeSeat: () => void;
   onStartMatchWithOrder: (orderId: OrderId) => void;
   onContinueNextPeriod: () => void;
-  onPlayAgainSameSeed: () => void;
+  onPlayAgainSameSeed?: () => void;
   onPlayAgainNewSeed: () => void;
-  onChangeOrder: () => void;
+  onChangeOrder?: () => void;
   onResumeFromPause: () => void;
 }
 
@@ -373,7 +373,10 @@ export class ScreenModalManager {
   /**
    * 4. Final Game Breakdown Modal (After Period 3).
    */
-  public showGameBreakdown(sim: MatchSimulation): void {
+  public showGameBreakdown(
+    sim: MatchSimulation,
+    activeTips: TipOffer[] = []
+  ): void {
     this.contentEl.classList.remove('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const totalStats = buildStatsSummary(sim.events, sim.crowdSamples);
@@ -390,6 +393,39 @@ export class ScreenModalManager {
       isMatchOver: true,
     });
 
+    const acceptedTips = activeTips.filter(
+      (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
+    );
+
+    const bribesHtml =
+      acceptedTips.length > 0
+        ? `
+        <div class="bribes-final-box" style="margin-top: 12px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(148, 163, 184, 0.2); border-left: 3px solid #facc15; border-radius: 6px; padding: 10px 14px; text-align: left;">
+          <div style="font-size: 11px; font-weight: 800; color: #facc15; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.05em;">
+            Under-The-Table Bribes (${acceptedTips.length} Taken)
+          </div>
+          ${acceptedTips
+            .map((tip) => {
+              const passed = tip.status === 'PASSED';
+              const pillClass = passed ? 'status-track' : 'status-fail';
+              const payoutText = passed ? `+$${tip.bribePayout}` : 'FAILED ($0)';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                  <div>
+                    <strong style="color: #f8fafc; font-size: 12px;">${tip.senderName} (${tip.senderTitle})</strong>
+                    <div style="font-size: 11px; color: #cbd5e1;">${tip.conditionDescription}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <span class="order-status-pill ${pillClass}">${payoutText}</span>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      `
+        : '';
+
     const periodRow = (label: string, s: PeriodStatsSummary) => `
       <tr>
         <td>${label}</td>
@@ -403,21 +439,17 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner breakdown-modal game-over-modal">
-        <div class="modal-eyebrow">FINAL BUZZER • SEED #${sim.rng.initialSeed}</div>
-        <h2 class="modal-title">
-          ${orderEval.passed ? '✅ OFFICIAL ORDER COMPLETED!' : '❌ OFFICIAL ORDER FAILED'}
-        </h2>
+        <!-- Header (Seed dropped) -->
+        <div class="modal-eyebrow">FINAL BUZZER</div>
 
-        <div class="order-final-banner ${orderEval.passed ? 'banner-pass' : 'banner-fail'}">
-          <strong>${orderDef.title}:</strong> ${orderEval.reason}
-        </div>
-
+        <!-- SECTION 1: Score -->
         <div class="breakdown-score-banner">
           <div class="b-team home">HOME <span>${sim.homeScore}</span></div>
           <div class="b-vs">${sim.homeScore === sim.awayScore ? 'TIE' : 'FINAL'}</div>
           <div class="b-team away"><span>${sim.awayScore}</span> AWAY</div>
         </div>
 
+        <!-- SECTION 2: Period / Final Stats Box -->
         <table class="period-summary-table">
           <thead>
             <tr>
@@ -452,31 +484,32 @@ export class ScreenModalManager {
           </ul>
         </div>
 
-        <div class="modal-actions multi-actions">
-          <button id="btn-replay-new-seed" class="primary-cta-btn" type="button">
-            🔄 Play Again (New Seed)
-          </button>
-          <button id="btn-replay-same-seed" class="secondary-cta-btn" type="button">
-            🔁 Replay Same Seed (#${sim.rng.initialSeed})
-          </button>
-          <button id="btn-change-order" class="secondary-cta-btn" type="button">
-            📋 Change Order
+        <!-- SECTION 3: Official Orders -->
+        <div class="order-final-banner ${orderEval.passed ? 'banner-pass' : 'banner-fail'}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <strong>Directive: ${orderDef.title}</strong>
+            <span class="order-status-pill ${orderEval.passed ? 'status-track' : 'status-fail'}">
+              ${orderEval.passed ? 'COMPLETED' : 'FAILED'}
+            </span>
+          </div>
+          <div style="font-size: 12px; color: #cbd5e1;">${orderEval.reason}</div>
+        </div>
+
+        <!-- SECTION 4: Bribes (if any taken) -->
+        ${bribesHtml}
+
+        <!-- SECTION 5: Final Section - Continue Button -->
+        <div class="modal-actions">
+          <button id="btn-game-over-continue" class="primary-cta-btn" type="button">
+            Continue
           </button>
         </div>
       </div>
     `;
 
-    document.getElementById('btn-replay-new-seed')?.addEventListener('click', () => {
+    document.getElementById('btn-game-over-continue')?.addEventListener('click', () => {
       this.hide();
       this.callbacks.onPlayAgainNewSeed();
-    });
-    document.getElementById('btn-replay-same-seed')?.addEventListener('click', () => {
-      this.hide();
-      this.callbacks.onPlayAgainSameSeed();
-    });
-    document.getElementById('btn-change-order')?.addEventListener('click', () => {
-      this.hide();
-      this.callbacks.onChangeOrder();
     });
   }
 
@@ -575,7 +608,7 @@ export class ScreenModalManager {
       .getElementById('btn-pause-change-order')
       ?.addEventListener('click', () => {
         this.hide();
-        this.callbacks.onChangeOrder();
+        this.callbacks.onChangeOrder?.();
       });
   }
 
