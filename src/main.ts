@@ -258,7 +258,39 @@ class OrganHeroApp {
         this.screens.showIntermissionTipNote(offers[0], () => {}, () => {});
       }
     } else if (urlOpts.screen === 'clipboard') {
-      this.screens.showOrderClipboard(initialOrder, this.currentSeed);
+      this.screens.showOrderClipboard(
+        initialOrder,
+        this.currentSeed,
+        campMatch,
+        this.campaign.getOfficialReputationPct()
+      );
+    } else if (urlOpts.screen === 'pause') {
+      const offers = generateIntermissionTips(1, 2, initialOrder, this.currentSeed, []);
+      if (offers.length > 0) {
+        offers[0].status = 'ACCEPTED';
+      }
+      this.screens.showPauseModal(this.sim, offers.slice(0, 1));
+    } else if (urlOpts.screen === 'period') {
+      for (let i = 0; i < 360; i++) {
+        this.sim.step(1 / 60);
+      }
+      this.screens.showPeriodBreakdown(this.sim);
+    } else if (urlOpts.screen === 'gameover') {
+      for (let i = 0; i < 360; i++) {
+        this.sim.step(1 / 60);
+      }
+      this.sim.period = 3;
+      this.sim.homeScore = 4;
+      this.sim.awayScore = 2;
+      const offers = generateIntermissionTips(1, 2, initialOrder, this.currentSeed, []);
+      if (offers.length > 0) {
+        offers[0].status = 'PASSED';
+      }
+      this.screens.showGameBreakdown(this.sim, offers.slice(0, 1));
+    } else if (urlOpts.screen === 'shop') {
+      this.screens.showOrganLoftShop(this.campaign, () => {});
+    } else if (urlOpts.screen === 'season') {
+      this.screens.showSeasonEndSummaryModal(this.campaign, () => {});
     } else {
       this.screens.showStartSeatScreen();
     }

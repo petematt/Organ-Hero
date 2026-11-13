@@ -53,7 +53,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: radial-gradient(circle at center, #162234 0%, #090d14 100%);
+  background: radial-gradient(circle at center, #2b1a0e 0%, #0d0906 100%);
   align-items: center;
   justify-content: center;
   padding: 24px;
@@ -67,28 +67,35 @@ body {
 }
 
 .rotate-card {
-  max-width: 320px;
-  background: rgba(17, 24, 36, 0.92);
-  border: 1px solid rgba(234, 179, 8, 0.45);
-  border-radius: 14px;
-  padding: 28px 22px;
+  position: relative;
+  max-width: 340px;
+  background: #faf6ec;
+  color: #1c1917;
+  border: 6px solid #5a381e;
+  border-radius: 10px;
+  padding: 28px 22px 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), inset 0 0 0 2px #855632;
 }
 
 .rotate-icon {
-  font-size: 46px;
-  color: var(--brass-gold);
-  margin-bottom: 12px;
+  font-size: 44px;
+  color: #dc2626;
+  margin-bottom: 10px;
 }
 
 .rotate-card h2 {
-  font-family: 'Chakra Petch', sans-serif;
-  font-size: 22px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 26px;
+  color: #1c1917;
   margin-bottom: 8px;
 }
 
 .rotate-card p {
   font-size: 14px;
-  color: var(--text-muted);
+  color: #44403c;
   line-height: 1.45;
 }
 
@@ -680,29 +687,53 @@ body {
   transition: width 0.08s linear;
 }
 
-/* Modals (Start Seat, Clipboard, Period Breakdown, Game Breakdown, Pause) */
+/* ==========================================================================
+   Modals — Style #5: Locker-Room Corkboard & Coach's Greaseboard
+   Scales smoothly across mobile landscape (844x390) and desktop (1920x1080)
+   ========================================================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 500;
-  background: rgba(6, 10, 17, 0.82);
-  backdrop-filter: blur(5px);
+  background: radial-gradient(circle at center, rgba(24, 15, 8, 0.72) 0%, rgba(7, 6, 5, 0.88) 100%);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px;
+  padding: clamp(6px, 1.4vmin, 18px);
 }
 
+/* Scarred wooden frame + warm granulated corkboard surface */
 .modal-card {
-  width: 100%;
-  max-width: 660px;
-  max-height: 94dvh;
+  position: relative;
+  width: clamp(320px, 66vw, 880px);
+  max-width: 95vw;
+  max-height: 93dvh;
   overflow-y: auto;
-  background: linear-gradient(180deg, #182234 0%, #0f1726 100%);
-  border: 2px solid #475569;
-  border-radius: 12px;
-  padding: 16px 20px;
-  color: var(--text-primary);
+  background-color: #b48252;
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(68, 36, 12, 0.2) 1.2px, transparent 1.6px),
+    radial-gradient(circle at 74% 62%, rgba(255, 232, 198, 0.18) 1px, transparent 1.5px),
+    radial-gradient(circle at 42% 81%, rgba(92, 50, 18, 0.18) 1.4px, transparent 1.9px),
+    radial-gradient(circle at 86% 19%, rgba(58, 29, 9, 0.16) 1px, transparent 1.5px),
+    linear-gradient(180deg, rgba(196, 147, 96, 0.45) 0%, rgba(146, 98, 55, 0.55) 100%);
+  background-size: 29px 31px, 37px 41px, 53px 47px, 43px 39px, 100% 100%;
+  background-position: 0 0, 11px 17px, 23px 7px, 5px 29px, 0 0;
+  border: clamp(5px, 0.85vmin, 10px) solid #4f2f17;
+  border-radius: clamp(8px, 1.2vmin, 14px);
+  padding: clamp(10px, 2vmin, 24px) clamp(12px, 2.5vmin, 30px);
+  color: #1c1917;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.82),
+    0 0 0 2px #261408,
+    inset 0 0 0 2px #7c4f2b,
+    inset 0 4px 18px rgba(40, 20, 6, 0.52);
+  scrollbar-width: thin;
+  scrollbar-color: #4f2f17 rgba(40, 20, 6, 0.22);
+}
+
+.modal-card.wide-board-host {
+  width: clamp(340px, 78vw, 1100px);
 }
 
 .modal-card.tip-note-host,
@@ -717,30 +748,54 @@ body {
   box-shadow: none;
 }
 
-/* Intermission Unsavory Offer / Confidential Proposition Card — scales with desktop & mobile viewports */
+/* Intermission Unsavory Offer — Duct-Taped Yellow Legal-Pad Sheet */
 .tip-note-card {
-  width: clamp(460px, 64vw, 1600px);
-  max-width: 90vw;
+  position: relative;
+  width: clamp(420px, 64vw, 1180px);
+  max-width: 92vw;
   max-height: 92dvh;
   overflow-y: auto;
-  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  background-color: #fef08a;
+  background-image:
+    linear-gradient(90deg, transparent 0, transparent clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.28) clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.28) calc(clamp(20px, 3.2vmin, 40px) + 1.5px), transparent calc(clamp(20px, 3.2vmin, 40px) + 1.5px)),
+    repeating-linear-gradient(180deg, transparent 0, transparent 27px, rgba(59, 130, 246, 0.16) 27px, rgba(59, 130, 246, 0.16) 28px),
+    linear-gradient(180deg, #fef9c3 0%, #fde047 100%);
   color: #1c1917;
-  border: clamp(2px, 0.3vmin, 4px) solid #d97706;
-  border-radius: clamp(10px, 1.8vmin, 24px);
-  padding: clamp(14px, 3.2vmin, 46px) clamp(18px, 3.8vmin, 54px);
-  box-shadow: 0 28px 68px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(251, 191, 36, 0.35);
+  border: 2.5px solid #292524;
+  border-radius: 6px;
+  padding: clamp(14px, 2.6vmin, 34px) clamp(16px, 3.2vmin, 42px) clamp(14px, 2.6vmin, 32px) clamp(28px, 4.4vmin, 56px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.8),
+    6px 6px 0 rgba(28, 25, 23, 0.45);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Silver duct-tape strip holding the bribe note at top center */
+.tip-note-card::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1.2deg);
+  width: clamp(86px, 14vmin, 160px);
+  height: clamp(10px, 1.5vmin, 18px);
+  background: linear-gradient(180deg, #e7e5e4 0%, #a8a29e 100%);
+  border: 1px solid rgba(41, 37, 36, 0.45);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
 .tip-note-eyebrow {
-  font-family: 'Chakra Petch', monospace;
-  font-size: clamp(10px, 1.6vmin, 22px);
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(11px, 1.7vmin, 20px);
   font-weight: 800;
-  letter-spacing: 0.1em;
-  color: #92400e;
-  border-bottom: clamp(2px, 0.25vmin, 3px) dashed #b45309;
-  padding-bottom: clamp(5px, 1vmin, 14px);
-  margin-bottom: clamp(10px, 2vmin, 28px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #78350f;
+  border-bottom: 2px dashed #a16207;
+  padding-bottom: clamp(4px, 0.8vmin, 10px);
+  margin-bottom: clamp(8px, 1.6vmin, 20px);
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -750,397 +805,1316 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: clamp(12px, 2.2vmin, 30px);
+  gap: 14px;
+  margin-bottom: clamp(8px, 1.6vmin, 20px);
 }
 
 .tip-note-sender {
-  font-size: clamp(17px, 3.4vmin, 46px);
-  font-weight: 800;
-  line-height: 1.18;
-  color: #78350f;
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-size: clamp(18px, 3.2vmin, 40px);
+  font-weight: 700;
+  line-height: 1.12;
+  color: #1c1917;
 }
 
 .tip-note-role {
-  font-size: clamp(12px, 2.1vmin, 28px);
-  color: #92400e;
+  font-size: clamp(11.5px, 1.85vmin, 22px);
+  color: #78350f;
+  font-weight: 700;
   font-style: italic;
-  margin-top: clamp(2px, 0.35vmin, 6px);
+  margin-top: 2px;
 }
 
 .tip-note-payout {
   background: #15803d;
   color: #f0fdf4;
-  padding: clamp(4px, 0.9vmin, 14px) clamp(12px, 2.2vmin, 30px);
-  border-radius: 999px;
+  padding: clamp(4px, 0.7vmin, 10px) clamp(10px, 1.9vmin, 24px);
+  border-radius: 5px;
+  border: 2px solid #052e16;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 800;
-  font-size: clamp(14px, 2.8vmin, 38px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.24);
+  font-size: clamp(14px, 2.5vmin, 32px);
+  box-shadow: 3px 3px 0 #052e16;
+  transform: rotate(1.5deg);
   flex-shrink: 0;
 }
 
 .tip-note-quote {
   font-family: 'Courier New', Courier, monospace;
-  font-size: clamp(13px, 2.35vmin, 32px);
-  font-weight: 600;
-  line-height: 1.48;
-  color: #292524;
-  background: rgba(255, 251, 235, 0.8);
-  border-left: clamp(4px, 0.5vmin, 7px) solid #d97706;
-  border-radius: 0 clamp(6px, 0.9vmin, 12px) clamp(6px, 0.9vmin, 12px) 0;
-  padding: clamp(10px, 2vmin, 28px) clamp(12px, 2.4vmin, 34px);
-  margin-bottom: clamp(12px, 2.2vmin, 28px);
+  font-size: clamp(12.5px, 2.05vmin, 25px);
+  font-weight: 700;
+  line-height: 1.42;
+  color: #1c1917;
+  background: rgba(255, 253, 240, 0.88);
+  border: 1.5px solid #a16207;
+  border-left: 5px solid #b45309;
+  border-radius: 4px;
+  padding: clamp(8px, 1.5vmin, 20px) clamp(10px, 2vmin, 26px);
+  margin-bottom: clamp(8px, 1.6vmin, 20px);
 }
 
 .tip-note-demand {
-  background: rgba(217, 119, 6, 0.16);
-  border: clamp(1.5px, 0.2vmin, 2.5px) solid #d97706;
-  border-radius: clamp(8px, 1.1vmin, 14px);
-  padding: clamp(9px, 1.8vmin, 24px) clamp(12px, 2.4vmin, 32px);
-  margin-bottom: clamp(10px, 1.8vmin, 24px);
-  font-size: clamp(12.5px, 2.2vmin, 30px);
+  background: rgba(254, 243, 199, 0.92);
+  border: 2px dashed #b91c1c;
+  border-radius: 6px;
+  padding: clamp(7px, 1.4vmin, 18px) clamp(10px, 2vmin, 24px);
+  margin-bottom: clamp(8px, 1.4vmin, 18px);
+  font-size: clamp(12px, 1.95vmin, 24px);
   font-weight: 800;
-  line-height: 1.4;
-  color: #78350f;
+  line-height: 1.35;
+  color: #991b1b;
 }
 
 .tip-note-demand-text {
-  color: #451a03;
-  font-weight: 600;
+  color: #1c1917;
+  font-weight: 700;
 }
 
 .tip-conflict-warning {
-  margin: clamp(8px, 1.5vmin, 20px) 0;
-  background: rgba(185, 28, 28, 0.14);
-  border: clamp(1.5px, 0.2vmin, 2.5px) solid #dc2626;
-  color: #991b1b;
-  padding: clamp(7px, 1.4vmin, 18px) clamp(10px, 2vmin, 26px);
-  border-radius: clamp(8px, 1.1vmin, 14px);
-  font-size: clamp(11.5px, 1.9vmin, 25px);
-  font-weight: 700;
+  margin: clamp(6px, 1.2vmin, 16px) 0;
+  background: #fee2e2;
+  border: 2px solid #b91c1c;
+  color: #7f1d1d;
+  padding: clamp(6px, 1.1vmin, 14px) clamp(10px, 1.8vmin, 22px);
+  border-radius: 5px;
+  font-size: clamp(11px, 1.7vmin, 20px);
+  font-weight: 800;
+  box-shadow: 2px 2px 0 rgba(185, 28, 28, 0.35);
 }
 
 .tip-note-actions {
   display: flex;
-  gap: clamp(8px, 1.6vmin, 22px);
-  margin-top: clamp(14px, 2.4vmin, 32px);
+  gap: clamp(8px, 1.5vmin, 18px);
+  margin-top: clamp(10px, 1.8vmin, 24px);
 }
 
 .tip-btn-accept {
   flex: 2;
-  background: #16a34a;
-  color: #ffffff;
-  border: none;
-  padding: clamp(10px, 1.9vmin, 26px) clamp(14px, 2.6vmin, 34px);
-  border-radius: clamp(8px, 1.1vmin, 14px);
-  font-family: 'Chakra Petch', sans-serif;
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #052e16;
+  border: 2.5px solid #052e16;
+  box-shadow: 0 4px 0 #052e16;
+  padding: clamp(8px, 1.5vmin, 18px) clamp(12px, 2.2vmin, 28px);
+  border-radius: 6px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  font-size: clamp(13px, 2.25vmin, 30px);
-  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: clamp(14px, 2.2vmin, 26px);
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
 }
 
 .tip-btn-accept:hover {
-  background: #15803d;
+  filter: brightness(1.05);
+}
+
+.tip-btn-accept:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #052e16;
 }
 
 .tip-btn-decline {
   flex: 1;
-  background: #57534e;
-  color: #ffffff;
-  border: none;
-  padding: clamp(10px, 1.9vmin, 26px) clamp(14px, 2.6vmin, 32px);
-  border-radius: clamp(8px, 1.1vmin, 14px);
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: clamp(12px, 2.05vmin, 28px);
-  letter-spacing: 0.02em;
+  background: linear-gradient(180deg, #e7e5e4 0%, #d6d3d1 100%);
+  color: #1c1917;
+  border: 2.5px solid #292524;
+  box-shadow: 0 4px 0 #292524;
+  padding: clamp(8px, 1.5vmin, 18px) clamp(12px, 2vmin, 24px);
+  border-radius: 6px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(13px, 2vmin, 24px);
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
 }
 
 .tip-btn-decline:hover {
-  background: #44403c;
+  filter: brightness(1.03);
 }
 
+.tip-btn-decline:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #292524;
+}
+
+/* ==========================================================================
+   Shared Corkboard Primitives: Masking Tape, Pushpins, Rubber Stamps, Cards
+   ========================================================================== */
+.modal-inner {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(7px, 1.25vmin, 14px);
+}
+
+/* Masking-tape eyebrow label */
 .modal-eyebrow {
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--brass-gold);
-  margin-bottom: 2px;
+  display: inline-block;
+  align-self: flex-start;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(10.5px, 1.35vmin, 15px);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #451a03;
+  background: linear-gradient(180deg, #f7efd8 0%, #ead9b5 100%);
+  border: 1px solid rgba(120, 83, 38, 0.5);
+  padding: 2px clamp(7px, 1.1vmin, 12px);
+  border-radius: 2px;
+  box-shadow: 1px 2px 4px rgba(28, 15, 5, 0.25);
 }
 
+/* Bold marker / athletic varsity headline */
 .modal-title {
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: 20px;
-  margin-bottom: 8px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-size: clamp(20px, 3vmin, 34px);
+  line-height: 1.06;
+  color: #1c1917;
+  margin: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Direct title sitting directly on corkboard gets a taped cream plaque feel */
+.modal-inner > .modal-title,
+.cork-header-strip {
+  background: linear-gradient(180deg, #faf5e8 0%, #efe4c8 100%);
+  border: 2px solid #292524;
+  border-radius: 4px;
+  padding: clamp(5px, 0.9vmin, 10px) clamp(10px, 1.6vmin, 18px);
+  box-shadow: 3px 3px 0 rgba(28, 18, 8, 0.38);
+}
+
+.cork-header-strip .modal-title {
+  text-shadow: none;
+}
+
+/* Pinned paper / index card base */
+.cork-pinned-sheet {
+  position: relative;
+  background: linear-gradient(180deg, #fcfaf4 0%, #f4ede0 100%);
+  border: 2px solid #292524;
+  border-radius: 6px;
+  padding: clamp(9px, 1.5vmin, 18px) clamp(11px, 1.9vmin, 22px);
+  color: #1c1917;
+  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.34);
+}
+
+/* 3D Plastic Thumbtacks on pinned cards */
+.welcome-sheet::before,
+.directive-pin-card::before,
+.bribes-pin-card::before,
+.scout-report-card::before,
+.seat-tip::before,
+.breakdown-col::before,
+.season-stat-card::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(11px, 1.45vmin, 15px);
+  height: clamp(11px, 1.45vmin, 15px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 32%, #fca5a5 0%, #dc2626 52%, #7f1d1d 100%);
+  border: 1.5px solid #292524;
+  box-shadow: 1px 3px 4px rgba(0, 0, 0, 0.42);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tip-pin-gold::before,
+.pin-gold::before,
+.bribes-pin-card::before {
+  background: radial-gradient(circle at 35% 32%, #fef08a 0%, #eab308 55%, #854d0e 100%);
+}
+
+.tip-pin-blue::before,
+.pin-blue::before,
+.scout-report-card::before {
+  background: radial-gradient(circle at 35% 32%, #93c5fd 0%, #2563eb 55%, #1e3a8a 100%);
+}
+
+.pin-green::before {
+  background: radial-gradient(circle at 35% 32%, #86efac 0%, #16a34a 55%, #14532d 100%);
+}
+
+/* Rubber-Stamp Status Pills inside Modals */
+.modal-card .order-status-pill,
+.street-cred-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(10.5px, 1.35vmin, 14px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px clamp(6px, 1vmin, 10px);
+  border-radius: 3px;
+  transform: rotate(-1.2deg);
+  white-space: nowrap;
+}
+
+.modal-card .status-track {
+  background: rgba(22, 163, 74, 0.14);
+  color: #14532d;
+  border: 2px solid #15803d;
+}
+
+.modal-card .status-risk {
+  background: rgba(234, 179, 8, 0.22);
+  color: #78350f;
+  border: 2px solid #b45309;
+}
+
+.modal-card .status-fail {
+  background: rgba(220, 38, 38, 0.14);
+  color: #7f1d1d;
+  border: 2px solid #b91c1c;
+}
+
+.modal-card .mastery-novice {
+  background: rgba(100, 116, 139, 0.14);
+  color: #334155;
+  border: 2px solid #475569;
+}
+
+.street-cred-pill {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1e3a8a;
+  border: 2px solid #1d4ed8;
+  transform: rotate(0.8deg);
+}
+
+/* ==========================================================================
+   1. Start Seat Screen
+   ========================================================================== */
+.welcome-sheet .modal-eyebrow {
+  margin-bottom: 4px;
+}
+
+.welcome-sheet .modal-title {
+  margin-bottom: clamp(4px, 0.8vmin, 8px);
 }
 
 .modal-lead {
-  font-size: 13px;
-  line-height: 1.45;
-  color: #cbd5e1;
-  margin-bottom: 12px;
+  font-size: clamp(12.5px, 1.65vmin, 17px);
+  line-height: 1.48;
+  color: #292524;
+  margin: 0;
+}
+
+.modal-lead strong {
+  background: linear-gradient(104deg, rgba(253, 224, 71, 0) 0.5%, rgba(253, 224, 71, 0.85) 2.5%, rgba(253, 224, 71, 0.72) 97%, rgba(253, 224, 71, 0) 99%);
+  padding: 0 4px;
+  color: #1c1917;
+  font-weight: 800;
 }
 
 .seat-repertoire-heading {
-  font-family: 'Chakra Petch', sans-serif;
+  display: inline-block;
+  align-self: flex-start;
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
   font-weight: 700;
-  font-size: 14px;
+  font-size: clamp(13px, 1.85vmin, 20px);
   letter-spacing: 0.03em;
-  color: #f8fafc;
-  margin-bottom: 6px;
+  color: #1c1917;
+  background: linear-gradient(180deg, #f7efd8 0%, #ead9b5 100%);
+  border: 1.5px solid #292524;
+  border-bottom: 3px solid #dc2626;
+  padding: 2px 10px;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 rgba(28, 18, 8, 0.3);
+  margin: 0;
 }
 
 .seat-tips-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, 1.4vmin, 16px);
 }
 
 .seat-tip {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid #334155;
-  border-radius: 7px;
-  padding: 8px 10px;
+  position: relative;
+  background: linear-gradient(180deg, #fffdf7 0%, #f5eedf 100%);
+  border: 2px solid #292524;
+  border-radius: 6px;
+  padding: clamp(9px, 1.5vmin, 16px) clamp(10px, 1.7vmin, 18px);
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: clamp(11.5px, 1.5vmin, 15.5px);
+  line-height: 1.38;
+  color: #292524;
+  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
+}
+
+.seat-tip.tip-pin-gold {
+  border-left: 5px solid #d97706;
+}
+
+.seat-tip.tip-pin-blue {
+  border-left: 5px solid #0d9488;
 }
 
 .seat-tip strong {
-  font-family: 'Chakra Petch', sans-serif;
-  color: #fde047;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(14px, 1.95vmin, 21px);
+  letter-spacing: 0.02em;
+  color: #1c1917;
+}
+
+/* ==========================================================================
+   2. Pre-Match Official Orders Clipboard & Coach's Greaseboard Banner
+   ========================================================================== */
+.greaseboard-card {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff 0%, #eef2f6 100%);
+  border: 2.5px solid #334155;
+  border-bottom-width: 5px;
+  border-radius: 7px;
+  padding: clamp(9px, 1.5vmin, 16px) clamp(11px, 1.8vmin, 20px);
+  color: #0f172a;
+  box-shadow: 3px 4px 0 rgba(28, 18, 8, 0.38);
+  overflow: hidden;
+}
+
+/* Red & blue rink-line stripe along top of whiteboard */
+.greaseboard-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #dc2626 0 32%, #cbd5e1 32% 68%, #2563eb 68% 100%);
+}
+
+.greaseboard-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: clamp(4px, 0.8vmin, 8px);
+}
+
+.greaseboard-tag {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(11px, 1.45vmin, 15px);
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #1e3a8a;
+}
+
+.greaseboard-matchup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.matchup-teams-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(16px, 2.35vmin, 26px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.matchup-home-tag {
+  color: #1d4ed8;
+}
+
+.matchup-vs {
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-size: clamp(12px, 1.65vmin, 18px);
+  color: #dc2626;
+  padding: 0 2px;
+}
+
+.matchup-away-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f172a;
+}
+
+.team-color-swatch {
+  display: inline-block;
+  width: clamp(10px, 1.3vmin, 14px);
+  height: clamp(10px, 1.3vmin, 14px);
+  border-radius: 3px;
+  border: 1.5px solid #1c1917;
+  flex-shrink: 0;
+}
+
+.cash-stipend-tag {
+  background: #fef9c3;
+  border: 1.5px solid #a16207;
+  color: #713f12;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10.5px, 1.4vmin, 14.5px);
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 rgba(161, 98, 7, 0.25);
+}
+
+.visitor-warning-slip {
+  margin-top: clamp(6px, 1vmin, 10px);
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  color: #7f1d1d;
+  background: #ffe4e6;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1.5px solid #e11d48;
+  border-left: 5px solid #be123c;
+  font-weight: 600;
 }
 
 .active-order-spotlight {
-  background: rgba(234, 179, 8, 0.12);
-  border: 1px solid rgba(234, 179, 8, 0.5);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
+  position: relative;
+  background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
+  border: 2px solid #292524;
+  border-left: 6px solid #d97706;
+  border-radius: 6px;
+  padding: clamp(10px, 1.6vmin, 18px) clamp(12px, 2vmin, 22px);
+  color: #1c1917;
+  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.34);
 }
 
 .spotlight-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--brass-gold);
+  display: inline-block;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(10.5px, 1.35vmin, 14px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #78350f;
+  text-transform: uppercase;
+  margin-bottom: 2px;
 }
 
 .spotlight-title {
-  font-family: 'Chakra Petch', sans-serif;
-  font-size: 16px;
-  font-weight: 700;
-  margin: 1px 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(17px, 2.4vmin, 27px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #1c1917;
+  margin: 2px 0 4px;
 }
 
 .spotlight-desc {
-  font-size: 12px;
-  color: #e2e8f0;
-}
-
-.picker-heading {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 5px;
-}
-
-.order-options-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.order-option-btn {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 6px 8px;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.order-option-btn.selected {
-  border-color: var(--brass-gold);
-  background: rgba(234, 179, 8, 0.15);
-}
-
-.order-opt-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 2px;
+  font-size: clamp(12px, 1.6vmin, 16.5px);
+  line-height: 1.42;
+  color: #292524;
+  font-weight: 500;
 }
 
 .assigned-pill {
   background: #1d4ed8;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
+  color: #ffffff;
+  border: 1.5px solid #1c1917;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(10px, 1.3vmin, 13.5px);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 7px;
   border-radius: 4px;
 }
 
-.order-opt-desc {
-  font-size: 10px;
-  color: var(--text-muted);
+.assigned-pill.pill-away {
+  background: #dc2626;
 }
 
-/* Breakdown styling */
+/* ==========================================================================
+   3 & 4. Period Breakdown & Final Game Breakdown (Coach's Greaseboard)
+   ========================================================================== */
 .breakdown-score-banner {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  background: #090d14;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 8px 14px;
-  margin-bottom: 10px;
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: 16px;
+  gap: clamp(14px, 2.5vmin, 28px);
+  background: linear-gradient(180deg, #ffffff 0%, #e9eef5 100%);
+  border: 2.5px solid #292524;
+  border-bottom-width: 5px;
+  border-radius: 7px;
+  padding: clamp(6px, 1.2vmin, 14px) clamp(12px, 2.2vmin, 24px);
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(16px, 2.3vmin, 25px);
+  box-shadow: 3px 4px 0 rgba(28, 18, 8, 0.36);
+  overflow: hidden;
+}
+
+.breakdown-score-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2563eb 0 42%, #dc2626 42% 58%, #dc2626 58% 100%);
+}
+
+.b-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .b-team span {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 22px;
-  margin: 0 5px;
+  font-weight: 800;
+  font-size: clamp(22px, 3.4vmin, 38px);
+  margin: 0 3px;
 }
 
 .b-team.home {
-  color: #60a5fa;
-}
-.b-team.away {
-  color: #f87171;
+  color: #1d4ed8;
 }
 
-.breakdown-columns {
+.b-team.away {
+  color: #dc2626;
+}
+
+.b-vs {
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-size: clamp(13px, 1.8vmin, 20px);
+  color: #475569;
+  background: #e2e8f0;
+  border: 1.5px solid #64748b;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.breakdown-columns,
+.game-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: clamp(8px, 1.4vmin, 16px);
 }
 
-.breakdown-col {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 8px 10px;
+.game-stats-grid {
+  grid-template-columns: 1.25fr 1fr;
+  align-items: stretch;
+}
+
+.breakdown-col,
+.cork-table-sheet {
+  position: relative;
+  background: linear-gradient(180deg, #fcfaf4 0%, #f3ecdd 100%);
+  border: 2px solid #292524;
+  border-radius: 6px;
+  padding: clamp(8px, 1.4vmin, 15px) clamp(10px, 1.7vmin, 18px);
+  color: #1c1917;
+  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
 }
 
 .breakdown-col h3,
 .impact-callout-box h3 {
-  font-family: 'Chakra Petch', sans-serif;
-  font-size: 12px;
-  color: #fde047;
-  margin-bottom: 4px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: clamp(13px, 1.75vmin, 18px);
+  color: #7c2d12;
+  border-bottom: 1.5px dashed #bda988;
+  padding-bottom: 3px;
+  margin-bottom: 6px;
 }
 
 .stat-kv-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  color: #292524;
 }
 
 .stat-kv-list li {
   display: flex;
   justify-content: space-between;
+  border-bottom: 1px dotted rgba(120, 113, 108, 0.35);
+  padding-bottom: 2px;
+}
+
+.stat-kv-list strong {
+  font-family: 'JetBrains Mono', monospace;
+  color: #1c1917;
 }
 
 .sparkline-box {
-  margin-top: 4px;
+  margin-top: 6px;
   display: flex;
   justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #d6d3d1;
+  border-radius: 4px;
+  padding: 2px 4px;
 }
 
+.sparkline-svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Yellow Sticky-Note Organ Impact Callout */
 .impact-callout-box {
-  background: rgba(30, 41, 59, 0.65);
-  border: 1px solid #475569;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
+  position: relative;
+  background: linear-gradient(180deg, #fef9c3 0%, #fde68a 100%);
+  border: 2px solid #292524;
+  border-left: 5px solid #ca8a04;
+  border-radius: 6px;
+  padding: clamp(8px, 1.4vmin, 15px) clamp(10px, 1.7vmin, 18px);
+  color: #1c1917;
+  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
+}
+
+.impact-callout-box h3 {
+  border-bottom-color: rgba(161, 98, 7, 0.4);
+  color: #713f12;
 }
 
 .impact-callout-box ul {
   padding-left: 16px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #e2e8f0;
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  line-height: 1.42;
+  color: #292524;
 }
 
 .order-check-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #090d14;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 7px 10px;
-  margin-bottom: 10px;
-  font-size: 12px;
+  gap: 10px;
+  background: #faf6ec;
+  border: 2px solid #292524;
+  border-radius: 6px;
+  padding: clamp(7px, 1.2vmin, 12px) clamp(10px, 1.6vmin, 16px);
+  font-size: clamp(12px, 1.55vmin, 16px);
+  color: #1c1917;
+  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
 }
 
 .order-reason-sub {
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: clamp(10.5px, 1.35vmin, 13.5px);
+  color: #57534e;
+  margin-top: 2px;
 }
 
 .order-final-banner {
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  font-size: 12px;
+  padding: clamp(8px, 1.3vmin, 14px) clamp(10px, 1.7vmin, 18px);
+  border-radius: 6px;
+  font-size: clamp(12px, 1.55vmin, 16px);
+  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
+}
+
+.order-final-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.order-final-reason {
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  color: #292524;
 }
 
 .banner-pass {
-  background: rgba(34, 197, 94, 0.18);
-  border: 1px solid #4ade80;
-  color: #dcfce7;
+  background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 2px solid #15803d;
+  border-left-width: 6px;
+  color: #14532d;
 }
 
 .banner-fail {
-  background: rgba(239, 68, 68, 0.18);
-  border: 1px solid #f87171;
-  color: #fee2e2;
+  background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+  border: 2px solid #b91c1c;
+  border-left-width: 6px;
+  color: #7f1d1d;
 }
 
 .period-summary-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
-  margin-bottom: 10px;
+  font-size: clamp(11px, 1.4vmin, 14.5px);
+  color: #1c1917;
 }
 
-.period-summary-table th,
-.period-summary-table td {
-  padding: 5px 6px;
-  border-bottom: 1px solid #334155;
+.period-summary-table th {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: clamp(11px, 1.45vmin, 15px);
+  color: #57534e;
+  padding: 4px 5px;
+  border-bottom: 2px solid #292524;
   text-align: center;
 }
 
-.period-summary-table .total-row {
-  background: rgba(30, 41, 59, 0.6);
+.period-summary-table td {
+  font-family: 'JetBrains Mono', monospace;
+  padding: 5px 5px;
+  border-bottom: 1px dashed #bda988;
+  text-align: center;
 }
 
+.period-summary-table .total-row td {
+  background: rgba(234, 179, 8, 0.18);
+  border-top: 1.5px solid #292524;
+  border-bottom: none;
+}
+
+.bribes-final-box {
+  background: linear-gradient(180deg, #fef9c3 0%, #fef08a 100%);
+  border: 2px solid #292524;
+  border-left: 6px solid #ca8a04;
+  border-radius: 6px;
+  padding: clamp(8px, 1.4vmin, 14px) clamp(10px, 1.8vmin, 18px);
+  color: #1c1917;
+  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
+}
+
+.bribes-final-heading {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(11.5px, 1.5vmin, 15px);
+  font-weight: 800;
+  color: #78350f;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.bribe-row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(161, 98, 7, 0.4);
+}
+
+.bribe-row-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bribe-sender-line {
+  color: #1c1917;
+  font-size: clamp(11.5px, 1.5vmin, 15px);
+}
+
+.bribe-cond-line {
+  font-size: clamp(10.5px, 1.35vmin, 13.5px);
+  color: #44403c;
+}
+
+.bribe-payout-col {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   5. Pause Overlay Corkboard
+   ========================================================================== */
+.pause-board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, 1.5vmin, 16px);
+  align-items: start;
+}
+
+.pin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pin-card-kicker {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(11px, 1.45vmin, 15px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #78350f;
+}
+
+.pin-card-title {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(16px, 2.2vmin, 24px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #1c1917;
+  line-height: 1.15;
+}
+
+.pin-card-desc {
+  font-size: clamp(11.5px, 1.5vmin, 15.5px);
+  color: #44403c;
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.pin-card-progress {
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  color: #1d4ed8;
+  font-weight: 800;
+  background: rgba(37, 99, 235, 0.1);
+  border-left: 3px solid #1d4ed8;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.empty-bribes-note,
+.empty-catalog-note {
+  font-size: clamp(11.5px, 1.5vmin, 14.5px);
+  color: #57534e;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+.sticky-tip-card {
+  background: linear-gradient(180deg, #fef9c3 0%, #fde68a 100%);
+  border: 1.5px solid #a16207;
+  border-left: 4px solid #ca8a04;
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  box-shadow: 2px 2px 0 rgba(120, 53, 15, 0.2);
+}
+
+.sticky-tip-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(12px, 1.55vmin, 15px);
+  color: #1c1917;
+  margin-bottom: 2px;
+}
+
+.sticky-tip-cash {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(11px, 1.45vmin, 14px);
+  font-weight: 800;
+  color: #14532d;
+  background: #dcfce7;
+  border: 1px solid #15803d;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.sticky-tip-cond {
+  font-size: clamp(11px, 1.45vmin, 14px);
+  color: #292524;
+  margin-bottom: 5px;
+}
+
+.sticky-tip-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(10.5px, 1.35vmin, 13px);
+  color: #57534e;
+}
+
+/* ==========================================================================
+   6. Organ Loft Workshop & Console Upgrade Shop
+   ========================================================================== */
+.shop-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: linear-gradient(180deg, #faf5e8 0%, #efe4c8 100%);
+  border: 2px solid #292524;
+  border-radius: 6px;
+  padding: clamp(7px, 1.2vmin, 13px) clamp(10px, 1.8vmin, 18px);
+  box-shadow: 3px 3px 0 rgba(28, 18, 8, 0.36);
+}
+
+.shop-header-bar .modal-eyebrow {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-bottom: 1px;
+}
+
+.shop-wallet-cluster {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cash-bankroll-badge {
+  background: #15803d;
+  color: #f0fdf4;
+  border: 2px solid #052e16;
+  border-radius: 5px;
+  padding: 2px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(15px, 2.1vmin, 23px);
+  font-weight: 800;
+  box-shadow: 2px 3px 0 #052e16;
+}
+
+.shop-rep-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.shop-board-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: clamp(8px, 1.5vmin, 16px);
+  align-items: start;
+}
+
+.shop-col {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.4vmin, 14px);
+}
+
+.scout-report-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border-top: 5px solid #1d4ed8;
+}
+
+.scout-kicker {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(10.5px, 1.35vmin, 14px);
+  font-weight: 800;
+  color: #1d4ed8;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.scout-opponent-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(16px, 2.2vmin, 24px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #0f172a;
+  margin: 2px 0 6px;
+}
+
+.scout-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: clamp(11px, 1.45vmin, 14.5px);
+  line-height: 1.38;
+  color: #1e293b;
+}
+
+.scout-highlight-tip {
+  margin-top: 3px;
+  background: #fef08a;
+  border-left: 4px solid #ca8a04;
+  padding: 4px 8px;
+  border-radius: 3px;
+  color: #451a03;
+}
+
+.shop-section-card .pin-card-kicker {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.shop-upgrade-row,
+.shop-catalog-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: #fffdf7;
+  border: 1.5px solid #bda988;
+  border-radius: 5px;
+  padding: clamp(6px, 1.1vmin, 11px) clamp(8px, 1.4vmin, 14px);
+}
+
+.shop-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: clamp(110px, 32dvh, 300px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.shop-item-copy {
+  min-width: 0;
+}
+
+.shop-item-title {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(13.5px, 1.75vmin, 18px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #1c1917;
+}
+
+.shop-item-desc {
+  font-size: clamp(10.5px, 1.35vmin, 13.5px);
+  color: #57534e;
+  line-height: 1.32;
+}
+
+.shop-buy-btn {
+  min-height: 34px !important;
+  padding: 5px 12px !important;
+  font-size: clamp(11.5px, 1.45vmin, 14.5px) !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.shop-max-banner {
+  background: #dcfce7;
+  border: 2px solid #15803d;
+  border-radius: 5px;
+  padding: 8px 12px;
+  color: #14532d;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(12px, 1.55vmin, 15.5px);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* Setlist Taped Chips for Equipped Songs */
+.setlist-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setlist-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f5f0e3;
+  border: 2px solid #78716c;
+  border-left: 5px solid var(--chip-accent, #eab308);
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.08s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.setlist-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.setlist-chip.is-equipped {
+  background: #fef9c3;
+  border-color: #1c1917;
+  box-shadow: 2px 2px 0 rgba(28, 25, 23, 0.3);
+}
+
+.setlist-check-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #292524;
+  border-radius: 3px;
+  background: #ffffff;
+  font-weight: 900;
+  font-size: 12px;
+  color: #15803d;
+  line-height: 1;
+}
+
+.setlist-chip-label {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(12px, 1.55vmin, 16px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #1c1917;
+}
+
+/* ==========================================================================
+   7. Season Finale / Disqualification Summary
+   ========================================================================== */
+.season-hero-sheet {
+  text-align: center;
+  padding: clamp(10px, 1.8vmin, 20px) clamp(12px, 2.2vmin, 24px);
+}
+
+.season-hero-sheet.is-champion {
+  background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
+  border-color: #854d0e;
+}
+
+.season-hero-sheet.is-dismissed {
+  background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
+  border-color: #9f1239;
+}
+
+.season-hero-sheet .modal-eyebrow {
+  margin-bottom: 4px;
+}
+
+.season-trophy-icon {
+  font-size: clamp(28px, 4.2vmin, 44px);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.season-headline {
+  color: #1c1917;
+  margin: 2px 0 6px;
+}
+
+.season-lead-copy {
+  font-size: clamp(12px, 1.55vmin, 16px);
+  color: #292524;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.42;
+}
+
+.season-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(6px, 1.2vmin, 14px);
+}
+
+.season-stat-card {
+  padding: clamp(8px, 1.3vmin, 14px) clamp(9px, 1.4vmin, 16px);
+}
+
+.season-stat-big {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(18px, 2.4vmin, 26px);
+  font-weight: 800;
+  color: #1c1917;
+  margin-top: 2px;
+  line-height: 1.15;
+}
+
+.season-stat-big.ink-green {
+  color: #15803d;
+}
+
+.season-stat-big.ink-red {
+  color: #b91c1c;
+}
+
+.season-stat-big.ink-blue {
+  color: #1d4ed8;
+}
+
+.season-stat-sub {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(10.5px, 1.3vmin, 13px);
+  font-weight: 600;
+  color: #57534e;
+  margin-top: 2px;
+}
+
+.season-rep-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.season-mastered-count {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-size: clamp(12px, 1.55vmin, 16px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #854d0e;
+}
+
+.season-songs-scroll {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.season-song-row {
+  background: #fffdf7;
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1.5px solid #bda988;
+  border-left: 5px solid var(--song-tab, #eab308);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.season-song-title {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  text-transform: uppercase;
+  color: #1c1917;
+  font-size: clamp(13px, 1.65vmin, 16.5px);
+}
+
+.season-song-desc {
+  font-size: clamp(10px, 1.3vmin, 13px);
+  color: #57534e;
+}
+
+/* ==========================================================================
+   Modal Actions & Tactile Athletic-Tape / Duct-Tape Buttons
+   ========================================================================== */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: clamp(8px, 1.3vmin, 14px);
+  margin-top: 2px;
+}
+
+.modal-actions.center-actions {
+  justify-content: center;
 }
 
 .modal-actions.multi-actions {
@@ -1149,25 +2123,70 @@ body {
 
 .primary-cta-btn,
 .secondary-cta-btn {
-  min-height: 40px;
-  padding: 8px 16px;
-  border-radius: 7px;
-  font-family: 'Chakra Petch', sans-serif;
-  font-weight: 700;
-  font-size: 13px;
+  min-height: clamp(36px, 5.2vmin, 48px);
+  padding: clamp(6px, 1.1vmin, 12px) clamp(14px, 2.4vmin, 26px);
+  border-radius: 6px;
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: clamp(14px, 2vmin, 21px);
   cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
 }
 
 .primary-cta-btn {
-  background: var(--brass-gold);
-  color: #090d14;
-  border: none;
+  background: linear-gradient(180deg, #fde047 0%, #facc15 100%);
+  color: #1c1917;
+  border: 2.5px solid #1c1917;
+  box-shadow: 0 4px 0 #1c1917;
+}
+
+.primary-cta-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.primary-cta-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #1c1917;
 }
 
 .secondary-cta-btn {
-  background: #1e293b;
-  color: var(--text-primary);
-  border: 1px solid #475569;
+  background: linear-gradient(180deg, #f5f5f4 0%, #d6d3d1 100%);
+  color: #1c1917;
+  border: 2px solid #292524;
+  box-shadow: 0 3px 0 #292524;
+}
+
+.secondary-cta-btn:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.secondary-cta-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #292524;
+}
+
+.primary-cta-btn:disabled,
+.secondary-cta-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+@media (max-width: 640px) {
+  .seat-tips-grid,
+  .breakdown-columns,
+  .game-stats-grid,
+  .pause-board-grid,
+  .shop-board-grid,
+  .season-songs-scroll {
+    grid-template-columns: 1fr;
+  }
+  .season-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Debug Drawer */
@@ -1339,29 +2358,137 @@ body {
   .song-btn-target {
     font-size: 9.5px;
   }
-  .modal-card {
-    padding: 12px 16px;
+  .modal-backdrop {
+    padding: 4px 8px;
+  }
+  .modal-card,
+  .modal-card.wide-board-host {
+    width: min(96vw, 820px);
+    max-height: 96dvh;
+    border-width: 5px;
+    padding: 6px 11px;
+  }
+  .modal-inner {
+    gap: 5px;
   }
   .modal-title {
     font-size: 17px;
-    margin-bottom: 6px;
+  }
+  .cork-header-strip,
+  .modal-inner > .modal-title,
+  .shop-header-bar {
+    padding: 4px 9px;
   }
   .modal-lead {
-    font-size: 12px;
-    margin-bottom: 8px;
+    font-size: 11.5px;
+    line-height: 1.34;
   }
-  .seat-tips-grid {
+  .cork-pinned-sheet,
+  .greaseboard-card,
+  .active-order-spotlight,
+  .breakdown-col,
+  .cork-table-sheet,
+  .impact-callout-box,
+  .bribes-final-box,
+  .order-check-row,
+  .order-final-banner {
+    padding: 5px 9px;
+  }
+  .seat-tips-grid,
+  .breakdown-columns,
+  .game-stats-grid,
+  .pause-board-grid,
+  .shop-board-grid,
+  .shop-col {
     gap: 6px;
-    margin-bottom: 10px;
   }
   .seat-tip {
-    padding: 6px 8px;
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+  .breakdown-score-banner {
+    padding: 3px 10px;
+  }
+  .b-team span {
+    font-size: 19px;
+  }
+  .breakdown-modal:not(.game-over-modal) .modal-eyebrow {
+    display: none;
+  }
+  .breakdown-col h3,
+  .impact-callout-box h3 {
+    font-size: 12px;
+    padding-bottom: 1px;
+    margin-bottom: 2px;
+  }
+  .stat-kv-list {
+    gap: 2px;
     font-size: 10.5px;
+  }
+  .sparkline-box {
+    margin-top: 3px;
+    padding: 1px 4px;
+  }
+  .sparkline-svg {
+    max-height: 22px;
+  }
+  .period-summary-table th,
+  .period-summary-table td {
+    padding: 2px 4px;
+    font-size: 10.5px;
+  }
+  .bribes-final-heading {
+    margin-bottom: 2px;
+  }
+  .bribe-row-item {
+    padding: 2px 0;
+  }
+  .scout-opponent-title {
+    font-size: 15px;
+    margin: 1px 0 3px;
+  }
+  .scout-notes-list {
+    gap: 2px;
+    font-size: 10.5px;
+    line-height: 1.28;
+  }
+  .scout-highlight-tip {
+    padding: 2px 6px;
+  }
+  .shop-section-card .pin-card-kicker {
+    margin-bottom: 3px;
+  }
+  .shop-upgrade-row,
+  .shop-catalog-row {
+    padding: 4px 8px;
+  }
+  .shop-catalog-list {
+    max-height: 102px;
+    gap: 4px;
+  }
+  .setlist-chip {
+    padding: 3px 8px;
+  }
+  .season-hero-sheet {
+    padding: 5px 10px;
+  }
+  .season-trophy-icon {
+    font-size: 20px;
+    margin-bottom: 1px;
+  }
+  .season-songs-scroll {
+    max-height: 92px;
+  }
+  .tip-note-card {
+    width: min(92vw, 720px);
+    max-height: 94dvh;
+    padding: 12px 16px 10px 26px;
   }
   .primary-cta-btn,
   .secondary-cta-btn {
-    min-height: 36px;
-    padding: 6px 14px;
-    font-size: 12px;
+    min-height: 30px;
+    padding: 4px 14px;
+    font-size: 13px;
+    box-shadow: 0 2px 0 #1c1917;
   }
 }

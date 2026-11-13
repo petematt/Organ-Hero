@@ -28,6 +28,10 @@ export interface ScreenCallbacks {
   onResumeFromPause: () => void;
 }
 
+function pluralWord(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return count === 1 ? singular : pluralForm;
+}
+
 export class ScreenModalManager {
   private backdropEl = document.getElementById('modal-backdrop')!;
   private contentEl = document.getElementById('modal-content')!;
@@ -37,9 +41,14 @@ export class ScreenModalManager {
     this.callbacks = callbacks;
   }
 
+  private resetHostClasses(): void {
+    this.contentEl.classList.remove('tip-note-host');
+    this.contentEl.classList.remove('wide-board-host');
+  }
+
   public hide(): void {
     this.backdropEl.classList.add('hidden');
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
     this.contentEl.innerHTML = '';
   }
 
@@ -55,6 +64,7 @@ export class ScreenModalManager {
     onAccept: () => void,
     onDecline: () => void
   ): void {
+    this.resetHostClasses();
     this.contentEl.classList.add('tip-note-host');
     this.backdropEl.classList.remove('hidden');
     const conflictHtml = tip.conflictsWithOfficial
@@ -116,24 +126,27 @@ export class ScreenModalManager {
    * 1. Initial intro screen to unlock Web Audio on iOS/Android.
    */
   public showStartSeatScreen(): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
     this.backdropEl.classList.remove('hidden');
     this.contentEl.innerHTML = `
       <div class="modal-inner start-seat-modal">
-        <h2 class="modal-title">ORGAN MVP: AN ICE HOCKEY JOURNEY</h2>
-        <p class="modal-lead">
-          You sit high in the Organist's Perch overlooking a chaotic 3v3 hockey match.
-          You don't control the skaters directly—instead, watch <strong>who has possession</strong>
-          and play the right stadium organ song at the right moment to shift player moods,
-          ignite brawls, and fulfill management's Official Orders.
-        </p>
+        <div class="cork-pinned-sheet welcome-sheet">
+          <div class="modal-eyebrow">1988 MUNICIPAL ARENA • ORGANIST BOOTH</div>
+          <h2 class="modal-title">ORGAN MVP: AN ICE HOCKEY JOURNEY</h2>
+          <p class="modal-lead">
+            You sit high in the Organist's Perch overlooking a chaotic 3v3 hockey match.
+            You don't control the skaters directly—instead, watch <strong>who has possession</strong>
+            and play the right stadium organ song at the right moment to shift player moods,
+            ignite brawls, and fulfill management's Official Orders.
+          </p>
+        </div>
         <h3 class="seat-repertoire-heading">Your organ repertoire</h3>
         <div class="seat-tips-grid">
-          <div class="seat-tip">
+          <div class="seat-tip tip-pin-gold">
             <strong>Charge! Fanfare</strong>
             <span>Boosts Focus &amp; Aggression for the <em>possessing</em> (or last-touch) team.</span>
           </div>
-          <div class="seat-tip">
+          <div class="seat-tip tip-pin-blue">
             <strong>Hold the Line</strong>
             <span>Boosts Goalie &amp; Defense for the <em>defending</em> team.</span>
           </div>
@@ -160,35 +173,39 @@ export class ScreenModalManager {
     campaignMatch?: MatchScheduleEntry | null,
     officialRepPct?: number
   ): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
     this.backdropEl.classList.remove('hidden');
 
     const targetTeam = resolveOrderTargetTeam(assignedOrderId, seed ?? 0);
     const currentOrder = getOrderDisplay(assignedOrderId, targetTeam);
     const teamBadge = currentOrder.usesRandomTeam
-      ? `<span class="assigned-pill" style="margin-left: 8px;">${targetTeam === 'away' ? 'AWAY TEAM' : 'HOME TEAM'}</span>`
+      ? `<span class="assigned-pill ${targetTeam === 'away' ? 'pill-away' : 'pill-home'}">${targetTeam === 'away' ? 'AWAY TEAM' : 'HOME TEAM'}</span>`
       : '';
 
+    const repPct = officialRepPct ?? 100;
     const campaignHeaderHtml = campaignMatch
       ? `
-        <div class="campaign-match-banner" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
-            <span>MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
-            <span style="color: ${officialRepPct !== undefined && officialRepPct < 75 ? '#fb7185' : '#4ade80'}">JOB SECURITY: ${officialRepPct ?? 100}%</span>
+        <div class="campaign-match-banner greaseboard-card">
+          <div class="greaseboard-meta-row">
+            <span class="greaseboard-tag">MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
+            <span class="order-status-pill ${repPct < 75 ? 'status-fail' : 'status-track'}">JOB SECURITY: ${repPct}%</span>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-            <div style="font-size: 16px; font-weight: 800; color: #f8fafc;">
-              <span style="color: #38bdf8">${campaignMatch.homeTeam.shortName}</span>
-              <span style="color: #64748b; font-size: 13px; margin: 0 4px;">vs</span>
-              <span style="color: ${campaignMatch.awayTeam.primaryColor}">${campaignMatch.awayTeam.name}</span>
+          <div class="greaseboard-matchup-row">
+            <div class="matchup-teams-line">
+              <span class="matchup-home-tag">${campaignMatch.homeTeam.shortName}</span>
+              <span class="matchup-vs">VS</span>
+              <span class="matchup-away-tag">
+                <span class="team-color-swatch" style="background: ${campaignMatch.awayTeam.primaryColor};"></span>
+                ${campaignMatch.awayTeam.name}
+              </span>
             </div>
-            <div style="font-size: 13px; font-weight: 800; color: #facc15;">
-              BASE PAY: $${campaignMatch.baseSalary} • ORDER BONUS: +$${campaignMatch.orderBonus}
+            <div class="cash-stipend-tag">
+              BASE: $${campaignMatch.baseSalary} • BONUS: +$${campaignMatch.orderBonus}
             </div>
           </div>
           ${
             campaignMatch.hasOpposingOrganist && campaignMatch.opposingOrganist
-              ? `<div style="margin-top: 6px; font-size: 11px; color: #fb7185; background: rgba(244,63,94,0.12); padding: 4px 8px; border-radius: 4px; border-left: 3px solid #f43f5e;">
+              ? `<div class="visitor-warning-slip">
                   ⚠️ OPPOSING ORGANIST: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
                  </div>`
               : ''
@@ -199,7 +216,9 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner clipboard-modal">
-        <h2 class="modal-title">Commissioner's Official Orders</h2>
+        <div class="cork-header-strip">
+          <h2 class="modal-title">Commissioner's Official Orders</h2>
+        </div>
         ${campaignHeaderHtml}
         <div class="active-order-spotlight">
           <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
@@ -235,8 +254,8 @@ export class ScreenModalManager {
 
     return `
       <svg class="sparkline-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
-        <line x1="0" y1="${h * 0.35}" x2="${w}" y2="${h * 0.35}" stroke="rgba(148,163,184,0.25)" stroke-dasharray="3,3" />
-        <polyline fill="none" stroke="#38bdf8" stroke-width="2.5" points="${pts}" />
+        <line x1="0" y1="${h * 0.35}" x2="${w}" y2="${h * 0.35}" stroke="rgba(185, 28, 28, 0.35)" stroke-dasharray="4,3" />
+        <polyline fill="none" stroke="#1d4ed8" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" points="${pts}" />
       </svg>
     `;
   }
@@ -245,7 +264,8 @@ export class ScreenModalManager {
    * 3. Between-Period Breakdown Modal.
    */
   public showPeriodBreakdown(sim: MatchSimulation): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
+    this.contentEl.classList.add('wide-board-host');
     this.backdropEl.classList.remove('hidden');
     const pStats = buildStatsSummary(sim.events, sim.crowdSamples, sim.period);
     const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
@@ -270,8 +290,8 @@ export class ScreenModalManager {
         </div>
 
         <div class="breakdown-columns">
-          <div class="breakdown-col">
-            <h3>Ice Telemetry (Period ${sim.period})</h3>
+          <div class="breakdown-col pin-red">
+            <h3>Rink Sheet (Period ${sim.period})</h3>
             <ul class="stat-kv-list">
               <li><span>Goals (Home / Away)</span><strong>${pStats.homeGoals} – ${pStats.awayGoals}</strong></li>
               <li><span>Shots on Goal</span><strong>${pStats.homeShots} – ${pStats.awayShots}</strong></li>
@@ -280,8 +300,8 @@ export class ScreenModalManager {
             </ul>
           </div>
 
-          <div class="breakdown-col">
-            <h3>Organist Performance</h3>
+          <div class="breakdown-col pin-blue">
+            <h3>Organist Scorecard</h3>
             <ul class="stat-kv-list">
               <li><span>Songs Played (C / H / G)</span><strong>${pStats.songsPlayed.charge} / ${pStats.songsPlayed.hold_the_line} / ${pStats.songsPlayed.grudge_toccata}</strong></li>
               <li><span>Situational Cue Hits</span><strong>${pStats.cueHits} ★</strong></li>
@@ -330,7 +350,8 @@ export class ScreenModalManager {
     sim: MatchSimulation,
     activeTips: TipOffer[] = []
   ): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
+    this.contentEl.classList.add('wide-board-host');
     this.backdropEl.classList.remove('hidden');
     const totalStats = buildStatsSummary(sim.events, sim.crowdSamples);
     const p1 = buildStatsSummary(sim.events, sim.crowdSamples, 1);
@@ -347,8 +368,8 @@ export class ScreenModalManager {
     const bribesHtml =
       acceptedTips.length > 0
         ? `
-        <div class="bribes-final-box" style="margin-top: 12px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(148, 163, 184, 0.2); border-left: 3px solid #facc15; border-radius: 6px; padding: 10px 14px; text-align: left;">
-          <div style="font-size: 11px; font-weight: 800; color: #facc15; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.05em;">
+        <div class="bribes-final-box">
+          <div class="bribes-final-heading">
             Under-The-Table Bribes (${acceptedTips.length} Taken)
           </div>
           ${acceptedTips
@@ -357,12 +378,12 @@ export class ScreenModalManager {
               const pillClass = passed ? 'status-track' : 'status-fail';
               const payoutText = passed ? `+$${tip.bribePayout}` : 'FAILED ($0)';
               return `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <div class="bribe-row-item">
                   <div>
-                    <strong style="color: #f8fafc; font-size: 12px;">${tip.senderName} (${tip.senderTitle})</strong>
-                    <div style="font-size: 11px; color: #cbd5e1;">${tip.conditionDescription}</div>
+                    <strong class="bribe-sender-line">${tip.senderName} (${tip.senderTitle})</strong>
+                    <div class="bribe-cond-line">${tip.conditionDescription}</div>
                   </div>
-                  <div style="text-align: right;">
+                  <div class="bribe-payout-col">
                     <span class="order-status-pill ${pillClass}">${payoutText}</span>
                   </div>
                 </div>
@@ -397,49 +418,53 @@ export class ScreenModalManager {
         </div>
 
         <!-- SECTION 2: Period / Final Stats Box -->
-        <table class="period-summary-table">
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th>Goals</th>
-              <th>Shots</th>
-              <th>Saves</th>
-              <th>Fights (PIM)</th>
-              <th>Crowd Avg</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${periodRow('P1', p1)}
-            ${periodRow('P2', p2)}
-            ${periodRow('P3', p3)}
-            <tr class="total-row">
-              <td><strong>Total</strong></td>
-              <td><strong>${totalStats.homeGoals}–${totalStats.awayGoals}</strong></td>
-              <td><strong>${totalStats.homeShots}–${totalStats.awayShots}</strong></td>
-              <td><strong>${totalStats.homeSaves}–${totalStats.awaySaves}</strong></td>
-              <td><strong>${totalStats.fights} (${totalStats.penaltyMinutes}m)</strong></td>
-              <td><strong>${Math.round(sim.getAverageCrowdVolume())}%</strong></td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="game-stats-grid">
+          <div class="cork-table-sheet">
+            <table class="period-summary-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Goals</th>
+                  <th>Shots</th>
+                  <th>Saves</th>
+                  <th>Fights (PIM)</th>
+                  <th>Crowd Avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${periodRow('P1', p1)}
+                ${periodRow('P2', p2)}
+                ${periodRow('P3', p3)}
+                <tr class="total-row">
+                  <td><strong>Total</strong></td>
+                  <td><strong>${totalStats.homeGoals}–${totalStats.awayGoals}</strong></td>
+                  <td><strong>${totalStats.homeShots}–${totalStats.awayShots}</strong></td>
+                  <td><strong>${totalStats.homeSaves}–${totalStats.awaySaves}</strong></td>
+                  <td><strong>${totalStats.fights} (${totalStats.penaltyMinutes}m)</strong></td>
+                  <td><strong>${Math.round(sim.getAverageCrowdVolume())}%</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <div class="impact-callout-box">
-          <h3>🎹 Full-Match Organ Impact</h3>
-          <ul>
-            ${totalStats.impactLines.map((line) => `<li>${line}</li>`).join('')}
-            <li>Cue Hits: <strong>${totalStats.cueHits}</strong> • Stale Repeats: <strong>${totalStats.stalePlays}</strong></li>
-          </ul>
+          <div class="impact-callout-box">
+            <h3>🎹 Full-Match Organ Impact</h3>
+            <ul>
+              ${totalStats.impactLines.map((line) => `<li>${line}</li>`).join('')}
+              <li>Cue Hits: <strong>${totalStats.cueHits}</strong> • Stale Repeats: <strong>${totalStats.stalePlays}</strong></li>
+            </ul>
+          </div>
         </div>
 
         <!-- SECTION 3: Official Orders -->
         <div class="order-final-banner ${orderEval.passed ? 'banner-pass' : 'banner-fail'}">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <div class="order-final-top">
             <strong>Directive: ${orderDef.title}</strong>
             <span class="order-status-pill ${orderEval.passed ? 'status-track' : 'status-fail'}">
               ${orderEval.passed ? 'COMPLETED' : 'FAILED'}
             </span>
           </div>
-          <div style="font-size: 12px; color: #cbd5e1;">${orderEval.reason}</div>
+          <div class="order-final-reason">${orderEval.reason}</div>
         </div>
 
         <!-- SECTION 4: Bribes (if any taken) -->
@@ -467,7 +492,8 @@ export class ScreenModalManager {
     sim: MatchSimulation,
     activeTips: TipOffer[] = []
   ): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
+    this.contentEl.classList.add('wide-board-host');
     this.backdropEl.classList.remove('hidden');
     const orderDef = getOrderDisplay(sim.orderId, sim.orderTargetTeam);
     const orderEval = evaluateOrder(sim.orderId, sim.getOrderEvaluationSnapshot(sim.phase === 'MATCH_OVER'));
@@ -481,7 +507,7 @@ export class ScreenModalManager {
     );
     const tipsHtml =
       acceptedTips.length === 0
-        ? '<div style="font-size: 12px; color: #94a3b8; font-style: italic; padding: 6px 0;">No under-the-table tips accepted this match.</div>'
+        ? '<div class="empty-bribes-note">No under-the-table tips accepted this match.</div>'
         : acceptedTips
             .map((tip) => {
               const pillClass =
@@ -489,16 +515,16 @@ export class ScreenModalManager {
                   ? 'status-track'
                   : tip.status === 'FAILED'
                   ? 'status-fail'
-                  : 'status-track';
+                  : 'status-risk';
               return `
-                <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(148, 163, 184, 0.2); border-left: 3px solid #facc15; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-                    <strong style="color: #f8fafc; font-size: 13px;">${tip.senderName} (${tip.senderTitle})</strong>
-                    <span style="font-size: 11px; font-weight: 800; color: #facc15;">+$${tip.bribePayout}</span>
+                <div class="sticky-tip-card">
+                  <div class="sticky-tip-top">
+                    <strong>${tip.senderName} (${tip.senderTitle})</strong>
+                    <span class="sticky-tip-cash">+$${tip.bribePayout}</span>
                   </div>
-                  <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 4px;">${tip.conditionDescription}</div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
-                    <span style="color: #94a3b8;">${tip.liveProgressText || 'In progress...'}</span>
+                  <div class="sticky-tip-cond">${tip.conditionDescription}</div>
+                  <div class="sticky-tip-foot">
+                    <span>${tip.liveProgressText || 'In progress...'}</span>
                     <span class="order-status-pill ${pillClass}">${tip.status}</span>
                   </div>
                 </div>
@@ -507,27 +533,29 @@ export class ScreenModalManager {
             .join('');
 
     this.contentEl.innerHTML = `
-      <div class="modal-inner pause-modal" style="max-width: 580px; text-align: left;">
+      <div class="modal-inner pause-modal">
         <div class="modal-eyebrow">MATCH PAUSED • SEED #${sim.rng.initialSeed} • PERIOD ${sim.period}</div>
-        <h2 class="modal-title" style="margin-bottom: 12px;">ORGANIST PERCH PAUSED</h2>
+        <h2 class="modal-title">ORGANIST PERCH PAUSED</h2>
 
-        <!-- Official Directive Section -->
-        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Official Arena Directive</div>
-            ${orderStatusPill}
+        <div class="pause-board-grid">
+          <!-- Official Directive Section -->
+          <div class="cork-pinned-sheet directive-pin-card">
+            <div class="pin-card-header">
+              <span class="pin-card-kicker">Official Arena Directive</span>
+              ${orderStatusPill}
+            </div>
+            <div class="pin-card-title">${orderDef.title}</div>
+            <div class="pin-card-desc">${orderDef.description}</div>
+            <div class="pin-card-progress">Progress: ${orderEval.reason}</div>
           </div>
-          <div style="font-size: 14px; font-weight: 900; color: #f8fafc;">${orderDef.title}</div>
-          <div style="font-size: 12px; color: #cbd5e1; margin: 3px 0 6px 0;">${orderDef.description}</div>
-          <div style="font-size: 11px; color: #38bdf8; font-weight: 700;">Progress: ${orderEval.reason}</div>
-        </div>
 
-        <!-- Under-the-Table Propositions Section -->
-        <div style="margin-bottom: 16px;">
-          <div style="font-size: 11px; font-weight: 800; color: #facc15; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">
-            Under-The-Table Bribes &amp; Tips (${acceptedTips.length} Active)
+          <!-- Under-the-Table Propositions Section -->
+          <div class="cork-pinned-sheet bribes-pin-card">
+            <div class="pin-card-header">
+              <span class="pin-card-kicker">Under-The-Table Bribes &amp; Tips (${acceptedTips.length} Active)</span>
+            </div>
+            ${tipsHtml}
           </div>
-          ${tipsHtml}
         </div>
 
         <div class="modal-actions multi-actions">
@@ -560,7 +588,8 @@ export class ScreenModalManager {
     mgr: CampaignManager,
     onProceedNextMatch: () => void
   ): void {
-    this.contentEl.classList.remove('tip-note-host');
+    this.resetHostClasses();
+    this.contentEl.classList.add('wide-board-host');
     this.backdropEl.classList.remove('hidden');
 
     const render = () => {
@@ -572,16 +601,15 @@ export class ScreenModalManager {
 
       const nextUpgradeHtml = nextUpgrade
         ? `
-          <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #475569; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 13px; font-weight: 800; color: #f8fafc;">${nextUpgrade.name} (${nextUpgrade.slots} Slots)</div>
-              <div style="font-size: 11px; color: #94a3b8;">${nextUpgrade.desc}</div>
+          <div class="shop-upgrade-row">
+            <div class="shop-item-copy">
+              <div class="shop-item-title">${nextUpgrade.name} (${nextUpgrade.slots} ${pluralWord(nextUpgrade.slots, 'Slot')})</div>
+              <div class="shop-item-desc">${nextUpgrade.desc}</div>
             </div>
             <button
               id="btn-buy-stand"
               type="button"
-              class="primary-cta-btn"
-              style="padding: 6px 14px; font-size: 12px; white-space: nowrap; ${state.bankroll < nextUpgrade.cost ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+              class="primary-cta-btn shop-buy-btn"
               ${state.bankroll < nextUpgrade.cost ? 'disabled' : ''}
             >
               UPGRADE ($${nextUpgrade.cost})
@@ -589,7 +617,7 @@ export class ScreenModalManager {
           </div>
         `
         : `
-          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; color: #34d399; font-weight: 700; font-size: 12px; text-align: center;">
+          <div class="shop-max-banner">
             ★ GRAND CATHEDRAL CONSOLE: MAXIMUM CAPACITY REACHED (6 SLOTS) ★
           </div>
         `;
@@ -604,16 +632,15 @@ export class ScreenModalManager {
           ? buyableSongs
               .map(
                 (s) => `
-                <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                  <div>
-                    <div style="font-size: 12px; font-weight: 800; color: #f8fafc;">${s.title}</div>
-                    <div style="font-size: 11px; color: #94a3b8;">${s.desc}</div>
+                <div class="shop-catalog-row">
+                  <div class="shop-item-copy">
+                    <div class="shop-item-title">${s.title}</div>
+                    <div class="shop-item-desc">${s.desc}</div>
                   </div>
                   <button
-                    class="btn-buy-song secondary-cta-btn"
+                    class="btn-buy-song secondary-cta-btn shop-buy-btn"
                     data-song-id="${s.id}"
                     type="button"
-                    style="padding: 4px 10px; font-size: 11px; white-space: nowrap; ${state.bankroll < s.cost ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                     ${state.bankroll < s.cost ? 'disabled' : ''}
                   >
                     BUY ($${s.cost})
@@ -622,16 +649,20 @@ export class ScreenModalManager {
               `
               )
               .join('')
-          : '<div style="font-size: 11px; color: #94a3b8; font-style: italic;">All sheet music acquired!</div>';
+          : '<div class="empty-catalog-note">All sheet music acquired!</div>';
 
       // Loadout checkboxes for unlocked songs
       const repertoireHtml = state.unlockedSongs
         .map((sid) => {
           const isEquipped = state.equippedSongs.includes(sid);
+          const sDef = SONGS[sid];
+          const songLabel = sDef ? sDef.title : sid.toUpperCase();
+          const accentColor = sDef ? sDef.color : '#eab308';
           return `
-            <label style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid ${isEquipped ? '#38bdf8' : '#334155'}; border-radius: 6px; padding: 6px 10px; cursor: pointer;">
+            <label class="setlist-chip ${isEquipped ? 'is-equipped' : ''}" style="--chip-accent: ${accentColor};">
               <input type="checkbox" class="equip-checkbox" data-song-id="${sid}" ${isEquipped ? 'checked' : ''} />
-              <span style="font-size: 12px; font-weight: 700; color: ${isEquipped ? '#38bdf8' : '#cbd5e1'};">${sid.toUpperCase()}</span>
+              <span class="setlist-check-box" aria-hidden="true">${isEquipped ? '✓' : ''}</span>
+              <span class="setlist-chip-label">${songLabel}</span>
             </label>
           `;
         })
@@ -640,66 +671,75 @@ export class ScreenModalManager {
       // Scouting info for next match
       const scoutHtml = nextMatch
         ? `
-          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;">
-            <div style="font-size: 10px; font-weight: 800; color: #38bdf8; letter-spacing: 0.08em; text-transform: uppercase;">
+          <div class="cork-pinned-sheet scout-report-card">
+            <div class="scout-kicker">
               NEXT MATCH ${nextMatch.matchNumber} OF 17 • ${nextMatch.tierLabel}
             </div>
-            <div style="font-size: 15px; font-weight: 800; color: #f8fafc; margin-top: 2px;">
-              VS. <span style="color: ${nextMatch.awayTeam.primaryColor}">${nextMatch.awayTeam.name}</span>
+            <div class="scout-opponent-title">
+              VS.
+              <span class="team-color-swatch" style="background: ${nextMatch.awayTeam.primaryColor};"></span>
+              <span>${nextMatch.awayTeam.name}</span>
             </div>
-            <div style="font-size: 11px; color: #cbd5e1; margin-top: 4px; line-height: 1.4;">
+            <div class="scout-notes-list">
               <div><strong>STRENGTH:</strong> ${nextMatch.awayTeam.scoutReport.strength}</div>
               <div><strong>WEAKNESS:</strong> ${nextMatch.awayTeam.scoutReport.weakness}</div>
-              <div style="color: #facc15;"><strong>ORGANIST TIP:</strong> ${nextMatch.awayTeam.scoutReport.organistTip}</div>
+              <div class="scout-highlight-tip"><strong>ORGANIST TIP:</strong> ${nextMatch.awayTeam.scoutReport.organistTip}</div>
             </div>
           </div>
         `
-        : '<div style="font-size: 13px; color: #4ade80;">Season matches complete!</div>';
+        : '<div class="cork-pinned-sheet scout-complete-card">Season matches complete!</div>';
 
       this.contentEl.innerHTML = `
-        <div class="modal-card shop-modal" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
+        <div class="modal-inner shop-modal">
+          <div class="shop-header-bar">
             <div>
               <div class="modal-eyebrow">POST-MATCH HEADQUARTERS</div>
-              <h2 class="modal-title" style="margin: 0; font-size: 18px;">🎹 ORGAN LOFT WORKSHOP</h2>
+              <h2 class="modal-title">🎹 ORGAN LOFT WORKSHOP</h2>
             </div>
-            <div style="text-align: right;">
-              <div style="font-size: 18px; font-weight: 900; color: #facc15;">$${state.bankroll}</div>
-              <div style="font-size: 10px; font-weight: 700; color: ${officialRep < 75 ? '#fb7185' : '#4ade80'};">
-                JOB SECURITY: ${officialRep}% • STREET CRED: LVL ${state.unofficialRepLevel}
+            <div class="shop-wallet-cluster">
+              <div class="cash-bankroll-badge">$${state.bankroll}</div>
+              <div class="shop-rep-row">
+                <span class="order-status-pill ${officialRep < 75 ? 'status-fail' : 'status-track'}">JOB SECURITY: ${officialRep}%</span>
+                <span class="street-cred-pill">STREET CRED: LVL ${state.unofficialRepLevel}</span>
               </div>
             </div>
           </div>
 
-          ${scoutHtml}
+          <div class="shop-board-grid">
+            <div class="shop-col">
+              ${scoutHtml}
 
-          <div style="margin-bottom: 14px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">
-              Console Music Stand Capacity (${currentSlots} Active Slots)
-            </div>
-            ${nextUpgradeHtml}
-          </div>
-
-          <div style="margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">
-                Active Console Loadout (${state.equippedSongs.length} / ${state.maxSongSlots} Equipped)
+              <div class="cork-pinned-sheet shop-section-card">
+                <div class="pin-card-kicker">
+                  Console Music Stand Capacity (${currentSlots} Active ${pluralWord(currentSlots, 'Slot')})
+                </div>
+                ${nextUpgradeHtml}
               </div>
             </div>
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
-              ${repertoireHtml}
-            </div>
-          </div>
 
-          <div style="margin-bottom: 14px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">
-              Sheet Music Library (Buy New Anthems)
+            <div class="shop-col">
+              <div class="cork-pinned-sheet shop-section-card">
+                <div class="pin-card-kicker">
+                  Active Console Loadout (${state.equippedSongs.length} / ${state.maxSongSlots} Equipped)
+                </div>
+                <div class="setlist-chips-wrap">
+                  ${repertoireHtml}
+                </div>
+              </div>
+
+              <div class="cork-pinned-sheet shop-section-card">
+                <div class="pin-card-kicker">
+                  Sheet Music Library (Buy New Anthems)
+                </div>
+                <div class="shop-catalog-list">
+                  ${songsToBuyHtml}
+                </div>
+              </div>
             </div>
-            ${songsToBuyHtml}
           </div>
 
           <div class="modal-actions">
-            <button id="btn-proceed-match" class="primary-cta-btn" type="button" style="padding: 10px 20px; font-size: 13px; font-weight: 800;">
+            <button id="btn-proceed-match" class="primary-cta-btn" type="button">
               🏒 ${nextMatch ? `PROCEED TO MATCH ${nextMatch.matchNumber}` : 'VIEW SEASON SUMMARY'}
             </button>
           </div>
@@ -763,6 +803,10 @@ export class ScreenModalManager {
     mgr: CampaignManager,
     onRestartSeason: () => void
   ): void {
+    this.resetHostClasses();
+    this.contentEl.classList.add('wide-board-host');
+    this.backdropEl.classList.remove('hidden');
+
     const state = mgr.getState();
     const isSuccess = state.isSeasonCompleted && !state.isDisqualified;
     const history = state.matchHistory;
@@ -784,15 +828,15 @@ export class ScreenModalManager {
       .map((sid) => {
         const sDef = SONGS[sid];
         const lvl = mgr.getSongMasteryLevel(sid);
-        const badgeColor =
-          lvl === 'MASTERED' ? '#facc15' : lvl === 'FAMILIAR' ? '#38bdf8' : '#94a3b8';
+        const pillClass =
+          lvl === 'MASTERED' ? 'status-track' : lvl === 'FAMILIAR' ? 'status-risk' : 'mastery-novice';
         return `
-          <div style="background: rgba(15,23,42,0.6); padding: 8px 12px; border-radius: 6px; border-left: 3px solid ${sDef.color}; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <div class="season-song-row" style="--song-tab: ${sDef.color};">
             <div>
-              <strong style="color: #f8fafc; font-size: 13px;">${sDef.title}</strong>
-              <div style="font-size: 11px; color: #94a3b8;">${sDef.shortDesc}</div>
+              <strong class="season-song-title">${sDef.title}</strong>
+              <div class="season-song-desc">${sDef.shortDesc}</div>
             </div>
-            <span style="font-size: 11px; font-weight: 800; color: ${badgeColor}; padding: 2px 6px; border: 1px solid ${badgeColor}; border-radius: 4px;">
+            <span class="order-status-pill ${pillClass}">
               ${lvl === 'MASTERED' ? '★ MASTERED' : lvl}
             </span>
           </div>
@@ -800,19 +844,21 @@ export class ScreenModalManager {
       })
       .join('');
 
+    const officialPct = mgr.getOfficialReputationPct();
+
     this.contentEl.innerHTML = `
-      <div class="modal-inner" style="max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 24px; text-align: left;">
-        <div style="text-align: center; margin-bottom: 18px;">
-          <div style="font-size: 40px; line-height: 1; margin-bottom: 8px;">
+      <div class="modal-inner season-summary-modal">
+        <div class="cork-pinned-sheet season-hero-sheet ${isSuccess ? 'is-champion' : 'is-dismissed'}">
+          <div class="season-trophy-icon" aria-hidden="true">
             ${isSuccess ? '🏆' : '❌'}
           </div>
-          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em; text-transform: uppercase;">
+          <div class="modal-eyebrow">
             ${isSuccess ? '1988 MUNICIPAL ARENA • CAMPAIGN FINALE' : 'SEASON DISQUALIFICATION'}
           </div>
-          <h2 style="font-size: 24px; font-weight: 900; color: ${isSuccess ? '#facc15' : '#f87171'}; margin: 4px 0 8px 0; text-transform: uppercase;">
+          <h2 class="modal-title season-headline">
             ${isSuccess ? 'Hall of Fame Organist' : 'Relegated & Dismissed'}
           </h2>
-          <p style="font-size: 13px; color: #cbd5e1; max-width: 520px; margin: 0 auto; line-height: 1.4;">
+          <p class="season-lead-copy">
             ${
               isSuccess
                 ? 'From a humble cramped loft in Preseason to the thunderous climax of the Memorial Cup Final, your organ gave the Harmonizers their soul!'
@@ -821,48 +867,48 @@ export class ScreenModalManager {
           </p>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px;">
-          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Career Matches</div>
-            <div style="font-size: 18px; font-weight: 900; color: #f8fafc;">
-              ${history.length} <span style="font-size: 13px; color: #94a3b8;">/ 17 (${wins}W - ${losses}L - ${ties}T)</span>
+        <div class="season-stats-grid">
+          <div class="cork-pinned-sheet season-stat-card pin-red">
+            <div class="pin-card-kicker">Career Matches</div>
+            <div class="season-stat-big">
+              ${history.length} <span class="season-stat-sub">/ 17 (${wins}W - ${losses}L - ${ties}T)</span>
             </div>
           </div>
 
-          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Official Directives</div>
-            <div style="font-size: 18px; font-weight: 900; color: ${mgr.getOfficialReputationPct() >= 75 ? '#34d399' : '#f87171'};">
-              ${mgr.getOfficialReputationPct()}% <span style="font-size: 13px; color: #94a3b8;">(${state.officialOrdersCompleted}/${state.officialOrdersTotal} Passed)</span>
+          <div class="cork-pinned-sheet season-stat-card pin-blue">
+            <div class="pin-card-kicker">Official Directives</div>
+            <div class="season-stat-big ${officialPct >= 75 ? 'ink-green' : 'ink-red'}">
+              ${officialPct}% <span class="season-stat-sub">(${state.officialOrdersCompleted}/${state.officialOrdersTotal} Passed)</span>
             </div>
           </div>
 
-          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Street Cred & Tips</div>
-            <div style="font-size: 18px; font-weight: 900; color: #38bdf8;">
-              Lvl ${state.unofficialRepLevel}/5 <span style="font-size: 13px; color: #94a3b8;">(${state.totalTipsCompleted} tips, +$${state.totalTipEarnings.toLocaleString()})</span>
+          <div class="cork-pinned-sheet season-stat-card pin-gold">
+            <div class="pin-card-kicker">Street Cred &amp; Tips</div>
+            <div class="season-stat-big ink-blue">
+              Lvl ${state.unofficialRepLevel}/5 <span class="season-stat-sub">(${state.totalTipsCompleted} ${pluralWord(state.totalTipsCompleted, 'tip')}, +$${state.totalTipEarnings.toLocaleString()})</span>
             </div>
           </div>
 
-          <div style="background: rgba(30,41,59,0.7); border: 1px solid rgba(148,163,184,0.15); border-radius: 8px; padding: 12px;">
-            <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Career Bankroll & Stand</div>
-            <div style="font-size: 18px; font-weight: 900; color: #facc15;">
-              $${state.bankroll.toLocaleString()} <span style="font-size: 13px; color: #94a3b8;">(${state.maxSongSlots}/6 slots)</span>
+          <div class="cork-pinned-sheet season-stat-card pin-green">
+            <div class="pin-card-kicker">Career Bankroll &amp; Stand</div>
+            <div class="season-stat-big ink-green">
+              $${state.bankroll.toLocaleString()} <span class="season-stat-sub">(${state.maxSongSlots}/6 ${pluralWord(state.maxSongSlots, 'slot')})</span>
             </div>
           </div>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between;">
-            <span>Song Repertoire (${state.unlockedSongs.length} Unlocked)</span>
-            <span style="color: #facc15;">${masteredCount} Mastered</span>
+        <div class="cork-pinned-sheet season-repertoire-sheet">
+          <div class="season-rep-header">
+            <span class="pin-card-kicker">Song Repertoire (${state.unlockedSongs.length} Unlocked)</span>
+            <span class="season-mastered-count">${masteredCount} Mastered</span>
           </div>
-          <div style="max-height: 180px; overflow-y: auto;">
+          <div class="season-songs-scroll">
             ${songsHtml}
           </div>
         </div>
 
-        <div style="text-align: center;">
-          <button id="btn-restart-season" class="primary-cta-btn" type="button" style="padding: 12px 28px; font-size: 14px; font-weight: 900;">
+        <div class="modal-actions center-actions">
+          <button id="btn-restart-season" class="primary-cta-btn" type="button">
             🎹 START NEW CAMPAIGN SEASON
           </button>
         </div>
@@ -873,9 +919,6 @@ export class ScreenModalManager {
       this.hide();
       onRestartSeason();
     });
-
-    this.contentEl.classList.remove('tip-note-host');
-    this.backdropEl.classList.remove('hidden');
   }
 }
 

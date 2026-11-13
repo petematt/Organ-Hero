@@ -8,6 +8,7 @@ import { HudController } from '../../ui/hud';
 import { RinkRenderer } from '../../ui/rinkRenderer';
 import { ScreenModalManager } from '../../ui/screens';
 import { TipOffer } from '../../campaign/tips';
+import { CampaignManager } from '../../campaign/campaignState';
 
 class MockElement {
   public innerHTML: string = '';
@@ -17,6 +18,7 @@ class MockElement {
     contains: vi.fn().mockReturnValue(false),
   };
   public addEventListener = vi.fn();
+  public querySelectorAll = vi.fn().mockReturnValue([]);
   public get textContent(): string {
     return this.innerHTML.replace(/<[^>]*>/g, '').trim();
   }
@@ -247,6 +249,50 @@ describe('End-of-Game UI Improvements', () => {
     const btnMatch = html.match(/<button id="btn-drop-puck"[^>]*>([\s\S]*?)<\/button>/);
     expect(btnMatch).not.toBeNull();
     expect(btnMatch![1].trim()).toBe('Drop the puck');
+  });
+
+  it('renders Locker-Room Corkboard & Greaseboard semantic layout across Pause, Shop, and Season modals without nested .modal-card', () => {
+    const store: Record<string, string> = {};
+    (globalThis as unknown as { localStorage: unknown }).localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => {
+        store[k] = v;
+      },
+      removeItem: (k: string) => {
+        delete store[k];
+      },
+    };
+
+    const screens = new ScreenModalManager({
+      onTakeSeat: vi.fn(),
+      onStartMatchWithOrder: vi.fn(),
+      onContinueNextPeriod: vi.fn(),
+      onPlayAgainNewSeed: vi.fn(),
+      onResumeFromPause: vi.fn(),
+    });
+
+    const mgr = new CampaignManager();
+
+    // Shop modal should add wide-board-host, render pinned sheets & setlist chips, and NOT double-nest .modal-card
+    screens.showOrganLoftShop(mgr, vi.fn());
+    expect(contentEl.classList.add).toHaveBeenCalledWith('wide-board-host');
+    expect(contentEl.innerHTML).toContain('shop-board-grid');
+    expect(contentEl.innerHTML).toContain('scout-report-card');
+    expect(contentEl.innerHTML).toContain('setlist-chip');
+    expect(contentEl.innerHTML).toContain('CHARGE! FANFARE');
+    expect(contentEl.innerHTML).not.toContain('class="modal-card');
+
+    // Pause modal should render cork-pinned-sheet cards in a 2-column pause-board-grid
+    screens.showPauseModal(sim, []);
+    expect(contentEl.innerHTML).toContain('pause-board-grid');
+    expect(contentEl.innerHTML).toContain('directive-pin-card');
+    expect(contentEl.innerHTML).toContain('bribes-pin-card');
+
+    // Season summary modal should render 4 pinned stat cards and proper singular/plural labels
+    screens.showSeasonEndSummaryModal(mgr, vi.fn());
+    expect(contentEl.innerHTML).toContain('season-stats-grid');
+    expect(contentEl.innerHTML).toContain('0 tips');
+    expect(contentEl.innerHTML).toContain('2/6 slots');
   });
 });
 
