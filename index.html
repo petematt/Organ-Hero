@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="Organ MVP: An Ice Hockey Journey — Play the stadium pipe organ to manipulate player moods, crowd volume, and 3v3 hockey mayhem."
+    />
+    <meta name="theme-color" content="#0d131a" />
+    <title>Organ MVP — An Ice Hockey Journey</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700;1,800&family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Permanent+Marker&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="./assets/index-DhGa-8Ow.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D39VDWb7.css">
+  </head>
+  <body>
+    <h1 class="sr-only">Organ MVP: An Ice Hockey Journey</h1>
+
+    <!-- Portrait Orientation Lock Overlay -->
+    <div id="rotate-overlay" class="rotate-overlay" aria-live="polite">
+      <div class="rotate-card">
+        <div class="rotate-icon" aria-hidden="true">⟳</div>
+        <h2>Rotate Your Device</h2>
+        <p>The Organist's Perch requires a landscape view overlooking the ice rink.</p>
+      </div>
+    </div>
+
+    <!-- Main Organist Perch Viewport -->
+    <main id="app-viewport" class="perch-viewport">
+      <!-- Top Jumbotron Scoreboard HUD -->
+      <header id="jumbotron-hud" class="jumbotron-hud">
+        <div class="hud-crowd-order">
+          <div class="crowd-meter-wrap" title="Crowd Volume">
+            <div class="crowd-label-row">
+              <span>CROWD</span>
+              <span id="crowd-pct">50%</span>
+            </div>
+            <div class="crowd-bar-track">
+              <div id="crowd-bar-fill" class="crowd-bar-fill" style="width: 50%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hud-score-cluster">
+          <div class="hud-team hud-home">
+            <span class="team-badge home-badge">HOME</span>
+            <span id="score-home" class="team-score">0</span>
+          </div>
+
+          <div class="period-pill">
+            <span id="period-label">P1</span>
+            <span class="dot-sep">•</span>
+            <span id="clock-display" class="clock-digits">2:00</span>
+          </div>
+
+          <div class="hud-team hud-away">
+            <span id="score-away" class="team-score">0</span>
+            <span class="team-badge away-badge">AWAY</span>
+          </div>
+        </div>
+
+        <div class="hud-controls">
+          <button
+            id="btn-speed-toggle"
+            class="hud-btn active-toggle"
+            type="button"
+            title="Toggle Simulation Speed (1x / 2x)"
+          >
+            2x
+          </button>
+          <button
+            id="btn-fullscreen"
+            class="hud-btn"
+            type="button"
+            title="Toggle Fullscreen (F)"
+            aria-label="Toggle Fullscreen"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: middle;">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          </button>
+          <button
+            id="btn-pause"
+            class="hud-btn"
+            type="button"
+            title="Pause Match (Space)"
+          >
+            ❚❚
+          </button>
+          <button
+            id="btn-debug"
+            class="hud-btn"
+            type="button"
+            title="Open Tuning & Debug Config (`)"
+          >
+            ⚙
+          </button>
+        </div>
+      </header>
+
+      <!-- Center Ice Rink Canvas Area -->
+      <section id="rink-stage" class="rink-stage">
+        <div id="cue-banner" class="cue-banner hidden">
+          <span id="cue-text">BREAKAWAY! PLAY CHARGE!</span>
+        </div>
+        <canvas id="rink-canvas"></canvas>
+      </section>
+
+      <!-- Bottom Pipe Organ Music Stand Console -->
+      <footer id="organ-console" class="organ-console">
+        <div class="music-stand-row">
+          <!-- Song Buttons -->
+          <div class="music-stand-buttons">
+            <button
+              id="btn-song-charge"
+              class="song-btn song-charge"
+              type="button"
+              data-song="charge"
+            >
+              <div class="song-btn-top">
+                <span class="song-title">CHARGE!</span>
+                <span id="stale-badge-charge" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">+FOC +AGG (Offense)</div>
+              <div class="song-btn-target">
+                <span id="target-label-charge" class="target-pill target-home">HOME (Poss)</span>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-charge" class="song-progress-fill"></div>
+              </div>
+            </button>
+
+            <button
+              id="btn-song-hold"
+              class="song-btn song-hold"
+              type="button"
+              data-song="hold_the_line"
+            >
+              <div class="song-btn-top">
+                <span class="song-title">HOLD THE LINE</span>
+                <span id="stale-badge-hold_the_line" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">+DEF +GOALIE −AGG</div>
+              <div class="song-btn-target">
+                <span id="target-label-hold" class="target-pill target-away">AWAY (Def)</span>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-hold_the_line" class="song-progress-fill"></div>
+              </div>
+            </button>
+
+            <button
+              id="btn-song-grudge"
+              class="song-btn song-grudge"
+              type="button"
+              data-song="grudge_toccata"
+            >
+              <div class="song-btn-top">
+                <span class="song-title">GRUDGE TOCCATA</span>
+                <span id="stale-badge-grudge_toccata" class="stale-badge hidden">STALE</span>
+              </div>
+              <div class="song-btn-desc">++AGG −FOC (Brawl)</div>
+              <div class="song-btn-target">
+                <span id="target-label-grudge" class="target-pill target-both">BOTH TEAMS</span>
+              </div>
+              <div class="song-progress-bar">
+                <div id="progress-grudge_toccata" class="song-progress-fill"></div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <!-- Modal Overlay Container (Start Seat, Clipboard, Period Breakdown, Game Breakdown, Pause) -->
+    <div id="modal-backdrop" class="modal-backdrop">
+      <div id="modal-content" class="modal-card"></div>
+    </div>
+
+    <!-- Live Debug & Balance Config Drawer -->
+    <aside id="debug-drawer" class="debug-drawer hidden" aria-label="Debug Configuration Panel">
+      <div class="debug-header">
+        <h2>⚙ Organist Tuning &amp; Seed Panel</h2>
+        <button id="btn-close-debug" class="hud-btn" type="button">✕</button>
+      </div>
+      <div id="debug-body" class="debug-body"></div>
+    </aside>
+
+  </body>
+</html>
