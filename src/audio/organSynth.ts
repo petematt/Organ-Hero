@@ -13,12 +13,46 @@ export class OrganSynth {
   private organGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private unlocked: boolean = false;
+  // Crowd Ambiance System (Alternative 1: Enhanced Multi-Band Procedural Synthesis)
+  // Layer A: Sub-Arena Rumble Bed (Brown Noise + cascaded 24 dB/oct lowpass at 180 Hz)
+  private rumbleSource: AudioBufferSourceNode | null = null;
+  private rumbleLp1: BiquadFilterNode | null = null;
+  private rumbleLp2: BiquadFilterNode | null = null;
+  private rumbleGain: GainNode | null = null;
+
+  // Layer B: Vocal Formant Murmur / Babble Bank (Pink Noise + F1/F2/F3 Formant Filters + LFOs)
+  private formantSource: AudioBufferSourceNode | null = null;
+  private f1Filter: BiquadFilterNode | null = null;
+  private f2Filter: BiquadFilterNode | null = null;
+  private f3Filter: BiquadFilterNode | null = null;
+  private f1Gain: GainNode | null = null;
+  private f2Gain: GainNode | null = null;
+  private f3Gain: GainNode | null = null;
+  private formantBus: GainNode | null = null;
+  private formantTremoloGain: GainNode | null = null;
+  private formantMasterGain: GainNode | null = null;
+  private lfo1: OscillatorNode | null = null;
+  private lfo2: OscillatorNode | null = null;
+  private flutterLfo: OscillatorNode | null = null;
+
+  // Layer C: Stochastic Transient Applause / Clamour (Bandpass Micro-Transients)
+  private clapBuffers: AudioBuffer[] = [];
+  private clapBusGain: GainNode | null = null;
+  private clapInterval: number | null = null;
+
+  // Spatial Arena Diffusion (Procedural 1.2s Impulse Response)
+  private convolver: ConvolverNode | null = null;
+  private crowdDryGain: GainNode | null = null;
+  private crowdWetGain: GainNode | null = null;
+  private crowdSummingBus: GainNode | null = null;
+
+  // Master Crowd Volume & Surge State
   private crowdGain: GainNode | null = null;
-  private crowdFilter: BiquadFilterNode | null = null;
   private crowdSurgeGain: GainNode | null = null;
   private crowdRunning: boolean = false;
+  private crowdNormVolume: number = 0.5;
+  private isCrowdPaused: boolean = false;
   private lastCrowdTargetGain: number = -1;
-  private lastCrowdTargetFreq: number = -1;
 
   // Analytical surge envelope state for glitch-free overlapping surges
   private surgeStartTime: number = 0;
@@ -31,27 +65,32 @@ export class OrganSynth {
   public unlock(): void {
     try {
       if (!this.ctx) {
+        const win =
+          typeof window !== 'undefined'
+            ? window
+            : (globalThis as unknown as Record<string, unknown>);
         const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext })
+          (win as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
+          (win as unknown as { webkitAudioContext?: typeof AudioContext })
             .webkitAudioContext;
         if (!AudioCtx) return;
-        this.ctx = new AudioCtx();
-        this.masterGain = this.ctx.createGain();
+        const ctx = new AudioCtx();
+        this.ctx = ctx;
+        this.masterGain = ctx.createGain();
         this.masterGain.gain.value = 1.0;
-        this.masterGain.connect(this.ctx.destination);
+        this.masterGain.connect(ctx.destination);
 
-        this.organGain = this.ctx.createGain();
+        this.organGain = ctx.createGain();
         this.organGain.gain.value = 0.98;
         this.organGain.connect(this.masterGain);
 
-        this.sfxGain = this.ctx.createGain();
+        this.sfxGain = ctx.createGain();
         this.sfxGain.gain.value = 0.95;
         this.sfxGain.connect(this.masterGain);
 
-        this.initCrowdAmbiance(this.ctx);
+        this.initCrowdAmbiance(ctx);
       }
-      if (this.ctx.state === 'suspended') {
+      if (this.ctx && this.ctx.state === 'suspended') {
         void this.ctx.resume();
       }
       this.unlocked = true;
@@ -63,55 +102,196 @@ export class OrganSynth {
   private initCrowdAmbiance(ctx: AudioContext): void {
     if (this.crowdRunning) return;
     try {
-      const buffer = this.createCrowdBuffer(ctx);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
-
-      this.crowdFilter = ctx.createBiquadFilter();
-      this.crowdFilter.type = 'lowpass';
-      this.crowdFilter.frequency.value = 550;
-      this.crowdFilter.Q.value = 0.7;
-
-      // Slow organic acoustic drift
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.2;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 60;
-      lfo.connect(lfoGain);
-      lfoGain.connect(this.crowdFilter.frequency);
-      lfo.start();
+      // 1. Crowd summing bus and spatial arena diffusion (ConvolverNode)
+      this.crowdSummingBus = ctx.createGain();
+      this.crowdSummingBus.gain.value = 1.0;
 
       this.crowdGain = ctx.createGain();
-      this.crowdGain.gain.value = 0.10;
+      this.crowdGain.gain.value = 0.07;
+
+      this.crowdDryGain = ctx.createGain();
+      this.crowdDryGain.gain.value = 0.75;
+
+      this.crowdWetGain = ctx.createGain();
+      this.crowdWetGain.gain.value = 0.25;
 
       this.crowdSurgeGain = ctx.createGain();
       this.crowdSurgeGain.gain.value = 1.0;
 
-      source.connect(this.crowdFilter);
-      this.crowdFilter.connect(this.crowdGain);
-      this.crowdGain.connect(this.crowdSurgeGain);
+      try {
+        this.convolver = ctx.createConvolver();
+        this.convolver.buffer = this.createArenaImpulseResponse(ctx);
+      } catch {
+        this.convolver = null;
+      }
+
+      this.crowdSummingBus.connect(this.crowdGain);
+      this.crowdGain.connect(this.crowdDryGain);
+      this.crowdDryGain.connect(this.crowdSurgeGain);
+
+      if (this.convolver) {
+        this.crowdGain.connect(this.convolver);
+        this.convolver.connect(this.crowdWetGain);
+        this.crowdWetGain.connect(this.crowdSurgeGain);
+      }
+
       if (this.masterGain) {
         this.crowdSurgeGain.connect(this.masterGain);
       } else {
         this.crowdSurgeGain.connect(ctx.destination);
       }
 
-      source.start();
+      // 2. Layer A: Sub-Arena Rumble Bed (Brown Noise + cascaded 24 dB/oct lowpass at 180 Hz)
+      const brownBuf = this.createBrownNoiseBuffer(ctx, 6);
+      this.rumbleSource = ctx.createBufferSource();
+      this.rumbleSource.buffer = brownBuf;
+      this.rumbleSource.loop = true;
+
+      this.rumbleLp1 = ctx.createBiquadFilter();
+      this.rumbleLp1.type = 'lowpass';
+      this.rumbleLp1.frequency.value = 180;
+      this.rumbleLp1.Q.value = 0.707;
+
+      this.rumbleLp2 = ctx.createBiquadFilter();
+      this.rumbleLp2.type = 'lowpass';
+      this.rumbleLp2.frequency.value = 180;
+      this.rumbleLp2.Q.value = 0.707;
+
+      this.rumbleGain = ctx.createGain();
+      this.rumbleGain.gain.value = 0.16;
+
+      this.rumbleSource.connect(this.rumbleLp1);
+      this.rumbleLp1.connect(this.rumbleLp2);
+      this.rumbleLp2.connect(this.rumbleGain);
+      this.rumbleGain.connect(this.crowdSummingBus);
+      this.rumbleSource.start();
+
+      // 3. Layer B: Vocal Formant Murmur / Babble Bank (Pink Noise + F1/F2/F3 Formant Filters)
+      const pinkBuf = this.createPinkNoiseBuffer(ctx, 6);
+      this.formantSource = ctx.createBufferSource();
+      this.formantSource.buffer = pinkBuf;
+      this.formantSource.loop = true;
+
+      this.f1Filter = ctx.createBiquadFilter();
+      this.f1Filter.type = 'bandpass';
+      this.f1Filter.frequency.value = 520;
+      this.f1Filter.Q.value = 2.5;
+
+      this.f2Filter = ctx.createBiquadFilter();
+      this.f2Filter.type = 'bandpass';
+      this.f2Filter.frequency.value = 1350;
+      this.f2Filter.Q.value = 3.0;
+
+      this.f3Filter = ctx.createBiquadFilter();
+      this.f3Filter.type = 'bandpass';
+      this.f3Filter.frequency.value = 2500;
+      this.f3Filter.Q.value = 3.5;
+
+      this.f1Gain = ctx.createGain();
+      this.f1Gain.gain.value = 0.50;
+
+      this.f2Gain = ctx.createGain();
+      this.f2Gain.gain.value = 0.32;
+
+      this.f3Gain = ctx.createGain();
+      this.f3Gain.gain.value = 0.18;
+
+      this.formantSource.connect(this.f1Filter);
+      this.f1Filter.connect(this.f1Gain);
+
+      this.formantSource.connect(this.f2Filter);
+      this.f2Filter.connect(this.f2Gain);
+
+      this.formantSource.connect(this.f3Filter);
+      this.f3Filter.connect(this.f3Gain);
+
+      this.formantBus = ctx.createGain();
+      this.formantBus.gain.value = 1.0;
+      this.f1Gain.connect(this.formantBus);
+      this.f2Gain.connect(this.formantBus);
+      this.f3Gain.connect(this.formantBus);
+
+      // Tremolo flutter node (4.5 Hz pseudo-flutter modulating gain around 1.0 +/- 0.10)
+      this.formantTremoloGain = ctx.createGain();
+      this.formantTremoloGain.gain.value = 1.0;
+
+      this.formantMasterGain = ctx.createGain();
+      this.formantMasterGain.gain.value = 0.22;
+
+      this.formantBus.connect(this.formantTremoloGain);
+      this.formantTremoloGain.connect(this.formantMasterGain);
+      this.formantMasterGain.connect(this.crowdSummingBus);
+
+      // Dual asynchronous LFOs (0.13 Hz and 0.27 Hz) detuning formants
+      this.lfo1 = ctx.createOscillator();
+      this.lfo1.frequency.value = 0.13;
+      const lfo1Gain = ctx.createGain();
+      lfo1Gain.gain.value = 30;
+      this.lfo1.connect(lfo1Gain);
+      lfo1Gain.connect(this.f1Filter.frequency);
+      lfo1Gain.connect(this.f2Filter.frequency);
+      this.lfo1.start();
+
+      this.lfo2 = ctx.createOscillator();
+      this.lfo2.frequency.value = 0.27;
+      const lfo2Gain = ctx.createGain();
+      lfo2Gain.gain.value = 60;
+      this.lfo2.connect(lfo2Gain);
+      lfo2Gain.connect(this.f2Filter.frequency);
+      lfo2Gain.connect(this.f3Filter.frequency);
+      this.lfo2.start();
+
+      // Pseudo-flutter tremolo LFO (4.5 Hz)
+      this.flutterLfo = ctx.createOscillator();
+      this.flutterLfo.frequency.value = 4.5;
+      const flutterGain = ctx.createGain();
+      flutterGain.gain.value = 0.10;
+      this.flutterLfo.connect(flutterGain);
+      flutterGain.connect(this.formantTremoloGain.gain);
+      this.flutterLfo.start();
+
+      this.formantSource.start();
+
+      // 4. Layer C: Stochastic Transient Applause / Clamour
+      this.clapBuffers = this.createClapBuffers(ctx);
+      this.clapBusGain = ctx.createGain();
+      this.clapBusGain.gain.value = 0.32;
+      this.clapBusGain.connect(this.crowdSummingBus);
+
+      if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+        this.clapInterval = window.setInterval(() => this.scheduleClapsTick(), 120);
+      }
+
       this.crowdRunning = true;
     } catch {
       // Audio buffer / source creation blocked or unsupported
     }
   }
 
-  private createCrowdBuffer(ctx: AudioContext): AudioBuffer {
+  private createBrownNoiseBuffer(ctx: AudioContext, durationSec: number = 6): AudioBuffer {
     const sampleRate = ctx.sampleRate || 44100;
-    const bufferLength = sampleRate * 4; // 4 seconds looping stereo buffer
-    const buffer = ctx.createBuffer(2, bufferLength, sampleRate);
+    const length = Math.floor(sampleRate * durationSec);
+    const buffer = ctx.createBuffer(2, length, sampleRate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
+      let lastVal = 0;
+      for (let i = 0; i < length; i++) {
+        const white = Math.random() * 2 - 1;
+        lastVal = (lastVal + white * 0.04) * 0.985;
+        data[i] = lastVal * 1.5;
+      }
+    }
+    return buffer;
+  }
+
+  private createPinkNoiseBuffer(ctx: AudioContext, durationSec: number = 6): AudioBuffer {
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.floor(sampleRate * durationSec);
+    const buffer = ctx.createBuffer(2, length, sampleRate);
     for (let channel = 0; channel < 2; channel++) {
       const data = buffer.getChannelData(channel);
       let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-      for (let i = 0; i < bufferLength; i++) {
+      for (let i = 0; i < length; i++) {
         const white = Math.random() * 2 - 1;
         b0 = 0.99886 * b0 + white * 0.0555179;
         b1 = 0.99332 * b1 + white * 0.0750759;
@@ -121,10 +301,58 @@ export class OrganSynth {
         b5 = -0.7616 * b5 - white * 0.0168980;
         const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
         b6 = white * 0.115926;
-        data[i] = pink * 0.22;
+        data[i] = pink * 0.20;
       }
     }
     return buffer;
+  }
+
+  private createClapBuffers(ctx: AudioContext): AudioBuffer[] {
+    const sampleRate = ctx.sampleRate || 44100;
+    const durationSec = 0.015;
+    const length = Math.floor(sampleRate * durationSec);
+    const buffers: AudioBuffer[] = [];
+    for (let b = 0; b < 6; b++) {
+      const buf = ctx.createBuffer(2, length, sampleRate);
+      const panL = 0.7 + Math.random() * 0.6;
+      const panR = 0.7 + Math.random() * 0.6;
+      for (let ch = 0; ch < 2; ch++) {
+        const data = buf.getChannelData(ch);
+        const pan = ch === 0 ? panL : panR;
+        let lastWhite = 0;
+        for (let i = 0; i < length; i++) {
+          const t = i / sampleRate;
+          const env = Math.exp(-t * 260); // sharp 4-8ms decay
+          const white = Math.random() * 2 - 1;
+          const hp = white - lastWhite * 0.85; // highpass diff
+          lastWhite = white;
+          data[i] = hp * env * pan * 0.18;
+        }
+      }
+      buffers.push(buf);
+    }
+    return buffers;
+  }
+
+  private createArenaImpulseResponse(ctx: AudioContext, durationSec: number = 1.2): AudioBuffer {
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.floor(sampleRate * durationSec);
+    const irBuffer = ctx.createBuffer(2, length, sampleRate);
+    const decayTau = 0.38;
+    for (let channel = 0; channel < 2; channel++) {
+      const data = irBuffer.getChannelData(channel);
+      let b0 = 0, b1 = 0;
+      for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        const env = Math.exp(-t / decayTau);
+        const white = Math.random() * 2 - 1;
+        b0 = b0 * 0.6 + white * 0.4;
+        b1 = b1 * 0.8 + b0 * 0.2;
+        const early = t < 0.08 ? (Math.random() < 0.2 ? 1.5 : 0.7) : 1.0;
+        data[i] = b1 * env * early * 0.35;
+      }
+    }
+    return irBuffer;
   }
 
   public setCrowdVolume(crowdVolume: number, isPaused: boolean = false): void {
@@ -136,18 +364,31 @@ export class OrganSynth {
     }
 
     const norm = Math.max(0, Math.min(1, (crowdVolume ?? 50) / 100));
-    // Warm arena crowd bed (~ -26 dBFS at 50%, ~ -22.5 dBFS at 100%) supporting the -13.5 dBFS organ
-    const targetGain = isPaused ? 0.035 : 0.085 + norm * 0.145;
-    const targetFreq = isPaused ? 360 : 480 + norm * 540;
+    this.crowdNormVolume = norm;
+    this.isCrowdPaused = isPaused;
 
+    // Arena ambiance sits at -26 dBFS (quiet) to -22 dBFS (100%), supporting the -13.5 dBFS organ
+    const targetGain = isPaused ? 0.022 : 0.048 + norm * 0.042;
     const now = ctx.currentTime;
     if (this.crowdGain && Math.abs(targetGain - this.lastCrowdTargetGain) > 0.001) {
       this.lastCrowdTargetGain = targetGain;
       this.crowdGain.gain.setTargetAtTime(targetGain, now, 0.2);
     }
-    if (this.crowdFilter && Math.abs(targetFreq - this.lastCrowdTargetFreq) > 1.5) {
-      this.lastCrowdTargetFreq = targetFreq;
-      this.crowdFilter.frequency.setTargetAtTime(targetFreq, now, 0.25);
+
+    // Dynamic rumble bed scaling
+    if (this.rumbleGain) {
+      const targetRumble = isPaused ? 0.08 : 0.12 + norm * 0.08;
+      this.rumbleGain.gain.setTargetAtTime(targetRumble, now, 0.25);
+    }
+
+    // Dynamic vocal formant frequency scaling with crowd excitement
+    if (this.f1Filter && this.f2Filter && this.f3Filter) {
+      const f1Target = isPaused ? 480 : 500 + norm * 50;
+      const f2Target = isPaused ? 1220 : 1300 + norm * 150;
+      const f3Target = isPaused ? 2350 : 2450 + norm * 200;
+      this.f1Filter.frequency.setTargetAtTime(f1Target, now, 0.25);
+      this.f2Filter.frequency.setTargetAtTime(f2Target, now, 0.25);
+      this.f3Filter.frequency.setTargetAtTime(f3Target, now, 0.25);
     }
   }
 
@@ -168,9 +409,9 @@ export class OrganSynth {
   }
 
   /**
-   * Spikes crowd excitement up to ~2x baseline following a shot or a goal:
-   * Quick rise in volume, brief rounded crest, and smooth asymptotic decay back to baseline
-   * without touching crowdFilter (avoiding multi-stage cutoffs or filter stomping).
+   * Spikes crowd excitement up to ~1.95x baseline following a shot or a goal:
+   * Quick rise in volume, brief rounded crest, smooth asymptotic decay back to baseline,
+   * temporary formant excitation and transient applause burst.
    */
   public triggerCrowdSurge(type: 'shot' | 'goal'): void {
     if (!this.unlocked) return;
@@ -181,7 +422,7 @@ export class OrganSynth {
     const surgeGain = this.crowdSurgeGain.gain;
     const currentVal = this.getCurrentSurgeValue(now);
 
-    const targetPeak = type === 'goal' ? 2.0 : 1.8;
+    const targetPeak = type === 'goal' ? 1.95 : 1.70;
     const peakVal = Math.min(2.0, Math.max(currentVal, targetPeak));
     const attackSec = type === 'goal' ? 0.08 : 0.07;
     const holdSec = type === 'goal' ? 0.08 : 0.03;
@@ -206,6 +447,108 @@ export class OrganSynth {
     this.surgeAttackSec = attackSec;
     this.surgeHoldSec = holdSec;
     this.surgeDecayTau = decayTau;
+
+    // Formant excitation during surges
+    if (this.f2Filter && this.f3Filter) {
+      const f2Peak = type === 'goal' ? 1750 : 1550;
+      const f3Peak = type === 'goal' ? 2950 : 2750;
+      const nominalF2 = 1300 + this.crowdNormVolume * 150;
+      const nominalF3 = 2450 + this.crowdNormVolume * 200;
+
+      this.f2Filter.frequency.cancelScheduledValues(now);
+      this.f2Filter.frequency.setValueAtTime(this.f2Filter.frequency.value, now);
+      this.f2Filter.frequency.linearRampToValueAtTime(f2Peak, now + attackSec);
+      this.f2Filter.frequency.setTargetAtTime(nominalF2, now + attackSec + holdSec, decayTau);
+
+      this.f3Filter.frequency.cancelScheduledValues(now);
+      this.f3Filter.frequency.setValueAtTime(this.f3Filter.frequency.value, now);
+      this.f3Filter.frequency.linearRampToValueAtTime(f3Peak, now + attackSec);
+      this.f3Filter.frequency.setTargetAtTime(nominalF3, now + attackSec + holdSec, decayTau);
+    }
+
+    // Micro-transient applause burst
+    const count = type === 'goal' ? 24 : 12;
+    const span = type === 'goal' ? 1.2 : 0.8;
+    this.scheduleTransientBurst(now, count, span);
+  }
+
+  private scheduleTransientBurst(startTime: number, count: number, spanSec: number): void {
+    if (!this.ctx || this.clapBuffers.length === 0 || !this.clapBusGain) return;
+    for (let i = 0; i < count; i++) {
+      const t = startTime + Math.random() * spanSec;
+      this.playOneClap(t);
+    }
+  }
+
+  private playOneClap(time: number): void {
+    if (!this.ctx || this.clapBuffers.length === 0 || !this.clapBusGain) return;
+    try {
+      const buf = this.clapBuffers[Math.floor(Math.random() * this.clapBuffers.length)];
+      const source = this.ctx.createBufferSource();
+      source.buffer = buf;
+      source.playbackRate.value = 0.82 + Math.random() * 0.36;
+      source.connect(this.clapBusGain);
+      source.start(time);
+    } catch {
+      // Audio buffer playback error safe guard
+    }
+  }
+
+  private scheduleClapsTick(): void {
+    if (!this.ctx || this.ctx.state !== 'running' || !this.crowdRunning || this.isCrowdPaused) return;
+    const now = this.ctx.currentTime;
+    const lookahead = 0.12;
+    const density = 2.5 + this.crowdNormVolume * 32;
+    let expected = density * lookahead;
+    while (expected > 0) {
+      if (Math.random() < Math.min(1, expected)) {
+        this.playOneClap(now + Math.random() * lookahead);
+      }
+      expected -= 1;
+    }
+  }
+
+  public destroy(): void {
+    if (this.clapInterval !== null) {
+      clearInterval(this.clapInterval);
+      this.clapInterval = null;
+    }
+    if (this.rumbleSource) {
+      try {
+        this.rumbleSource.stop();
+        this.rumbleSource.disconnect();
+      } catch {}
+      this.rumbleSource = null;
+    }
+    if (this.formantSource) {
+      try {
+        this.formantSource.stop();
+        this.formantSource.disconnect();
+      } catch {}
+      this.formantSource = null;
+    }
+    if (this.lfo1) {
+      try {
+        this.lfo1.stop();
+        this.lfo1.disconnect();
+      } catch {}
+      this.lfo1 = null;
+    }
+    if (this.lfo2) {
+      try {
+        this.lfo2.stop();
+        this.lfo2.disconnect();
+      } catch {}
+      this.lfo2 = null;
+    }
+    if (this.flutterLfo) {
+      try {
+        this.flutterLfo.stop();
+        this.flutterLfo.disconnect();
+      } catch {}
+      this.flutterLfo = null;
+    }
+    this.crowdRunning = false;
   }
 
   private ensureContext(): AudioContext | null {
@@ -716,8 +1059,59 @@ export class OrganSynth {
     source.stop(now + durationSec + 0.02);
   }
 
+  /**
+   * Synthesizes an energetic arena crowd cheer ('YEAHHH!'):
+   * Rising vocal formant sweep (600 Hz -> 1600 Hz) with excitement surge & transient clap burst.
+   */
   public triggerCrowdCheer(): void {
+    if (!this.unlocked) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const dest = this.crowdSummingBus ?? this.masterGain ?? ctx.destination;
+    const now = ctx.currentTime;
+
+    const durationSec = 1.1;
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.floor(sampleRate * durationSec);
+    const buffer = ctx.createBuffer(2, length, sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < length; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.997 * b0 + white * 0.099;
+        b1 = 0.963 * b1 + white * 0.296;
+        b2 = 0.570 * b2 + white * 1.052;
+        data[i] = (b0 + b1 + b2 + white * 0.18) * 0.16;
+      }
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    // Rising cheer formant filter (600 Hz -> 1600 Hz)
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(600, now);
+    filter.frequency.exponentialRampToValueAtTime(1600, now + 0.35);
+    filter.frequency.exponentialRampToValueAtTime(1100, now + durationSec);
+    filter.Q.setValueAtTime(2.6, now);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0.001, now);
+    gainNode.gain.linearRampToValueAtTime(0.32, now + 0.12);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+
+    source.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(dest);
+
+    source.start(now);
+    source.stop(now + durationSec + 0.05);
+
+    // Trigger excitement surge and applause burst
     this.triggerCrowdSurge('shot');
+    this.scheduleTransientBurst(now, 16, 0.9);
   }
 
   public playFightImpact(): void {
