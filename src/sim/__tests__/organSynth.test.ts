@@ -223,6 +223,12 @@ describe('OrganSynth Crowd Audio (Alternative 1)', () => {
     );
     expect(rumbleFilters.length).toBe(2);
 
+    // Verify speech-band body filter (lowpass at 850 Hz)
+    const bodyFilters = mockCtx.createdFilters.filter(
+      (f) => f.type === 'lowpass' && Math.abs(f.frequency.value - 850) < 1
+    );
+    expect(bodyFilters.length).toBe(1);
+
     // Verify Layer B formant filters (F1=520, F2=1350, F3=2500)
     const bandpassFilters = mockCtx.createdFilters.filter((f) => f.type === 'bandpass');
     const freqs = bandpassFilters.map((f) => Math.round(f.frequency.value));
@@ -254,11 +260,16 @@ describe('OrganSynth Crowd Audio (Alternative 1)', () => {
     // Paused state
     synth.setCrowdVolume(80, true);
 
-    // Verify that target scheduling was invoked
+    // Verify that target scheduling was invoked with calibrated levels
     const targetCalls = mockCtx.createdGains.flatMap((g) =>
       g.gain.calls.filter((c) => c.method === 'setTargetAtTime')
     );
     expect(targetCalls.length).toBeGreaterThan(0);
+    const scheduledTargets = targetCalls.map((c) => Number(c.args[0]));
+    // 25% target ~0.22, 80% target ~0.308, paused target 0.08
+    expect(scheduledTargets.some((v) => Math.abs(v - 0.22) < 0.01)).toBe(true);
+    expect(scheduledTargets.some((v) => Math.abs(v - 0.308) < 0.01)).toBe(true);
+    expect(scheduledTargets.some((v) => Math.abs(v - 0.08) < 0.01)).toBe(true);
 
     synth.destroy();
   });

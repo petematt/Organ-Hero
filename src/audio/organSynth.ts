@@ -25,9 +25,11 @@ export class OrganSynth {
   private f1Filter: BiquadFilterNode | null = null;
   private f2Filter: BiquadFilterNode | null = null;
   private f3Filter: BiquadFilterNode | null = null;
+  private fBodyFilter: BiquadFilterNode | null = null;
   private f1Gain: GainNode | null = null;
   private f2Gain: GainNode | null = null;
   private f3Gain: GainNode | null = null;
+  private fBodyGain: GainNode | null = null;
   private formantBus: GainNode | null = null;
   private formantTremoloGain: GainNode | null = null;
   private formantMasterGain: GainNode | null = null;
@@ -107,7 +109,7 @@ export class OrganSynth {
       this.crowdSummingBus.gain.value = 1.0;
 
       this.crowdGain = ctx.createGain();
-      this.crowdGain.gain.value = 0.07;
+      this.crowdGain.gain.value = 0.26;
 
       this.crowdDryGain = ctx.createGain();
       this.crowdDryGain.gain.value = 0.75;
@@ -158,7 +160,7 @@ export class OrganSynth {
       this.rumbleLp2.Q.value = 0.707;
 
       this.rumbleGain = ctx.createGain();
-      this.rumbleGain.gain.value = 0.16;
+      this.rumbleGain.gain.value = 0.55;
 
       this.rumbleSource.connect(this.rumbleLp1);
       this.rumbleLp1.connect(this.rumbleLp2);
@@ -166,7 +168,7 @@ export class OrganSynth {
       this.rumbleGain.connect(this.crowdSummingBus);
       this.rumbleSource.start();
 
-      // 3. Layer B: Vocal Formant Murmur / Babble Bank (Pink Noise + F1/F2/F3 Formant Filters)
+      // 3. Layer B: Vocal Formant Murmur / Babble Bank (Pink Noise + F1/F2/F3 Formant Filters + Body Resonance)
       const pinkBuf = this.createPinkNoiseBuffer(ctx, 6);
       this.formantSource = ctx.createBufferSource();
       this.formantSource.buffer = pinkBuf;
@@ -175,26 +177,34 @@ export class OrganSynth {
       this.f1Filter = ctx.createBiquadFilter();
       this.f1Filter.type = 'bandpass';
       this.f1Filter.frequency.value = 520;
-      this.f1Filter.Q.value = 2.5;
+      this.f1Filter.Q.value = 2.0;
 
       this.f2Filter = ctx.createBiquadFilter();
       this.f2Filter.type = 'bandpass';
       this.f2Filter.frequency.value = 1350;
-      this.f2Filter.Q.value = 3.0;
+      this.f2Filter.Q.value = 2.4;
 
       this.f3Filter = ctx.createBiquadFilter();
       this.f3Filter.type = 'bandpass';
       this.f3Filter.frequency.value = 2500;
-      this.f3Filter.Q.value = 3.5;
+      this.f3Filter.Q.value = 2.8;
+
+      this.fBodyFilter = ctx.createBiquadFilter();
+      this.fBodyFilter.type = 'lowpass';
+      this.fBodyFilter.frequency.value = 850;
+      this.fBodyFilter.Q.value = 0.707;
 
       this.f1Gain = ctx.createGain();
-      this.f1Gain.gain.value = 0.50;
+      this.f1Gain.gain.value = 1.20;
 
       this.f2Gain = ctx.createGain();
-      this.f2Gain.gain.value = 0.32;
+      this.f2Gain.gain.value = 0.90;
 
       this.f3Gain = ctx.createGain();
-      this.f3Gain.gain.value = 0.18;
+      this.f3Gain.gain.value = 0.50;
+
+      this.fBodyGain = ctx.createGain();
+      this.fBodyGain.gain.value = 0.60;
 
       this.formantSource.connect(this.f1Filter);
       this.f1Filter.connect(this.f1Gain);
@@ -205,18 +215,22 @@ export class OrganSynth {
       this.formantSource.connect(this.f3Filter);
       this.f3Filter.connect(this.f3Gain);
 
+      this.formantSource.connect(this.fBodyFilter);
+      this.fBodyFilter.connect(this.fBodyGain);
+
       this.formantBus = ctx.createGain();
       this.formantBus.gain.value = 1.0;
       this.f1Gain.connect(this.formantBus);
       this.f2Gain.connect(this.formantBus);
       this.f3Gain.connect(this.formantBus);
+      this.fBodyGain.connect(this.formantBus);
 
       // Tremolo flutter node (4.5 Hz pseudo-flutter modulating gain around 1.0 +/- 0.10)
       this.formantTremoloGain = ctx.createGain();
       this.formantTremoloGain.gain.value = 1.0;
 
       this.formantMasterGain = ctx.createGain();
-      this.formantMasterGain.gain.value = 0.22;
+      this.formantMasterGain.gain.value = 0.85;
 
       this.formantBus.connect(this.formantTremoloGain);
       this.formantTremoloGain.connect(this.formantMasterGain);
@@ -255,7 +269,7 @@ export class OrganSynth {
       // 4. Layer C: Stochastic Transient Applause / Clamour
       this.clapBuffers = this.createClapBuffers(ctx);
       this.clapBusGain = ctx.createGain();
-      this.clapBusGain.gain.value = 0.32;
+      this.clapBusGain.gain.value = 0.85;
       this.clapBusGain.connect(this.crowdSummingBus);
 
       if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
@@ -368,7 +382,7 @@ export class OrganSynth {
     this.isCrowdPaused = isPaused;
 
     // Arena ambiance sits at -26 dBFS (quiet) to -22 dBFS (100%), supporting the -13.5 dBFS organ
-    const targetGain = isPaused ? 0.022 : 0.048 + norm * 0.042;
+    const targetGain = isPaused ? 0.08 : 0.18 + norm * 0.16;
     const now = ctx.currentTime;
     if (this.crowdGain && Math.abs(targetGain - this.lastCrowdTargetGain) > 0.001) {
       this.lastCrowdTargetGain = targetGain;
@@ -377,18 +391,23 @@ export class OrganSynth {
 
     // Dynamic rumble bed scaling
     if (this.rumbleGain) {
-      const targetRumble = isPaused ? 0.08 : 0.12 + norm * 0.08;
+      const targetRumble = isPaused ? 0.35 : 0.55 + norm * 0.35;
       this.rumbleGain.gain.setTargetAtTime(targetRumble, now, 0.25);
     }
 
     // Dynamic vocal formant frequency scaling with crowd excitement
     if (this.f1Filter && this.f2Filter && this.f3Filter) {
-      const f1Target = isPaused ? 480 : 500 + norm * 50;
-      const f2Target = isPaused ? 1220 : 1300 + norm * 150;
-      const f3Target = isPaused ? 2350 : 2450 + norm * 200;
+      const f1Target = isPaused ? 480 : 500 + norm * 60;
+      const f2Target = isPaused ? 1200 : 1300 + norm * 160;
+      const f3Target = isPaused ? 2300 : 2450 + norm * 220;
       this.f1Filter.frequency.setTargetAtTime(f1Target, now, 0.25);
       this.f2Filter.frequency.setTargetAtTime(f2Target, now, 0.25);
       this.f3Filter.frequency.setTargetAtTime(f3Target, now, 0.25);
+    }
+
+    if (this.fBodyFilter) {
+      const fBodyTarget = isPaused ? 600 : 850 + norm * 350;
+      this.fBodyFilter.frequency.setTargetAtTime(fBodyTarget, now, 0.25);
     }
   }
 
