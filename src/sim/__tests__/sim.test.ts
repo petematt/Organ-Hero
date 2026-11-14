@@ -43,6 +43,7 @@ import {
   HOME_GOAL_X,
   BLUE_LINE_HOME_X,
   BLUE_LINE_AWAY_X,
+  isBehindOpponentGoalLine,
   isBehindOwnBlueLine,
   NET_DEPTH,
 } from '../physics';
@@ -2128,6 +2129,125 @@ describe('Passing Mechanics, Disable Passing Option & Goalie Critical Saves', ()
       expect(penalized.faceoffTravelPath).toBeFalsy();
       expect(penalized.pos.x).toBeCloseTo(boxPos.x, 2);
       expect(penalized.pos.y).toBeCloseTo(boxPos.y, 2);
+    });
+  });
+
+  describe('Shot Eligibility & Behind-The-Goal-Line Play (Issue #5)', () => {
+    it('isBehindOpponentGoalLine correctly identifies positions behind home and away goal lines', () => {
+      // Home team attacks toward AWAY_GOAL_X = 900 (+x direction)
+      expect(isBehindOpponentGoalLine({ x: 910, y: CENTER_Y }, 'home')).toBe(true);
+      expect(isBehindOpponentGoalLine({ x: 900, y: CENTER_Y }, 'home')).toBe(true);
+      expect(isBehindOpponentGoalLine({ x: 890, y: CENTER_Y }, 'home')).toBe(false);
+      expect(isBehindOpponentGoalLine({ x: 895, y: CENTER_Y }, 'home', 10)).toBe(true);
+
+      // Away team attacks toward HOME_GOAL_X = 100 (-x direction)
+      expect(isBehindOpponentGoalLine({ x: 90, y: CENTER_Y }, 'away')).toBe(true);
+      expect(isBehindOpponentGoalLine({ x: 100, y: CENTER_Y }, 'away')).toBe(true);
+      expect(isBehindOpponentGoalLine({ x: 110, y: CENTER_Y }, 'away')).toBe(false);
+      expect(isBehindOpponentGoalLine({ x: 105, y: CENTER_Y }, 'away', 10)).toBe(true);
+    });
+
+    it('prevents striker behind the goal line from shooting when maxPossessionSec expires and cycles or passes instead', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 42);
+      sim.phase = 'PLAYING';
+
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+      // Place away striker behind the home goal line (HOME_GOAL_X = 100)
+      awayS1.pos = { x: 70, y: CENTER_Y + 30 };
+      sim.gainPossession(awayS1);
+      awayS1.pos = { x: 70, y: CENTER_Y + 30 };
+      awayS1.possessionTimer = cfg.maxPossessionSec;
+
+      sim.step(1 / 60);
+
+      // Must not have fired a shot
+      expect(sim.puck.inFlightShotFrom).toBeNull();
+      // Carrier should have reset possession timer to cycle, or passed puck
+      if (sim.puck.carrierId === awayS1.id) {
+        expect(awayS1.possessionTimer).toBeLessThan(cfg.maxPossessionSec);
+      } else {
+        expect(sim.events.some((e) => e.type === 'PASS')).toBe(true);
+      }
+    });
+
+    it('cycles and resets possession timer when behind the goal line if passing is disabled', () => {
+      const cfg = cloneConfig();
+      cfg.enablePassing = false;
+      const sim = new MatchSimulation(cfg, 42);
+      sim.phase = 'PLAYING';
+
+      const awayS1 = sim.players.find((p) => p.id === 'away-s1')!;
+      awayS1.pos = { x: 70, y: CENTER_Y + 30 };
+      sim.gainPossession(awayS1);
+      awayS1.pos = { x: 70, y: CENTER_Y + 30 };
+      awayS1.possessionTimer = cfg.maxPossessionSec;
+
+      sim.step(1 / 60);
+
+      // Must not shoot
+      expect(sim.puck.inFlightShotFrom).toBeNull();
+      // Must remain in possession and cycle
+      expect(sim.puck.carrierId).toBe(awayS1.id);
+      expect(awayS1.possessionTimer).toBeLessThan(cfg.maxPossessionSec);
+    });
+
+    it('shootPuck rejects shot attempts from behind the opponent goal line', () => {
+      const sim = new MatchSimulation(cloneConfig(), 77);
+      sim.phase = 'PLAYING';
+
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      // Position home striker behind away goal net (AWAY_GOAL_X = 900)
+      homeS1.pos = { x: 920, y: CENTER_Y };
+      sim.puck.carrierId = homeS1.id;
+      sim.puck.pos = { ...homeS1.pos };
+
+      sim.shootPuck(homeS1);
+
+      // Shot must be rejected
+      expect(sim.puck.inFlightShotFrom).toBeNull();
+      expect(sim.puck.carrierId).toBe(homeS1.id);
+    });
+
+    it('allows legal shots from in front of the goal line to trigger normally', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 88);
+      sim.phase = 'PLAYING';
+
+      const homeS1 = sim.players.find((p) => p.id === 'home-s1')!;
+      // Position in the high slot in front of away goal (AWAY_GOAL_X = 900)
+      homeS1.pos = { x: 780, y: CENTER_Y };
+      sim.gainPossession(homeS1);
+      homeS1.pos = { x: 780, y: CENTER_Y };
+      homeS1.possessionTimer = cfg.maxPossessionSec;
+
+      sim.step(1 / 60);
+
+      // Should fire a shot
+      expect(sim.puck.inFlightShotFrom).toBe('home');
+    });
+
+    it('regression: seed 3061 does not take a shot from behind HOME_GOAL_X', () => {
+      const cfg = cloneConfig();
+      const sim = new MatchSimulation(cfg, 3061);
+      sim.phase = 'PLAYING';
+
+      for (let step = 0; step < 400; step++) {
+        const prevInFlight = sim.puck.inFlightShotFrom;
+        sim.step(1 / 60);
+
+        // When a shot is initiated
+        if (!prevInFlight && sim.puck.inFlightShotFrom) {
+          const shotTeam = sim.puck.inFlightShotFrom;
+          if (shotTeam === 'away') {
+            // Away attacking home goal at HOME_GOAL_X = 100 must shoot from in front (X > 100)
+            expect(sim.puck.pos.x).toBeGreaterThan(HOME_GOAL_X);
+          } else {
+            // Home attacking away goal at AWAY_GOAL_X = 900 must shoot from in front (X < 900)
+            expect(sim.puck.pos.x).toBeLessThan(AWAY_GOAL_X);
+          }
+        }
+      }
     });
   });
 });

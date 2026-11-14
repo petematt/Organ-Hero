@@ -18,6 +18,16 @@ export function isBehindOwnBlueLine(pos: Vec2, team: Team): boolean {
   return team === 'home' ? pos.x < BLUE_LINE_HOME_X : pos.x > BLUE_LINE_AWAY_X;
 }
 
+export function isBehindOpponentGoalLine(
+  pos: Vec2,
+  team: Team,
+  margin: number = 0
+): boolean {
+  return team === 'home'
+    ? pos.x >= AWAY_GOAL_X - margin
+    : pos.x <= HOME_GOAL_X + margin;
+}
+
 export function dist(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -136,7 +146,7 @@ export function createAttackRoute(
       const cornerY = topSide ? 48 : RINK_HEIGHT - 48;
       waypoints.push(
         { x: clamp(oppGoal.x - dirX * 15, 45, RINK_WIDTH - 45), y: cornerY },
-        { x: clamp(oppGoal.x + dirX * 25, 35, RINK_WIDTH - 35), y: cornerY + (topSide ? 40 : -40) },
+        { x: clamp(oppGoal.x - dirX * 10, 45, RINK_WIDTH - 45), y: cornerY + (topSide ? 40 : -40) },
         { x: clamp(oppGoal.x - dirX * 70, 45, RINK_WIDTH - 45), y: CENTER_Y + (topSide ? 35 : -35) }
       );
       shotTriggerDist = 125;

@@ -46,6 +46,7 @@ import {
   getOwnGoalPos,
   GOAL_HALF_WIDTH,
   HOME_GOAL_X,
+  isBehindOpponentGoalLine,
   isBehindOwnBlueLine,
   normalize,
   RINK_HEIGHT,
@@ -1280,15 +1281,32 @@ export class MatchSimulation {
           }
         }
 
-        const isRouteNearEnd = route.currentWaypointIndex >= route.waypoints.length - 1;
-        const reachedShotTrigger = isRouteNearEnd && distToGoal <= route.shotTriggerDist;
-        const fallbackShotTrigger = isRouteNearEnd && distToGoal <= this.cfg.minShotDistance;
+        const teamDirX = p.team === 'home' ? 1 : -1;
+        const forwardAttackDist = teamDirX * (oppGoal.x - p.pos.x);
+        const isBehindGoalLine = isBehindOpponentGoalLine(p.pos, p.team);
 
-        if (
-          p.possessionTimer >= this.cfg.maxPossessionSec ||
-          reachedShotTrigger ||
-          fallbackShotTrigger
-        ) {
+        const isRouteNearEnd =
+          route.currentWaypointIndex >= route.waypoints.length - 1 &&
+          !isBehindGoalLine;
+        const reachedShotTrigger =
+          isRouteNearEnd &&
+          distToGoal <= route.shotTriggerDist &&
+          forwardAttackDist >= 15;
+        const fallbackShotTrigger =
+          isRouteNearEnd &&
+          distToGoal <= this.cfg.minShotDistance &&
+          forwardAttackDist >= 20;
+
+        if (p.possessionTimer >= this.cfg.maxPossessionSec) {
+          if (!isBehindGoalLine) {
+            this.shootPuck(p);
+          } else {
+            // Possession expired behind the goal line: prioritize centering feed or cycle
+            if (!this.tryPassPuck(p)) {
+              p.possessionTimer = this.cfg.maxPossessionSec * 0.45;
+            }
+          }
+        } else if (!isBehindGoalLine && (reachedShotTrigger || fallbackShotTrigger)) {
           this.shootPuck(p);
         }
         continue;
@@ -1871,12 +1889,17 @@ export class MatchSimulation {
     const ownGoal = getOwnGoalPos(carrier.team);
     const inDefensiveZone = dist(carrier.pos, ownGoal) < 240;
 
+    const isBehindGoalLine = isBehindOpponentGoalLine(carrier.pos, carrier.team);
+    const isCenteringPass =
+      isBehindGoalLine &&
+      !isBehindOpponentGoalLine(teammate.pos, carrier.team);
+
     const isPressured = minOppDistToCarrier < 95 && minOppDistToTeammate > 60;
     const isTeammateBetterPositioned =
       teammateGoalDist < carrierGoalDist - 20 && minOppDistToTeammate > 60;
     const isDefensiveBreakout = inDefensiveZone && teammateGoalDist < carrierGoalDist;
 
-    if (!isPressured && !isTeammateBetterPositioned && !isDefensiveBreakout) {
+    if (!isPressured && !isTeammateBetterPositioned && !isDefensiveBreakout && !isCenteringPass) {
       return false;
     }
 
@@ -1901,6 +1924,8 @@ export class MatchSimulation {
       ? 1.0
       : isTicTacToeActive
       ? 0.95
+      : isCenteringPass
+      ? 0.85
       : computePassTendency(
           carrier.focus,
           carrier.aggression,
@@ -2085,6 +2110,10 @@ export class MatchSimulation {
   }
 
   public shootPuck(striker: PlayerEntity, isOwnGoal: boolean = false): void {
+    if (!isOwnGoal && isBehindOpponentGoalLine(striker.pos, striker.team)) {
+      return;
+    }
+
     const oppGoal = isOwnGoal ? getOwnGoalPos(striker.team) : getOpponentGoalPos(striker.team);
     const defTeam = isOwnGoal ? striker.team : oppositeTeam(striker.team);
     const goalie = this.players.find(
