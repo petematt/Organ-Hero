@@ -1,4 +1,4 @@
-# Organ MVP ("Organ Hero") — An Ice Hockey Journey
+# Organ Hero — An Ice Hockey Journey
 
 Play as **The Organist**, perched above a 3v3 ice hockey rink. You don't control the skaters directly—instead, read who has possession, watch player moods (`Focus`, `Stamina`, `Aggression`), and play stadium pipe organ classics at the right moments to sway the game and complete management's **Official Orders**.
 

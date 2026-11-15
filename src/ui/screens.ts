@@ -1,12 +1,13 @@
 import {
   evaluateOrder,
   getOrderDisplay,
+  OrderLiveStatus,
   resolveOrderTargetTeam,
 } from '../game/orders';
 import { buildStatsSummary, PeriodStatsSummary } from '../game/stats';
 import { SONGS } from '../game/songs';
 import { MatchSimulation } from '../sim/match';
-import { OrderId } from '../sim/types';
+import { OrderId, SongId } from '../sim/types';
 
 import { CampaignManager } from '../campaign/campaignState';
 import { MatchScheduleEntry } from '../campaign/schedule';
@@ -17,6 +18,11 @@ import {
   SONG_SHOP_CATALOG,
 } from '../campaign/shop';
 import { TipOffer } from '../campaign/tips';
+import {
+  getSongEffectLine,
+  getSongTitleCase,
+  renderSongStaffSvg,
+} from './sheetMusicSvg';
 
 export interface ScreenCallbacks {
   onTakeSeat: () => void;
@@ -30,6 +36,40 @@ export interface ScreenCallbacks {
 
 function pluralWord(count: number, singular: string, pluralForm = `${singular}s`): string {
   return count === 1 ? singular : pluralForm;
+}
+
+function formatLiveStatus(status: OrderLiveStatus): string {
+  switch (status) {
+    case 'ON_TRACK':
+      return 'On Track';
+    case 'AT_RISK':
+      return 'At Risk';
+    case 'PASSED':
+      return 'Passed';
+    case 'FAILED':
+      return 'Failed';
+  }
+}
+
+function formatTipStatus(status: TipOffer['status']): string {
+  switch (status) {
+    case 'ACCEPTED':
+      return 'Accepted';
+    case 'PASSED':
+      return 'Passed';
+    case 'FAILED':
+      return 'Failed';
+    case 'DECLINED':
+      return 'Declined';
+    default:
+      return 'Offered';
+  }
+}
+
+function formatMasteryLabel(lvl: 'UNKNOWN' | 'FAMILIAR' | 'MASTERED'): string {
+  if (lvl === 'MASTERED') return '★ Mastered';
+  if (lvl === 'FAMILIAR') return 'Familiar';
+  return 'New';
 }
 
 export class ScreenModalManager {
@@ -69,15 +109,15 @@ export class ScreenModalManager {
     this.backdropEl.classList.remove('hidden');
     const conflictHtml = tip.conflictsWithOfficial
       ? `<div class="tip-conflict-warning">
-          ⚠️ <strong>MORAL HAZARD:</strong> This demand conflicts with management's Official Order!
+          ⚠️ <strong>Moral hazard:</strong> This demand conflicts with management's Official Order!
          </div>`
       : '';
 
     this.contentEl.innerHTML = `
       <div class="tip-note-card">
         <div class="tip-note-eyebrow">
-          <span>📎 CONFIDENTIAL PROPOSITION</span>
-          <span>SLIPPED UNDER BOOTH DOOR</span>
+          <span>📎 Confidential proposition</span>
+          <span>Slipped under booth door</span>
         </div>
 
         <div class="tip-note-header">
@@ -95,17 +135,17 @@ export class ScreenModalManager {
         </div>
 
         <div class="tip-note-demand">
-          🎯 DEMAND: <span class="tip-note-demand-text">${tip.conditionDescription}</span>
+          🎯 Demand: <span class="tip-note-demand-text">${tip.conditionDescription}</span>
         </div>
 
         ${conflictHtml}
 
         <div class="tip-note-actions">
           <button id="btn-accept-tip" class="tip-btn-accept" type="button">
-            🤝 ACCEPT BRIBE (+$${tip.bribePayout})
+            🤝 Accept Bribe (+$${tip.bribePayout})
           </button>
           <button id="btn-decline-tip" class="tip-btn-decline" type="button">
-            🗑️ DECLINE
+            🗑️ Decline
           </button>
         </div>
       </div>
@@ -130,9 +170,9 @@ export class ScreenModalManager {
     this.backdropEl.classList.remove('hidden');
     this.contentEl.innerHTML = `
       <div class="modal-inner start-seat-modal">
-        <div class="cork-pinned-sheet welcome-sheet">
-          <div class="modal-eyebrow">1988 MUNICIPAL ARENA • ORGANIST BOOTH</div>
-          <h2 class="modal-title">ORGAN MVP: AN ICE HOCKEY JOURNEY</h2>
+        <div class="cork-pinned-sheet welcome-sheet tilt-neg-sm">
+          <div class="modal-eyebrow">1988 Municipal Arena · Organist Booth</div>
+          <h2 class="modal-title">Organ Hero: An Ice Hockey Journey</h2>
           <p class="modal-lead">
             You sit high in the Organist's Perch overlooking a chaotic 3v3 hockey match.
             You don't control the skaters directly—instead, watch <strong>who has possession</strong>
@@ -142,13 +182,25 @@ export class ScreenModalManager {
         </div>
         <h3 class="seat-repertoire-heading">Your organ repertoire</h3>
         <div class="seat-tips-grid">
-          <div class="seat-tip tip-pin-gold">
-            <strong>Charge! Fanfare</strong>
-            <span>Boosts Focus &amp; Aggression for the <em>possessing</em> (or last-touch) team.</span>
+          <div class="seat-tip sheet-music-strip tip-pin-gold tilt-pos-sm" style="--strip-accent: #d97706;">
+            <div class="sheet-strip-copy">
+              <strong>Charge! Fanfare</strong>
+              <span class="sheet-strip-sep" aria-hidden="true">—</span>
+              <span class="sheet-strip-effect">Boosts Focus &amp; Aggression for the <em>possessing</em> (or last-touch) team.</span>
+            </div>
+            <div class="sheet-strip-staff">
+              ${renderSongStaffSvg('charge')}
+            </div>
           </div>
-          <div class="seat-tip tip-pin-blue">
-            <strong>Hold the Line</strong>
-            <span>Boosts Goalie &amp; Defense for the <em>defending</em> team.</span>
+          <div class="seat-tip sheet-music-strip tip-pin-blue tilt-neg-xs" style="--strip-accent: #0d9488;">
+            <div class="sheet-strip-copy">
+              <strong>Hold the Line</strong>
+              <span class="sheet-strip-sep" aria-hidden="true">—</span>
+              <span class="sheet-strip-effect">Boosts Goalie &amp; Defense for the <em>defending</em> team.</span>
+            </div>
+            <div class="sheet-strip-staff">
+              ${renderSongStaffSvg('hold_the_line')}
+            </div>
           </div>
         </div>
         <div class="modal-actions">
@@ -179,34 +231,34 @@ export class ScreenModalManager {
     const targetTeam = resolveOrderTargetTeam(assignedOrderId, seed ?? 0);
     const currentOrder = getOrderDisplay(assignedOrderId, targetTeam);
     const teamBadge = currentOrder.usesRandomTeam
-      ? `<span class="assigned-pill ${targetTeam === 'away' ? 'pill-away' : 'pill-home'}">${targetTeam === 'away' ? 'AWAY TEAM' : 'HOME TEAM'}</span>`
+      ? `<span class="assigned-pill ${targetTeam === 'away' ? 'pill-away' : 'pill-home'}">${targetTeam === 'away' ? 'Away Team' : 'Home Team'}</span>`
       : '';
 
     const repPct = officialRepPct ?? 100;
     const campaignHeaderHtml = campaignMatch
       ? `
-        <div class="campaign-match-banner greaseboard-card">
+        <div class="campaign-match-banner greaseboard-card tilt-neg-xs">
           <div class="greaseboard-meta-row">
-            <span class="greaseboard-tag">MATCH ${campaignMatch.matchNumber} OF 17 • ${campaignMatch.tierLabel}</span>
-            <span class="order-status-pill ${repPct < 75 ? 'status-fail' : 'status-track'}">JOB SECURITY: ${repPct}%</span>
+            <span class="greaseboard-tag">Match ${campaignMatch.matchNumber} of 17 · ${campaignMatch.tierLabel}</span>
+            <span class="order-status-pill ${repPct < 75 ? 'status-fail' : 'status-track'}">Job Security: ${repPct}%</span>
           </div>
           <div class="greaseboard-matchup-row">
             <div class="matchup-teams-line">
               <span class="matchup-home-tag">${campaignMatch.homeTeam.shortName}</span>
-              <span class="matchup-vs">VS</span>
+              <span class="matchup-vs">vs.</span>
               <span class="matchup-away-tag">
                 <span class="team-color-swatch" style="background: ${campaignMatch.awayTeam.primaryColor};"></span>
                 ${campaignMatch.awayTeam.name}
               </span>
             </div>
             <div class="cash-stipend-tag">
-              BASE: $${campaignMatch.baseSalary} • BONUS: +$${campaignMatch.orderBonus}
+              Base: $${campaignMatch.baseSalary} · Bonus: +$${campaignMatch.orderBonus}
             </div>
           </div>
           ${
             campaignMatch.hasOpposingOrganist && campaignMatch.opposingOrganist
               ? `<div class="visitor-warning-slip">
-                  ⚠️ OPPOSING ORGANIST: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
+                  ⚠️ Opposing organist: <strong>${campaignMatch.opposingOrganist.name}</strong> (${campaignMatch.opposingOrganist.title}) in the visitor box!
                  </div>`
               : ''
           }
@@ -216,12 +268,12 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner clipboard-modal">
-        <div class="cork-header-strip">
+        <div class="cork-header-strip tilt-pos-xs">
           <h2 class="modal-title">Commissioner's Official Orders</h2>
         </div>
         ${campaignHeaderHtml}
-        <div class="active-order-spotlight">
-          <div class="spotlight-label">MANAGEMENT DIRECTIVE:</div>
+        <div class="active-order-spotlight tilt-pos-sm">
+          <div class="spotlight-label">Management Directive</div>
           <div class="spotlight-title">${currentOrder.title}${teamBadge}</div>
           <div class="spotlight-desc">${currentOrder.description}</div>
         </div>
@@ -280,27 +332,29 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner breakdown-modal">
-        <div class="modal-eyebrow">END OF PERIOD ${sim.period} • STAMINA RESTORED</div>
-        <h2 class="modal-title">PERIOD ${sim.period} BREAKDOWN</h2>
+        <div class="board-header-cluster">
+          <div class="modal-eyebrow">End of Period ${sim.period} · Stamina Restored</div>
+          <h2 class="modal-title">Period ${sim.period} Breakdown</h2>
+        </div>
 
-        <div class="breakdown-score-banner">
-          <div class="b-team home">HOME <span>${sim.homeScore}</span></div>
-          <div class="b-vs">VS</div>
-          <div class="b-team away"><span>${sim.awayScore}</span> AWAY</div>
+        <div class="breakdown-score-banner tilt-neg-xs">
+          <div class="b-team home">Home <span>${sim.homeScore}</span></div>
+          <div class="b-vs">vs.</div>
+          <div class="b-team away"><span>${sim.awayScore}</span> Away</div>
         </div>
 
         <div class="breakdown-columns">
-          <div class="breakdown-col pin-red">
+          <div class="breakdown-col pin-red tilt-neg-sm">
             <h3>Rink Sheet (Period ${sim.period})</h3>
             <ul class="stat-kv-list">
               <li><span>Goals (Home / Away)</span><strong>${pStats.homeGoals} – ${pStats.awayGoals}</strong></li>
               <li><span>Shots on Goal</span><strong>${pStats.homeShots} – ${pStats.awayShots}</strong></li>
               <li><span>Goalie Saves</span><strong>${pStats.homeSaves} – ${pStats.awaySaves}</strong></li>
-              <li><span>Brawls / Penalty Mins</span><strong>${pStats.fights} / ${pStats.penaltyMinutes} PIM</strong></li>
+              <li><span>Brawls / Penalty Mins</span><strong>${pStats.fights} / ${pStats.penaltyMinutes}m</strong></li>
             </ul>
           </div>
 
-          <div class="breakdown-col pin-blue">
+          <div class="breakdown-col pin-blue tilt-pos-sm">
             <h3>Organist Scorecard</h3>
             <ul class="stat-kv-list">
               <li><span>Songs Played (C / H / G)</span><strong>${pStats.songsPlayed.charge} / ${pStats.songsPlayed.hold_the_line} / ${pStats.songsPlayed.grudge_toccata}</strong></li>
@@ -314,24 +368,24 @@ export class ScreenModalManager {
           </div>
         </div>
 
-        <div class="impact-callout-box">
+        <div class="impact-callout-box tilt-neg-xs">
           <h3>🎹 Your Organ's Impact This Period</h3>
           <ul>
             ${pStats.impactLines.map((line) => `<li>${line}</li>`).join('')}
           </ul>
         </div>
 
-        <div class="order-check-row">
+        <div class="order-check-row tilt-pos-xs">
           <div>
             <strong>Directive: ${orderDef.title}</strong>
             <div class="order-reason-sub">${orderEval.reason}</div>
           </div>
-          <span class="order-status-pill ${statusBadgeClass}">${orderEval.liveStatus.replace('_', ' ')}</span>
+          <span class="order-status-pill ${statusBadgeClass}">${formatLiveStatus(orderEval.liveStatus)}</span>
         </div>
 
         <div class="modal-actions">
           <button id="btn-next-period" class="primary-cta-btn" type="button">
-            ▶ START PERIOD ${sim.period + 1}
+            ▶ Start Period ${sim.period + 1}
           </button>
         </div>
       </div>
@@ -368,15 +422,15 @@ export class ScreenModalManager {
     const bribesHtml =
       acceptedTips.length > 0
         ? `
-        <div class="bribes-final-box">
+        <div class="bribes-final-box tilt-neg-xs">
           <div class="bribes-final-heading">
-            Under-The-Table Bribes (${acceptedTips.length} Taken)
+            Under-the-Table Bribes (${acceptedTips.length} taken)
           </div>
           ${acceptedTips
             .map((tip) => {
               const passed = tip.status === 'PASSED';
               const pillClass = passed ? 'status-track' : 'status-fail';
-              const payoutText = passed ? `+$${tip.bribePayout}` : 'FAILED ($0)';
+              const payoutText = passed ? `+$${tip.bribePayout}` : 'Failed ($0)';
               return `
                 <div class="bribe-row-item">
                   <div>
@@ -408,18 +462,21 @@ export class ScreenModalManager {
     this.contentEl.innerHTML = `
       <div class="modal-inner breakdown-modal game-over-modal">
         <!-- Header (Seed dropped) -->
-        <div class="modal-eyebrow">FINAL BUZZER</div>
+        <div class="board-header-cluster">
+          <div class="modal-eyebrow">End of Regulation</div>
+          <h2 class="modal-title">FINAL BUZZER</h2>
+        </div>
 
         <!-- SECTION 1: Score -->
-        <div class="breakdown-score-banner">
-          <div class="b-team home">HOME <span>${sim.homeScore}</span></div>
-          <div class="b-vs">${sim.homeScore === sim.awayScore ? 'TIE' : 'FINAL'}</div>
-          <div class="b-team away"><span>${sim.awayScore}</span> AWAY</div>
+        <div class="breakdown-score-banner tilt-pos-xs">
+          <div class="b-team home">Home <span>${sim.homeScore}</span></div>
+          <div class="b-vs">${sim.homeScore === sim.awayScore ? 'Tie' : 'Final'}</div>
+          <div class="b-team away"><span>${sim.awayScore}</span> Away</div>
         </div>
 
         <!-- SECTION 2: Period / Final Stats Box -->
         <div class="game-stats-grid">
-          <div class="cork-table-sheet">
+          <div class="cork-table-sheet tilt-neg-sm">
             <table class="period-summary-table">
               <thead>
                 <tr>
@@ -447,21 +504,21 @@ export class ScreenModalManager {
             </table>
           </div>
 
-          <div class="impact-callout-box">
+          <div class="impact-callout-box tilt-pos-sm">
             <h3>🎹 Full-Match Organ Impact</h3>
             <ul>
               ${totalStats.impactLines.map((line) => `<li>${line}</li>`).join('')}
-              <li>Cue Hits: <strong>${totalStats.cueHits}</strong> • Stale Repeats: <strong>${totalStats.stalePlays}</strong></li>
+              <li>Cue Hits: <strong>${totalStats.cueHits}</strong> · Stale Repeats: <strong>${totalStats.stalePlays}</strong></li>
             </ul>
           </div>
         </div>
 
         <!-- SECTION 3: Official Orders -->
-        <div class="order-final-banner ${orderEval.passed ? 'banner-pass' : 'banner-fail'}">
+        <div class="order-final-banner ${orderEval.passed ? 'banner-pass' : 'banner-fail'} tilt-neg-xs">
           <div class="order-final-top">
             <strong>Directive: ${orderDef.title}</strong>
             <span class="order-status-pill ${orderEval.passed ? 'status-track' : 'status-fail'}">
-              ${orderEval.passed ? 'COMPLETED' : 'FAILED'}
+              ${orderEval.passed ? 'Completed' : 'Failed'}
             </span>
           </div>
           <div class="order-final-reason">${orderEval.reason}</div>
@@ -499,8 +556,8 @@ export class ScreenModalManager {
     const orderEval = evaluateOrder(sim.orderId, sim.getOrderEvaluationSnapshot(sim.phase === 'MATCH_OVER'));
     const orderStatusPill =
       orderEval.liveStatus === 'ON_TRACK'
-        ? '<span class="order-status-pill status-track">ON TRACK</span>'
-        : '<span class="order-status-pill status-fail">FAILED</span>';
+        ? '<span class="order-status-pill status-track">On Track</span>'
+        : '<span class="order-status-pill status-fail">Failed</span>';
 
     const acceptedTips = activeTips.filter(
       (t) => t.status === 'ACCEPTED' || t.status === 'PASSED' || t.status === 'FAILED'
@@ -525,7 +582,7 @@ export class ScreenModalManager {
                   <div class="sticky-tip-cond">${tip.conditionDescription}</div>
                   <div class="sticky-tip-foot">
                     <span>${tip.liveProgressText || 'In progress...'}</span>
-                    <span class="order-status-pill ${pillClass}">${tip.status}</span>
+                    <span class="order-status-pill ${pillClass}">${formatTipStatus(tip.status)}</span>
                   </div>
                 </div>
               `;
@@ -534,12 +591,14 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner pause-modal">
-        <div class="modal-eyebrow">MATCH PAUSED • SEED #${sim.rng.initialSeed} • PERIOD ${sim.period}</div>
-        <h2 class="modal-title">ORGANIST PERCH PAUSED</h2>
+        <div class="board-header-cluster">
+          <div class="modal-eyebrow">Match Paused · Seed #${sim.rng.initialSeed} · Period ${sim.period}</div>
+          <h2 class="modal-title">Organist Perch Paused</h2>
+        </div>
 
         <div class="pause-board-grid">
           <!-- Official Directive Section -->
-          <div class="cork-pinned-sheet directive-pin-card">
+          <div class="cork-pinned-sheet directive-pin-card tilt-neg-sm">
             <div class="pin-card-header">
               <span class="pin-card-kicker">Official Arena Directive</span>
               ${orderStatusPill}
@@ -550,9 +609,9 @@ export class ScreenModalManager {
           </div>
 
           <!-- Under-the-Table Propositions Section -->
-          <div class="cork-pinned-sheet bribes-pin-card">
+          <div class="cork-pinned-sheet bribes-pin-card tilt-pos-sm">
             <div class="pin-card-header">
-              <span class="pin-card-kicker">Under-The-Table Bribes &amp; Tips (${acceptedTips.length} Active)</span>
+              <span class="pin-card-kicker">Under-the-Table Bribes &amp; Tips (${acceptedTips.length} active)</span>
             </div>
             ${tipsHtml}
           </div>
@@ -563,7 +622,7 @@ export class ScreenModalManager {
             ▶ Resume Match
           </button>
           <button id="btn-pause-change-order" class="secondary-cta-btn" type="button">
-            📋 Restart / Change Order
+            Restart / Change Order
           </button>
         </div>
       </div>
@@ -603,7 +662,7 @@ export class ScreenModalManager {
         ? `
           <div class="shop-upgrade-row">
             <div class="shop-item-copy">
-              <div class="shop-item-title">${nextUpgrade.name} (${nextUpgrade.slots} ${pluralWord(nextUpgrade.slots, 'Slot')})</div>
+              <div class="shop-item-title">${nextUpgrade.name} (${nextUpgrade.slots} ${pluralWord(nextUpgrade.slots, 'slot')})</div>
               <div class="shop-item-desc">${nextUpgrade.desc}</div>
             </div>
             <button
@@ -612,17 +671,17 @@ export class ScreenModalManager {
               class="primary-cta-btn shop-buy-btn"
               ${state.bankroll < nextUpgrade.cost ? 'disabled' : ''}
             >
-              UPGRADE ($${nextUpgrade.cost})
+              Upgrade ($${nextUpgrade.cost})
             </button>
           </div>
         `
         : `
           <div class="shop-max-banner">
-            ★ GRAND CATHEDRAL CONSOLE: MAXIMUM CAPACITY REACHED (6 SLOTS) ★
+            ★ Grand Cathedral Console: Max capacity reached (6 slots) ★
           </div>
         `;
 
-      // Song catalog for purchase
+      // Song catalog for purchase — single-line sheet music strips
       const buyableSongs = SONG_SHOP_CATALOG.filter(
         (s) => !state.unlockedSongs.includes(s.id)
       );
@@ -630,39 +689,53 @@ export class ScreenModalManager {
       const songsToBuyHtml =
         buyableSongs.length > 0
           ? buyableSongs
-              .map(
-                (s) => `
-                <div class="shop-catalog-row">
-                  <div class="shop-item-copy">
-                    <div class="shop-item-title">${s.title}</div>
-                    <div class="shop-item-desc">${s.desc}</div>
+              .map((s, idx) => {
+                const sDef = SONGS[s.id];
+                const accent = sDef ? sDef.color : '#eab308';
+                const tiltClass = idx % 2 === 0 ? 'tilt-pos-xs' : 'tilt-neg-xs';
+                return `
+                  <div class="shop-catalog-row sheet-music-strip ${tiltClass}" style="--strip-accent: ${accent};">
+                    <div class="sheet-strip-copy">
+                      <strong class="shop-item-title">${getSongTitleCase(s.id)}</strong>
+                      <span class="sheet-strip-sep" aria-hidden="true">—</span>
+                      <span class="sheet-strip-effect">${getSongEffectLine(s.id)}</span>
+                    </div>
+                    <div class="sheet-strip-staff">
+                      ${renderSongStaffSvg(s.id)}
+                    </div>
+                    <button
+                      class="btn-buy-song secondary-cta-btn shop-buy-btn"
+                      data-song-id="${s.id}"
+                      type="button"
+                      ${state.bankroll < s.cost ? 'disabled' : ''}
+                    >
+                      Buy ($${s.cost})
+                    </button>
                   </div>
-                  <button
-                    class="btn-buy-song secondary-cta-btn shop-buy-btn"
-                    data-song-id="${s.id}"
-                    type="button"
-                    ${state.bankroll < s.cost ? 'disabled' : ''}
-                  >
-                    BUY ($${s.cost})
-                  </button>
-                </div>
-              `
-              )
+                `;
+              })
               .join('')
           : '<div class="empty-catalog-note">All sheet music acquired!</div>';
 
-      // Loadout checkboxes for unlocked songs
+      // Loadout checkboxes for unlocked songs — single-line sheet music strips
       const repertoireHtml = state.unlockedSongs
-        .map((sid) => {
+        .map((sid, idx) => {
           const isEquipped = state.equippedSongs.includes(sid);
           const sDef = SONGS[sid];
-          const songLabel = sDef ? sDef.title : sid.toUpperCase();
           const accentColor = sDef ? sDef.color : '#eab308';
+          const tiltClass = idx % 2 === 0 ? 'tilt-neg-xs' : 'tilt-pos-xs';
           return `
-            <label class="setlist-chip ${isEquipped ? 'is-equipped' : ''}" style="--chip-accent: ${accentColor};">
+            <label class="setlist-chip sheet-music-strip ${isEquipped ? 'is-equipped' : ''} ${tiltClass}" style="--strip-accent: ${accentColor};">
               <input type="checkbox" class="equip-checkbox" data-song-id="${sid}" ${isEquipped ? 'checked' : ''} />
               <span class="setlist-check-box" aria-hidden="true">${isEquipped ? '✓' : ''}</span>
-              <span class="setlist-chip-label">${songLabel}</span>
+              <div class="sheet-strip-copy">
+                <strong class="setlist-chip-label">${getSongTitleCase(sid)}</strong>
+                <span class="sheet-strip-sep" aria-hidden="true">—</span>
+                <span class="sheet-strip-effect">${getSongEffectLine(sid)}</span>
+              </div>
+              <div class="sheet-strip-staff">
+                ${renderSongStaffSvg(sid)}
+              </div>
             </label>
           `;
         })
@@ -671,19 +744,19 @@ export class ScreenModalManager {
       // Scouting info for next match
       const scoutHtml = nextMatch
         ? `
-          <div class="cork-pinned-sheet scout-report-card">
+          <div class="cork-pinned-sheet scout-report-card tilt-neg-sm">
             <div class="scout-kicker">
-              NEXT MATCH ${nextMatch.matchNumber} OF 17 • ${nextMatch.tierLabel}
+              Next Match ${nextMatch.matchNumber} of 17 · ${nextMatch.tierLabel}
             </div>
             <div class="scout-opponent-title">
-              VS.
+              vs.
               <span class="team-color-swatch" style="background: ${nextMatch.awayTeam.primaryColor};"></span>
               <span>${nextMatch.awayTeam.name}</span>
             </div>
             <div class="scout-notes-list">
-              <div><strong>STRENGTH:</strong> ${nextMatch.awayTeam.scoutReport.strength}</div>
-              <div><strong>WEAKNESS:</strong> ${nextMatch.awayTeam.scoutReport.weakness}</div>
-              <div class="scout-highlight-tip"><strong>ORGANIST TIP:</strong> ${nextMatch.awayTeam.scoutReport.organistTip}</div>
+              <div><strong>Strength:</strong> ${nextMatch.awayTeam.scoutReport.strength}</div>
+              <div><strong>Weakness:</strong> ${nextMatch.awayTeam.scoutReport.weakness}</div>
+              <div class="scout-highlight-tip"><strong>Organist tip:</strong> ${nextMatch.awayTeam.scoutReport.organistTip}</div>
             </div>
           </div>
         `
@@ -693,14 +766,14 @@ export class ScreenModalManager {
         <div class="modal-inner shop-modal">
           <div class="shop-header-bar">
             <div>
-              <div class="modal-eyebrow">POST-MATCH HEADQUARTERS</div>
-              <h2 class="modal-title">🎹 ORGAN LOFT WORKSHOP</h2>
+              <div class="modal-eyebrow">Post-Match Headquarters</div>
+              <h2 class="modal-title">Organ Loft Workshop</h2>
             </div>
             <div class="shop-wallet-cluster">
               <div class="cash-bankroll-badge">$${state.bankroll}</div>
               <div class="shop-rep-row">
-                <span class="order-status-pill ${officialRep < 75 ? 'status-fail' : 'status-track'}">JOB SECURITY: ${officialRep}%</span>
-                <span class="street-cred-pill">STREET CRED: LVL ${state.unofficialRepLevel}</span>
+                <span class="order-status-pill ${officialRep < 75 ? 'status-fail' : 'status-track'}">Job Security: ${officialRep}%</span>
+                <span class="street-cred-pill">Street Cred: Lvl ${state.unofficialRepLevel}</span>
               </div>
             </div>
           </div>
@@ -709,27 +782,27 @@ export class ScreenModalManager {
             <div class="shop-col">
               ${scoutHtml}
 
-              <div class="cork-pinned-sheet shop-section-card">
+              <div class="cork-pinned-sheet shop-section-card tilt-pos-sm">
                 <div class="pin-card-kicker">
-                  Console Music Stand Capacity (${currentSlots} Active ${pluralWord(currentSlots, 'Slot')})
+                  Console Music Stand (${currentSlots} active ${pluralWord(currentSlots, 'slot')})
                 </div>
                 ${nextUpgradeHtml}
               </div>
             </div>
 
-            <div class="shop-col">
-              <div class="cork-pinned-sheet shop-section-card">
-                <div class="pin-card-kicker">
-                  Active Console Loadout (${state.equippedSongs.length} / ${state.maxSongSlots} Equipped)
+            <div class="shop-col shop-music-col">
+              <div class="unboxed-board-section">
+                <div class="board-scrawl-heading">
+                  Active Console Loadout <span>(${state.equippedSongs.length}/${state.maxSongSlots} equipped)</span>
                 </div>
                 <div class="setlist-chips-wrap">
                   ${repertoireHtml}
                 </div>
               </div>
 
-              <div class="cork-pinned-sheet shop-section-card">
-                <div class="pin-card-kicker">
-                  Sheet Music Library (Buy New Anthems)
+              <div class="unboxed-board-section">
+                <div class="board-scrawl-heading">
+                  Sheet Music Library <span>(Buy new anthems)</span>
                 </div>
                 <div class="shop-catalog-list">
                   ${songsToBuyHtml}
@@ -740,7 +813,7 @@ export class ScreenModalManager {
 
           <div class="modal-actions">
             <button id="btn-proceed-match" class="primary-cta-btn" type="button">
-              🏒 ${nextMatch ? `PROCEED TO MATCH ${nextMatch.matchNumber}` : 'VIEW SEASON SUMMARY'}
+              ${nextMatch ? `Proceed to Match ${nextMatch.matchNumber} →` : 'View Season Summary →'}
             </button>
           </div>
         </div>
@@ -755,7 +828,7 @@ export class ScreenModalManager {
       // Bind buy song buttons
       this.contentEl.querySelectorAll('.btn-buy-song').forEach((btn) => {
         btn.addEventListener('click', () => {
-          const sid = (btn as HTMLElement).dataset.songId as any;
+          const sid = (btn as HTMLElement).dataset.songId as SongId;
           if (sid) {
             const res = purchaseSong(mgr, sid);
             if (res.success) render();
@@ -766,7 +839,7 @@ export class ScreenModalManager {
       // Bind equip checkboxes
       this.contentEl.querySelectorAll('.equip-checkbox').forEach((cb) => {
         cb.addEventListener('change', () => {
-          const sid = (cb as HTMLElement).dataset.songId as any;
+          const sid = (cb as HTMLElement).dataset.songId as SongId;
           const isChecked = (cb as HTMLInputElement).checked;
           const cur = [...mgr.getState().equippedSongs];
           if (isChecked && !cur.includes(sid)) {
@@ -825,19 +898,24 @@ export class ScreenModalManager {
     ).length;
 
     const songsHtml = state.unlockedSongs
-      .map((sid) => {
+      .map((sid, idx) => {
         const sDef = SONGS[sid];
         const lvl = mgr.getSongMasteryLevel(sid);
         const pillClass =
           lvl === 'MASTERED' ? 'status-track' : lvl === 'FAMILIAR' ? 'status-risk' : 'mastery-novice';
+        const tiltClass = idx % 2 === 0 ? 'tilt-neg-xs' : 'tilt-pos-xs';
         return `
-          <div class="season-song-row" style="--song-tab: ${sDef.color};">
-            <div>
-              <strong class="season-song-title">${sDef.title}</strong>
-              <div class="season-song-desc">${sDef.shortDesc}</div>
+          <div class="season-song-row sheet-music-strip ${tiltClass}" style="--strip-accent: ${sDef.color};">
+            <div class="sheet-strip-copy">
+              <strong class="season-song-title">${getSongTitleCase(sid)}</strong>
+              <span class="sheet-strip-sep" aria-hidden="true">—</span>
+              <span class="sheet-strip-effect">${getSongEffectLine(sid)}</span>
+            </div>
+            <div class="sheet-strip-staff">
+              ${renderSongStaffSvg(sid)}
             </div>
             <span class="order-status-pill ${pillClass}">
-              ${lvl === 'MASTERED' ? '★ MASTERED' : lvl}
+              ${formatMasteryLabel(lvl)}
             </span>
           </div>
         `;
@@ -848,12 +926,12 @@ export class ScreenModalManager {
 
     this.contentEl.innerHTML = `
       <div class="modal-inner season-summary-modal">
-        <div class="cork-pinned-sheet season-hero-sheet ${isSuccess ? 'is-champion' : 'is-dismissed'}">
+        <div class="cork-pinned-sheet season-hero-sheet ${isSuccess ? 'is-champion' : 'is-dismissed'} tilt-neg-xs">
           <div class="season-trophy-icon" aria-hidden="true">
             ${isSuccess ? '🏆' : '❌'}
           </div>
           <div class="modal-eyebrow">
-            ${isSuccess ? '1988 MUNICIPAL ARENA • CAMPAIGN FINALE' : 'SEASON DISQUALIFICATION'}
+            ${isSuccess ? '1988 Municipal Arena · Campaign Finale' : 'Season Disqualification'}
           </div>
           <h2 class="modal-title season-headline">
             ${isSuccess ? 'Hall of Fame Organist' : 'Relegated & Dismissed'}
@@ -868,28 +946,28 @@ export class ScreenModalManager {
         </div>
 
         <div class="season-stats-grid">
-          <div class="cork-pinned-sheet season-stat-card pin-red">
+          <div class="cork-pinned-sheet season-stat-card pin-red tilt-neg-sm">
             <div class="pin-card-kicker">Career Matches</div>
             <div class="season-stat-big">
               ${history.length} <span class="season-stat-sub">/ 17 (${wins}W - ${losses}L - ${ties}T)</span>
             </div>
           </div>
 
-          <div class="cork-pinned-sheet season-stat-card pin-blue">
+          <div class="cork-pinned-sheet season-stat-card pin-blue tilt-pos-sm">
             <div class="pin-card-kicker">Official Directives</div>
             <div class="season-stat-big ${officialPct >= 75 ? 'ink-green' : 'ink-red'}">
-              ${officialPct}% <span class="season-stat-sub">(${state.officialOrdersCompleted}/${state.officialOrdersTotal} Passed)</span>
+              ${officialPct}% <span class="season-stat-sub">(${state.officialOrdersCompleted}/${state.officialOrdersTotal} passed)</span>
             </div>
           </div>
 
-          <div class="cork-pinned-sheet season-stat-card pin-gold">
+          <div class="cork-pinned-sheet season-stat-card pin-gold tilt-neg-xs">
             <div class="pin-card-kicker">Street Cred &amp; Tips</div>
             <div class="season-stat-big ink-blue">
               Lvl ${state.unofficialRepLevel}/5 <span class="season-stat-sub">(${state.totalTipsCompleted} ${pluralWord(state.totalTipsCompleted, 'tip')}, +$${state.totalTipEarnings.toLocaleString()})</span>
             </div>
           </div>
 
-          <div class="cork-pinned-sheet season-stat-card pin-green">
+          <div class="cork-pinned-sheet season-stat-card pin-green tilt-pos-sm">
             <div class="pin-card-kicker">Career Bankroll &amp; Stand</div>
             <div class="season-stat-big ink-green">
               $${state.bankroll.toLocaleString()} <span class="season-stat-sub">(${state.maxSongSlots}/6 ${pluralWord(state.maxSongSlots, 'slot')})</span>
@@ -897,9 +975,9 @@ export class ScreenModalManager {
           </div>
         </div>
 
-        <div class="cork-pinned-sheet season-repertoire-sheet">
+        <div class="unboxed-board-section season-repertoire-section">
           <div class="season-rep-header">
-            <span class="pin-card-kicker">Song Repertoire (${state.unlockedSongs.length} Unlocked)</span>
+            <span class="board-scrawl-heading">Song Repertoire <span>(${state.unlockedSongs.length} unlocked)</span></span>
             <span class="season-mastered-count">${masteredCount} Mastered</span>
           </div>
           <div class="season-songs-scroll">
@@ -909,7 +987,7 @@ export class ScreenModalManager {
 
         <div class="modal-actions center-actions">
           <button id="btn-restart-season" class="primary-cta-btn" type="button">
-            🎹 START NEW CAMPAIGN SEASON
+            Start New Campaign Season
           </button>
         </div>
       </div>
@@ -921,4 +999,3 @@ export class ScreenModalManager {
     });
   }
 }
-

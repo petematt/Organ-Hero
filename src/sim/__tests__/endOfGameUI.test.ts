@@ -251,7 +251,7 @@ describe('End-of-Game UI Improvements', () => {
     expect(btnMatch![1].trim()).toBe('Drop the puck');
   });
 
-  it('renders Locker-Room Corkboard & Greaseboard semantic layout across Pause, Shop, and Season modals without nested .modal-card', () => {
+  it('renders dynamic Corkboard collage, Organ Hero branding, readable Title Case copy, and engraved 5-line SVG sheet-music strips', () => {
     const store: Record<string, string> = {};
     (globalThis as unknown as { localStorage: unknown }).localStorage = {
       getItem: (k: string) => store[k] ?? null,
@@ -271,26 +271,38 @@ describe('End-of-Game UI Improvements', () => {
       onResumeFromPause: vi.fn(),
     });
 
+    // Intro modal uses Organ Hero branding and single-line engraved SVG sheet-music strips
+    screens.showStartSeatScreen();
+    expect(contentEl.innerHTML).toContain('Organ Hero: An Ice Hockey Journey');
+    expect(contentEl.innerHTML).not.toContain('Organ MVP');
+    expect(contentEl.innerHTML).not.toContain('ORGAN MVP');
+    expect(contentEl.innerHTML).toContain('sheet-music-strip');
+    expect(contentEl.innerHTML).toContain('sheet-staff-svg');
+
     const mgr = new CampaignManager();
 
-    // Shop modal should add wide-board-host, render pinned sheets & setlist chips, and NOT double-nest .modal-card
+    // Shop modal should add wide-board-host, render single-line sheet-music strips in Title Case, and NOT double-nest .modal-card
     screens.showOrganLoftShop(mgr, vi.fn());
     expect(contentEl.classList.add).toHaveBeenCalledWith('wide-board-host');
     expect(contentEl.innerHTML).toContain('shop-board-grid');
     expect(contentEl.innerHTML).toContain('scout-report-card');
     expect(contentEl.innerHTML).toContain('setlist-chip');
-    expect(contentEl.innerHTML).toContain('CHARGE! FANFARE');
+    expect(contentEl.innerHTML).toContain('sheet-staff-svg');
+    expect(contentEl.innerHTML).toContain('Charge! Fanfare');
+    expect(contentEl.innerHTML).not.toContain('CHARGE! FANFARE');
     expect(contentEl.innerHTML).not.toContain('class="modal-card');
 
-    // Pause modal should render cork-pinned-sheet cards in a 2-column pause-board-grid
+    // Pause modal should render cork-pinned-sheet cards in a 2-column pause-board-grid with readable status pills
     screens.showPauseModal(sim, []);
     expect(contentEl.innerHTML).toContain('pause-board-grid');
     expect(contentEl.innerHTML).toContain('directive-pin-card');
     expect(contentEl.innerHTML).toContain('bribes-pin-card');
+    expect(contentEl.innerHTML).toContain('Resume Match');
 
-    // Season summary modal should render 4 pinned stat cards and proper singular/plural labels
+    // Season summary modal should render 4 pinned stat cards, sheet-music rows, and proper singular/plural labels
     screens.showSeasonEndSummaryModal(mgr, vi.fn());
     expect(contentEl.innerHTML).toContain('season-stats-grid');
+    expect(contentEl.innerHTML).toContain('sheet-staff-svg');
     expect(contentEl.innerHTML).toContain('0 tips');
     expect(contentEl.innerHTML).toContain('2/6 slots');
   });

@@ -688,7 +688,7 @@ body {
 }
 
 /* ==========================================================================
-   Modals — Style #5: Locker-Room Corkboard & Coach's Greaseboard
+   Modals — Style #5: Dynamic Locker-Room Corkboard Collage & Sheet Music
    Scales smoothly across mobile landscape (844x390) and desktop (1920x1080)
    ========================================================================== */
 .modal-backdrop {
@@ -706,34 +706,35 @@ body {
 /* Scarred wooden frame + warm granulated corkboard surface */
 .modal-card {
   position: relative;
-  width: clamp(320px, 66vw, 880px);
+  width: clamp(340px, 72vw, 960px);
   max-width: 95vw;
   max-height: 93dvh;
   overflow-y: auto;
-  background-color: #b48252;
+  overflow-x: hidden;
+  background-color: #b78555;
   background-image:
-    radial-gradient(circle at 18% 28%, rgba(68, 36, 12, 0.2) 1.2px, transparent 1.6px),
-    radial-gradient(circle at 74% 62%, rgba(255, 232, 198, 0.18) 1px, transparent 1.5px),
-    radial-gradient(circle at 42% 81%, rgba(92, 50, 18, 0.18) 1.4px, transparent 1.9px),
-    radial-gradient(circle at 86% 19%, rgba(58, 29, 9, 0.16) 1px, transparent 1.5px),
-    linear-gradient(180deg, rgba(196, 147, 96, 0.45) 0%, rgba(146, 98, 55, 0.55) 100%);
+    radial-gradient(circle at 18% 28%, rgba(68, 36, 12, 0.22) 1.2px, transparent 1.7px),
+    radial-gradient(circle at 74% 62%, rgba(255, 232, 198, 0.2) 1px, transparent 1.6px),
+    radial-gradient(circle at 42% 81%, rgba(92, 50, 18, 0.2) 1.4px, transparent 2px),
+    radial-gradient(circle at 86% 19%, rgba(58, 29, 9, 0.18) 1px, transparent 1.6px),
+    radial-gradient(ellipse at 50% 35%, rgba(226, 178, 126, 0.35) 0%, rgba(128, 79, 38, 0.52) 100%);
   background-size: 29px 31px, 37px 41px, 53px 47px, 43px 39px, 100% 100%;
   background-position: 0 0, 11px 17px, 23px 7px, 5px 29px, 0 0;
-  border: clamp(5px, 0.85vmin, 10px) solid #4f2f17;
+  border: clamp(5px, 0.85vmin, 10px) solid #4a2b13;
   border-radius: clamp(8px, 1.2vmin, 14px);
-  padding: clamp(10px, 2vmin, 24px) clamp(12px, 2.5vmin, 30px);
+  padding: clamp(12px, 2.2vmin, 26px) clamp(14px, 2.8vmin, 34px);
   color: #1c1917;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.82),
-    0 0 0 2px #261408,
+    0 28px 68px rgba(0, 0, 0, 0.84),
+    0 0 0 2px #241206,
     inset 0 0 0 2px #7c4f2b,
-    inset 0 4px 18px rgba(40, 20, 6, 0.52);
+    inset 0 6px 22px rgba(36, 17, 5, 0.5);
   scrollbar-width: thin;
   scrollbar-color: #4f2f17 rgba(40, 20, 6, 0.22);
 }
 
 .modal-card.wide-board-host {
-  width: clamp(340px, 78vw, 1100px);
+  width: clamp(350px, 83vw, 1160px);
 }
 
 .modal-card.tip-note-host,
@@ -748,25 +749,40 @@ body {
   box-shadow: none;
 }
 
+/* Organic Collage Tilt Helpers (no rigid 90-degree spreadsheet feel) */
+.tilt-neg-sm {
+  transform: rotate(-1.05deg);
+}
+.tilt-pos-sm {
+  transform: rotate(0.95deg);
+}
+.tilt-neg-xs {
+  transform: rotate(-0.5deg);
+}
+.tilt-pos-xs {
+  transform: rotate(0.55deg);
+}
+
 /* Intermission Unsavory Offer — Duct-Taped Yellow Legal-Pad Sheet */
 .tip-note-card {
   position: relative;
-  width: clamp(420px, 64vw, 1180px);
+  width: clamp(420px, 64vw, 1100px);
   max-width: 92vw;
   max-height: 92dvh;
   overflow-y: auto;
   background-color: #fef08a;
   background-image:
-    linear-gradient(90deg, transparent 0, transparent clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.28) clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.28) calc(clamp(20px, 3.2vmin, 40px) + 1.5px), transparent calc(clamp(20px, 3.2vmin, 40px) + 1.5px)),
-    repeating-linear-gradient(180deg, transparent 0, transparent 27px, rgba(59, 130, 246, 0.16) 27px, rgba(59, 130, 246, 0.16) 28px),
+    linear-gradient(90deg, transparent 0, transparent clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.26) clamp(20px, 3.2vmin, 40px), rgba(220, 38, 38, 0.26) calc(clamp(20px, 3.2vmin, 40px) + 1.5px), transparent calc(clamp(20px, 3.2vmin, 40px) + 1.5px)),
+    repeating-linear-gradient(180deg, transparent 0, transparent 27px, rgba(59, 130, 246, 0.15) 27px, rgba(59, 130, 246, 0.15) 28px),
     linear-gradient(180deg, #fef9c3 0%, #fde047 100%);
   color: #1c1917;
-  border: 2.5px solid #292524;
-  border-radius: 6px;
-  padding: clamp(14px, 2.6vmin, 34px) clamp(16px, 3.2vmin, 42px) clamp(14px, 2.6vmin, 32px) clamp(28px, 4.4vmin, 56px);
+  border: 1px solid rgba(146, 102, 22, 0.45);
+  border-radius: 3px;
+  transform: rotate(-0.8deg);
+  padding: clamp(16px, 2.8vmin, 34px) clamp(18px, 3.2vmin, 42px) clamp(16px, 2.6vmin, 32px) clamp(30px, 4.5vmin, 58px);
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.8),
-    6px 6px 0 rgba(28, 25, 23, 0.45);
+    0 28px 64px rgba(0, 0, 0, 0.82),
+    0 6px 16px rgba(28, 18, 6, 0.42);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -775,25 +791,23 @@ body {
   content: '';
   position: absolute;
   top: 4px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-1.2deg);
-  width: clamp(86px, 14vmin, 160px);
-  height: clamp(10px, 1.5vmin, 18px);
-  background: linear-gradient(180deg, #e7e5e4 0%, #a8a29e 100%);
-  border: 1px solid rgba(41, 37, 36, 0.45);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
-  opacity: 0.9;
+  left: 48%;
+  transform: translateX(-50%) rotate(-2.2deg);
+  width: clamp(92px, 15vmin, 170px);
+  height: clamp(11px, 1.6vmin, 19px);
+  background: linear-gradient(180deg, rgba(235, 233, 229, 0.94) 0%, rgba(168, 162, 158, 0.92) 100%);
+  border: 1px solid rgba(68, 64, 60, 0.35);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
 
 .tip-note-eyebrow {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(11px, 1.7vmin, 20px);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: clamp(12px, 1.75vmin, 20px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: #78350f;
-  border-bottom: 2px dashed #a16207;
+  border-bottom: 1.5px dashed rgba(161, 98, 7, 0.55);
   padding-bottom: clamp(4px, 0.8vmin, 10px);
   margin-bottom: clamp(8px, 1.6vmin, 20px);
   display: flex;
@@ -811,55 +825,55 @@ body {
 
 .tip-note-sender {
   font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
-  font-size: clamp(18px, 3.2vmin, 40px);
+  font-size: clamp(19px, 3.2vmin, 40px);
   font-weight: 700;
   line-height: 1.12;
   color: #1c1917;
 }
 
 .tip-note-role {
-  font-size: clamp(11.5px, 1.85vmin, 22px);
+  font-size: clamp(12px, 1.85vmin, 22px);
   color: #78350f;
-  font-weight: 700;
+  font-weight: 600;
   font-style: italic;
   margin-top: 2px;
 }
 
 .tip-note-payout {
-  background: #15803d;
+  background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
   color: #f0fdf4;
-  padding: clamp(4px, 0.7vmin, 10px) clamp(10px, 1.9vmin, 24px);
-  border-radius: 5px;
-  border: 2px solid #052e16;
+  padding: clamp(4px, 0.7vmin, 10px) clamp(12px, 2vmin, 24px);
+  border-radius: 4px;
+  border: 1px solid rgba(5, 46, 22, 0.55);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 800;
-  font-size: clamp(14px, 2.5vmin, 32px);
-  box-shadow: 3px 3px 0 #052e16;
-  transform: rotate(1.5deg);
+  font-size: clamp(15px, 2.5vmin, 32px);
+  box-shadow: 0 5px 12px rgba(5, 46, 22, 0.35);
+  transform: rotate(2.6deg);
   flex-shrink: 0;
 }
 
 .tip-note-quote {
   font-family: 'Courier New', Courier, monospace;
-  font-size: clamp(12.5px, 2.05vmin, 25px);
+  font-size: clamp(12.5px, 2.05vmin, 24px);
   font-weight: 700;
-  line-height: 1.42;
+  line-height: 1.44;
   color: #1c1917;
-  background: rgba(255, 253, 240, 0.88);
-  border: 1.5px solid #a16207;
-  border-left: 5px solid #b45309;
-  border-radius: 4px;
-  padding: clamp(8px, 1.5vmin, 20px) clamp(10px, 2vmin, 26px);
+  background: rgba(255, 253, 244, 0.78);
+  border-left: 4px solid #b45309;
+  border-radius: 2px;
+  padding: clamp(8px, 1.5vmin, 18px) clamp(12px, 2vmin, 24px);
   margin-bottom: clamp(8px, 1.6vmin, 20px);
+  box-shadow: 0 2px 8px rgba(120, 53, 15, 0.12);
 }
 
 .tip-note-demand {
-  background: rgba(254, 243, 199, 0.92);
-  border: 2px dashed #b91c1c;
-  border-radius: 6px;
-  padding: clamp(7px, 1.4vmin, 18px) clamp(10px, 2vmin, 24px);
+  background: rgba(254, 243, 199, 0.85);
+  border-top: 1.5px dashed rgba(185, 28, 28, 0.55);
+  border-bottom: 1.5px dashed rgba(185, 28, 28, 0.55);
+  padding: clamp(7px, 1.3vmin, 16px) clamp(8px, 1.6vmin, 18px);
   margin-bottom: clamp(8px, 1.4vmin, 18px);
-  font-size: clamp(12px, 1.95vmin, 24px);
+  font-size: clamp(12.5px, 1.95vmin, 23px);
   font-weight: 800;
   line-height: 1.35;
   color: #991b1b;
@@ -873,18 +887,19 @@ body {
 .tip-conflict-warning {
   margin: clamp(6px, 1.2vmin, 16px) 0;
   background: #fee2e2;
-  border: 2px solid #b91c1c;
+  border-left: 5px solid #dc2626;
   color: #7f1d1d;
   padding: clamp(6px, 1.1vmin, 14px) clamp(10px, 1.8vmin, 22px);
-  border-radius: 5px;
-  font-size: clamp(11px, 1.7vmin, 20px);
-  font-weight: 800;
-  box-shadow: 2px 2px 0 rgba(185, 28, 28, 0.35);
+  border-radius: 3px;
+  font-size: clamp(11.5px, 1.7vmin, 19px);
+  font-weight: 700;
+  transform: rotate(0.5deg);
+  box-shadow: 0 3px 10px rgba(185, 28, 28, 0.2);
 }
 
 .tip-note-actions {
   display: flex;
-  gap: clamp(8px, 1.5vmin, 18px);
+  gap: clamp(10px, 1.6vmin, 20px);
   margin-top: clamp(10px, 1.8vmin, 24px);
 }
 
@@ -892,119 +907,168 @@ body {
   flex: 2;
   background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
   color: #052e16;
-  border: 2.5px solid #052e16;
-  box-shadow: 0 4px 0 #052e16;
+  border: 1.5px solid rgba(5, 46, 22, 0.7);
+  box-shadow: 0 5px 12px rgba(5, 46, 22, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.35);
   padding: clamp(8px, 1.5vmin, 18px) clamp(12px, 2.2vmin, 28px);
-  border-radius: 6px;
+  border-radius: 5px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  text-transform: uppercase;
-  font-size: clamp(14px, 2.2vmin, 26px);
-  letter-spacing: 0.03em;
+  font-size: clamp(15px, 2.2vmin, 26px);
+  letter-spacing: 0.02em;
+  transform: rotate(-0.5deg);
   cursor: pointer;
-  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 
 .tip-btn-accept:hover {
   filter: brightness(1.05);
+  transform: rotate(0deg) translateY(-1px);
 }
 
 .tip-btn-accept:active {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 #052e16;
 }
 
 .tip-btn-decline {
   flex: 1;
-  background: linear-gradient(180deg, #e7e5e4 0%, #d6d3d1 100%);
-  color: #1c1917;
-  border: 2.5px solid #292524;
-  box-shadow: 0 4px 0 #292524;
+  background: linear-gradient(180deg, #f5f5f4 0%, #e7e5e4 100%);
+  color: #292524;
+  border: 1.5px solid rgba(68, 64, 60, 0.55);
+  box-shadow: 0 4px 10px rgba(28, 25, 23, 0.22);
   padding: clamp(8px, 1.5vmin, 18px) clamp(12px, 2vmin, 24px);
-  border-radius: 6px;
+  border-radius: 5px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: clamp(13px, 2vmin, 24px);
-  letter-spacing: 0.03em;
+  font-weight: 700;
+  font-size: clamp(14px, 2vmin, 24px);
+  letter-spacing: 0.02em;
+  transform: rotate(0.6deg);
   cursor: pointer;
-  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 
 .tip-btn-decline:hover {
   filter: brightness(1.03);
+  transform: rotate(0deg) translateY(-1px);
 }
 
 .tip-btn-decline:active {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 #292524;
 }
 
 /* ==========================================================================
-   Shared Corkboard Primitives: Masking Tape, Pushpins, Rubber Stamps, Cards
+   Shared Corkboard Primitives: Taped Slips, Pushpins, Stamps & Sheet Music
+   (NOTE: Only .modal-title uses text-transform: uppercase!)
    ========================================================================== */
 .modal-inner {
   display: flex;
   flex-direction: column;
-  gap: clamp(7px, 1.25vmin, 14px);
+  gap: clamp(9px, 1.5vmin, 16px);
 }
 
-/* Masking-tape eyebrow label */
+/* Unboxed header cluster directly on the corkboard */
+.board-header-cluster {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-left: 2px;
+}
+
+/* Translucent masking-tape eyebrow strip */
 .modal-eyebrow {
   display: inline-block;
   align-self: flex-start;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-weight: 800;
-  font-size: clamp(10.5px, 1.35vmin, 15px);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-weight: 700;
+  font-size: clamp(11.5px, 1.45vmin, 15.5px);
+  letter-spacing: 0.03em;
   color: #451a03;
-  background: linear-gradient(180deg, #f7efd8 0%, #ead9b5 100%);
-  border: 1px solid rgba(120, 83, 38, 0.5);
-  padding: 2px clamp(7px, 1.1vmin, 12px);
-  border-radius: 2px;
-  box-shadow: 1px 2px 4px rgba(28, 15, 5, 0.25);
+  background: linear-gradient(180deg, rgba(249, 241, 218, 0.94) 0%, rgba(235, 218, 180, 0.92) 100%);
+  border-left: 2px dashed rgba(140, 102, 54, 0.45);
+  border-right: 2px dashed rgba(140, 102, 54, 0.45);
+  padding: 2px clamp(8px, 1.2vmin, 14px);
+  transform: rotate(-0.9deg);
+  box-shadow: 0 2px 5px rgba(28, 14, 4, 0.22);
 }
 
-/* Bold marker / athletic varsity headline */
+/* Modal Title — the ONLY ALL-CAPS element in modals */
 .modal-title {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.025em;
-  font-size: clamp(20px, 3vmin, 34px);
-  line-height: 1.06;
+  letter-spacing: 0.03em;
+  font-size: clamp(22px, 3.3vmin, 36px);
+  line-height: 1.04;
   color: #1c1917;
   margin: 0;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-/* Direct title sitting directly on corkboard gets a taped cream plaque feel */
-.modal-inner > .modal-title,
+/* Unboxed title directly on corkboard gets warm ivory plaque ink with shadow */
+.board-header-cluster .modal-title {
+  color: #fffaf0;
+  text-shadow:
+    0 2px 0 #3b200c,
+    0 4px 10px rgba(20, 9, 2, 0.55);
+}
+
+/* Taped parchment banner strip (used on Clipboard) — soft shadow + corner tape, no dark outline */
 .cork-header-strip {
-  background: linear-gradient(180deg, #faf5e8 0%, #efe4c8 100%);
-  border: 2px solid #292524;
-  border-radius: 4px;
-  padding: clamp(5px, 0.9vmin, 10px) clamp(10px, 1.6vmin, 18px);
-  box-shadow: 3px 3px 0 rgba(28, 18, 8, 0.38);
+  position: relative;
+  align-self: flex-start;
+  background: linear-gradient(180deg, #fcf8ee 0%, #f1e5ca 100%);
+  border: 1px solid rgba(138, 108, 68, 0.35);
+  border-radius: 3px;
+  padding: clamp(6px, 1vmin, 11px) clamp(14px, 2.2vmin, 26px);
+  box-shadow:
+    0 6px 16px rgba(32, 16, 4, 0.32),
+    0 1px 3px rgba(32, 16, 4, 0.2);
 }
 
-.cork-header-strip .modal-title {
-  text-shadow: none;
+/* Angled masking tape on corner of header strip */
+.cork-header-strip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: -10px;
+  width: 38px;
+  height: 13px;
+  background: rgba(244, 232, 201, 0.85);
+  transform: rotate(-28deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
-/* Pinned paper / index card base */
+.cork-header-strip::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  right: -10px;
+  width: 36px;
+  height: 12px;
+  background: rgba(244, 232, 201, 0.82);
+  transform: rotate(-24deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+/* Pinned paper / index card base — soft natural paper depth, NO thick black box outline */
 .cork-pinned-sheet {
   position: relative;
-  background: linear-gradient(180deg, #fcfaf4 0%, #f4ede0 100%);
-  border: 2px solid #292524;
-  border-radius: 6px;
-  padding: clamp(9px, 1.5vmin, 18px) clamp(11px, 1.9vmin, 22px);
+  background-color: #fcfaf3;
+  background-image:
+    repeating-linear-gradient(180deg, transparent 0, transparent 23px, rgba(59, 130, 246, 0.08) 23px, rgba(59, 130, 246, 0.08) 24px),
+    linear-gradient(180deg, #fdfbf6 0%, #f3ebdc 100%);
+  border: 1px solid rgba(120, 96, 68, 0.28);
+  border-radius: 3px;
+  padding: clamp(10px, 1.6vmin, 18px) clamp(12px, 2vmin, 24px);
   color: #1c1917;
-  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.34);
+  box-shadow:
+    0 8px 20px rgba(32, 15, 4, 0.32),
+    0 2px 4px rgba(32, 15, 4, 0.18);
 }
 
-/* 3D Plastic Thumbtacks on pinned cards */
+/* Asymmetric 3D Plastic Thumbtacks on pinned sheets */
 .welcome-sheet::before,
 .directive-pin-card::before,
 .bribes-pin-card::before,
@@ -1015,16 +1079,37 @@ body {
   content: '';
   position: absolute;
   top: -6px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 28%;
   width: clamp(11px, 1.45vmin, 15px);
   height: clamp(11px, 1.45vmin, 15px);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 32%, #fca5a5 0%, #dc2626 52%, #7f1d1d 100%);
-  border: 1.5px solid #292524;
-  box-shadow: 1px 3px 4px rgba(0, 0, 0, 0.42);
-  z-index: 2;
+  border: 1px solid rgba(41, 37, 36, 0.65);
+  box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.42);
+  z-index: 3;
   pointer-events: none;
+}
+
+/* Stagger pin positions organically across cards so they don't line up robotically */
+.welcome-sheet::before {
+  left: 44%;
+}
+.bribes-pin-card::before,
+.breakdown-col.pin-blue::before,
+.seat-tip.tip-pin-blue::before {
+  left: 72%;
+}
+.scout-report-card::before {
+  left: 22%;
+}
+.season-stat-card.pin-blue::before {
+  left: 68%;
+}
+.season-stat-card.pin-gold::before {
+  left: 35%;
+}
+.season-stat-card.pin-green::before {
+  left: 76%;
 }
 
 .tip-pin-gold::before,
@@ -1043,7 +1128,133 @@ body {
   background: radial-gradient(circle at 35% 32%, #86efac 0%, #16a34a 55%, #14532d 100%);
 }
 
-/* Rubber-Stamp Status Pills inside Modals */
+/* Unboxed Hand-Scrawled Marker Headings Directly on the Corkboard */
+.seat-repertoire-heading,
+.board-scrawl-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  align-self: flex-start;
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-weight: 400;
+  font-size: clamp(14.5px, 2vmin, 22px);
+  letter-spacing: 0.015em;
+  color: #fff8eb;
+  text-shadow:
+    0 2px 0 #3a1f0b,
+    0 3px 8px rgba(22, 10, 2, 0.48);
+  background-image: linear-gradient(90deg, rgba(253, 224, 71, 0.85) 0%, rgba(250, 204, 21, 0.55) 72%, transparent 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 3px;
+  background-position: 0 100%;
+  padding: 0 6px 3px 2px;
+  margin: 2px 0 0;
+  transform: rotate(-0.6deg);
+}
+
+.board-scrawl-heading span {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: clamp(12px, 1.5vmin, 16px);
+  color: #fef08a;
+  text-shadow: 0 1px 3px rgba(20, 9, 2, 0.65);
+}
+
+.unboxed-board-section {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 0.9vmin, 9px);
+}
+
+/* ==========================================================================
+   Engraved Single-Line Sheet Music Repertoire Strips
+   Layout: [ Song Name — Effect ]  [ 5-Line Engraved Musical Staff SVG ]  [ Optional CTA ]
+   ========================================================================== */
+.sheet-music-strip {
+  position: relative;
+  background-color: #fcf8ec;
+  background-image:
+    radial-gradient(ellipse at 85% 50%, rgba(255, 253, 245, 0.8) 0%, rgba(239, 228, 202, 0.55) 100%);
+  border: 1px solid rgba(132, 104, 66, 0.34);
+  border-left: 5px solid var(--strip-accent, #d97706);
+  border-radius: 3px;
+  padding: clamp(5px, 0.95vmin, 10px) clamp(10px, 1.5vmin, 16px);
+  color: #1c1917;
+  box-shadow:
+    0 6px 14px rgba(32, 16, 4, 0.28),
+    0 1px 3px rgba(32, 16, 4, 0.18);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+/* Small piece of translucent tape on top-right corner of manuscript strips */
+.sheet-music-strip::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: 12px;
+  width: 26px;
+  height: 9px;
+  background: rgba(246, 236, 209, 0.8);
+  border: 1px solid rgba(140, 112, 72, 0.22);
+  transform: rotate(8deg);
+  pointer-events: none;
+}
+
+.sheet-strip-copy {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(5px, 0.7vmin, 8px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sheet-strip-copy strong,
+.sheet-music-strip .shop-item-title,
+.sheet-music-strip .setlist-chip-label,
+.sheet-music-strip .season-song-title {
+  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
+  font-weight: 800;
+  font-size: clamp(14px, 1.85vmin, 19px);
+  letter-spacing: 0.01em;
+  color: #1c1917;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sheet-strip-sep {
+  color: #a16207;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sheet-strip-effect {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(11px, 1.4vmin, 14.5px);
+  line-height: 1.3;
+  color: #44403c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sheet-strip-staff {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  background: rgba(255, 253, 246, 0.72);
+  border-left: 1px dashed rgba(140, 112, 72, 0.32);
+  padding-left: clamp(6px, 0.9vmin, 10px);
+}
+
+.sheet-staff-svg {
+  display: block;
+  width: clamp(118px, 15.5vmin, 176px);
+  height: clamp(24px, 3.1vmin, 35px);
+}
+
+/* Rubber-Stamp Status Pills inside Modals (Readable Title Case, angled ink stamp) */
 .modal-card .order-status-pill,
 .street-cred-pill {
   display: inline-flex;
@@ -1051,60 +1262,60 @@ body {
   justify-content: center;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  font-size: clamp(10.5px, 1.35vmin, 14px);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 2px clamp(6px, 1vmin, 10px);
+  font-size: clamp(11px, 1.4vmin, 14.5px);
+  letter-spacing: 0.03em;
+  padding: 2px clamp(7px, 1vmin, 11px);
   border-radius: 3px;
-  transform: rotate(-1.2deg);
+  transform: rotate(-2.2deg);
   white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
 }
 
 .modal-card .status-track {
-  background: rgba(22, 163, 74, 0.14);
+  background: rgba(240, 253, 244, 0.92);
   color: #14532d;
   border: 2px solid #15803d;
 }
 
 .modal-card .status-risk {
-  background: rgba(234, 179, 8, 0.22);
+  background: rgba(254, 252, 232, 0.94);
   color: #78350f;
   border: 2px solid #b45309;
 }
 
 .modal-card .status-fail {
-  background: rgba(220, 38, 38, 0.14);
+  background: rgba(254, 242, 242, 0.94);
   color: #7f1d1d;
   border: 2px solid #b91c1c;
 }
 
 .modal-card .mastery-novice {
-  background: rgba(100, 116, 139, 0.14);
+  background: rgba(248, 250, 252, 0.92);
   color: #334155;
-  border: 2px solid #475569;
+  border: 1.5px solid #64748b;
 }
 
 .street-cred-pill {
-  background: rgba(37, 99, 235, 0.14);
+  background: rgba(239, 246, 255, 0.94);
   color: #1e3a8a;
   border: 2px solid #1d4ed8;
-  transform: rotate(0.8deg);
+  transform: rotate(1.8deg);
 }
 
 /* ==========================================================================
    1. Start Seat Screen
    ========================================================================== */
 .welcome-sheet .modal-eyebrow {
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 .welcome-sheet .modal-title {
-  margin-bottom: clamp(4px, 0.8vmin, 8px);
+  margin-bottom: clamp(5px, 0.9vmin, 10px);
 }
 
 .modal-lead {
   font-size: clamp(12.5px, 1.65vmin, 17px);
-  line-height: 1.48;
+  line-height: 1.5;
   color: #292524;
   margin: 0;
 }
@@ -1116,59 +1327,24 @@ body {
   font-weight: 800;
 }
 
-.seat-repertoire-heading {
-  display: inline-block;
-  align-self: flex-start;
-  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: clamp(13px, 1.85vmin, 20px);
-  letter-spacing: 0.03em;
-  color: #1c1917;
-  background: linear-gradient(180deg, #f7efd8 0%, #ead9b5 100%);
-  border: 1.5px solid #292524;
-  border-bottom: 3px solid #dc2626;
-  padding: 2px 10px;
-  border-radius: 3px;
-  box-shadow: 2px 2px 0 rgba(28, 18, 8, 0.3);
-  margin: 0;
-}
-
+/* Single-column full-width sheet music strips in Intro modal */
 .seat-tips-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(8px, 1.4vmin, 16px);
-}
-
-.seat-tip {
-  position: relative;
-  background: linear-gradient(180deg, #fffdf7 0%, #f5eedf 100%);
-  border: 2px solid #292524;
-  border-radius: 6px;
-  padding: clamp(9px, 1.5vmin, 16px) clamp(10px, 1.7vmin, 18px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: clamp(11.5px, 1.5vmin, 15.5px);
-  line-height: 1.38;
-  color: #292524;
-  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
+  gap: clamp(7px, 1.2vmin, 13px);
 }
 
-.seat-tip.tip-pin-gold {
-  border-left: 5px solid #d97706;
+.seat-tip.sheet-music-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(8px, 1.4vmin, 16px);
+  padding: clamp(7px, 1.2vmin, 13px) clamp(12px, 1.8vmin, 20px);
 }
 
-.seat-tip.tip-pin-blue {
-  border-left: 5px solid #0d9488;
-}
-
-.seat-tip strong {
-  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: clamp(14px, 1.95vmin, 21px);
-  letter-spacing: 0.02em;
-  color: #1c1917;
+.seat-tip.sheet-music-strip:hover {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 0 9px 20px rgba(32, 16, 4, 0.34);
 }
 
 /* ==========================================================================
@@ -1176,14 +1352,15 @@ body {
    ========================================================================== */
 .greaseboard-card {
   position: relative;
-  background: linear-gradient(180deg, #ffffff 0%, #eef2f6 100%);
-  border: 2.5px solid #334155;
-  border-bottom-width: 5px;
-  border-radius: 7px;
-  padding: clamp(9px, 1.5vmin, 16px) clamp(11px, 1.8vmin, 20px);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(100, 116, 139, 0.38);
+  border-bottom: 4px solid #64748b;
+  border-radius: 5px;
+  padding: clamp(10px, 1.6vmin, 17px) clamp(12px, 2vmin, 22px);
   color: #0f172a;
-  box-shadow: 3px 4px 0 rgba(28, 18, 8, 0.38);
-  overflow: hidden;
+  box-shadow:
+    0 9px 22px rgba(24, 14, 5, 0.34),
+    0 2px 4px rgba(24, 14, 5, 0.2);
 }
 
 /* Red & blue rink-line stripe along top of whiteboard */
@@ -1194,6 +1371,7 @@ body {
   left: 0;
   right: 0;
   height: 4px;
+  border-radius: 5px 5px 0 0;
   background: linear-gradient(90deg, #dc2626 0 32%, #cbd5e1 32% 68%, #2563eb 68% 100%);
 }
 
@@ -1208,10 +1386,9 @@ body {
 
 .greaseboard-tag {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(11px, 1.45vmin, 15px);
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: clamp(12px, 1.55vmin, 16px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   color: #1e3a8a;
 }
 
@@ -1227,11 +1404,10 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(16px, 2.35vmin, 26px);
+  font-size: clamp(17px, 2.45vmin, 27px);
   font-weight: 800;
-  text-transform: uppercase;
   color: #0f172a;
 }
 
@@ -1241,7 +1417,7 @@ body {
 
 .matchup-vs {
   font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
-  font-size: clamp(12px, 1.65vmin, 18px);
+  font-size: clamp(13px, 1.75vmin, 19px);
   color: #dc2626;
   padding: 0 2px;
 }
@@ -1258,53 +1434,69 @@ body {
   width: clamp(10px, 1.3vmin, 14px);
   height: clamp(10px, 1.3vmin, 14px);
   border-radius: 3px;
-  border: 1.5px solid #1c1917;
+  border: 1.5px solid rgba(28, 25, 23, 0.7);
   flex-shrink: 0;
 }
 
+/* Tilted paperclipped stipend slip */
 .cash-stipend-tag {
-  background: #fef9c3;
-  border: 1.5px solid #a16207;
+  background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
+  border: 1px solid rgba(161, 98, 7, 0.48);
   color: #713f12;
   font-family: 'JetBrains Mono', monospace;
-  font-size: clamp(10.5px, 1.4vmin, 14.5px);
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 4px;
-  box-shadow: 2px 2px 0 rgba(161, 98, 7, 0.25);
+  font-size: clamp(11px, 1.4vmin, 14.5px);
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 3px;
+  transform: rotate(1.8deg);
+  box-shadow: 0 3px 8px rgba(120, 53, 15, 0.2);
 }
 
 .visitor-warning-slip {
   margin-top: clamp(6px, 1vmin, 10px);
-  font-size: clamp(11px, 1.45vmin, 14.5px);
+  font-size: clamp(11.5px, 1.45vmin, 14.5px);
   color: #7f1d1d;
   background: #ffe4e6;
   padding: 5px 10px;
-  border-radius: 4px;
-  border: 1.5px solid #e11d48;
-  border-left: 5px solid #be123c;
+  border-radius: 3px;
+  border-left: 4px solid #be123c;
   font-weight: 600;
+  transform: rotate(-0.4deg);
 }
 
+/* Canary-yellow taped memo slip overlapping slightly below greaseboard */
 .active-order-spotlight {
   position: relative;
-  background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
-  border: 2px solid #292524;
-  border-left: 6px solid #d97706;
-  border-radius: 6px;
-  padding: clamp(10px, 1.6vmin, 18px) clamp(12px, 2vmin, 22px);
+  background: linear-gradient(180deg, #fefce8 0%, #fde68a 100%);
+  border: 1px solid rgba(180, 120, 18, 0.35);
+  border-left: 5px solid #d97706;
+  border-radius: 3px;
+  padding: clamp(10px, 1.7vmin, 18px) clamp(13px, 2.1vmin, 24px);
   color: #1c1917;
-  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.34);
+  box-shadow:
+    0 10px 22px rgba(32, 16, 4, 0.32),
+    0 2px 4px rgba(32, 16, 4, 0.18);
+}
+
+.active-order-spotlight::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 22%;
+  width: 56px;
+  height: 13px;
+  background: rgba(246, 236, 209, 0.85);
+  border: 1px solid rgba(140, 112, 72, 0.25);
+  transform: rotate(3.5deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
 }
 
 .spotlight-label {
   display: inline-block;
-  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(10.5px, 1.35vmin, 14px);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: #78350f;
-  text-transform: uppercase;
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-size: clamp(11.5px, 1.45vmin, 15px);
+  color: #9a3412;
   margin-bottom: 2px;
 }
 
@@ -1314,16 +1506,15 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(17px, 2.4vmin, 27px);
+  font-size: clamp(18px, 2.5vmin, 28px);
   font-weight: 800;
-  text-transform: uppercase;
   color: #1c1917;
-  margin: 2px 0 4px;
+  margin: 1px 0 4px;
 }
 
 .spotlight-desc {
   font-size: clamp(12px, 1.6vmin, 16.5px);
-  line-height: 1.42;
+  line-height: 1.44;
   color: #292524;
   font-weight: 500;
 }
@@ -1331,13 +1522,14 @@ body {
 .assigned-pill {
   background: #1d4ed8;
   color: #ffffff;
-  border: 1.5px solid #1c1917;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(10px, 1.3vmin, 13.5px);
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  padding: 1px 7px;
-  border-radius: 4px;
+  font-size: clamp(11px, 1.35vmin, 14px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  transform: rotate(-1.5deg);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .assigned-pill.pill-away {
@@ -1345,7 +1537,7 @@ body {
 }
 
 /* ==========================================================================
-   3 & 4. Period Breakdown & Final Game Breakdown (Coach's Greaseboard)
+   3 & 4. Period Breakdown & Final Game Breakdown
    ========================================================================== */
 .breakdown-score-banner {
   position: relative;
@@ -1353,16 +1545,17 @@ body {
   align-items: center;
   justify-content: center;
   gap: clamp(14px, 2.5vmin, 28px);
-  background: linear-gradient(180deg, #ffffff 0%, #e9eef5 100%);
-  border: 2.5px solid #292524;
-  border-bottom-width: 5px;
-  border-radius: 7px;
-  padding: clamp(6px, 1.2vmin, 14px) clamp(12px, 2.2vmin, 24px);
+  background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-bottom: 4px solid #64748b;
+  border-radius: 5px;
+  padding: clamp(6px, 1.2vmin, 13px) clamp(14px, 2.4vmin, 28px);
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  font-size: clamp(16px, 2.3vmin, 25px);
-  box-shadow: 3px 4px 0 rgba(28, 18, 8, 0.36);
-  overflow: hidden;
+  font-size: clamp(17px, 2.35vmin, 26px);
+  box-shadow:
+    0 8px 18px rgba(24, 14, 5, 0.32),
+    0 2px 4px rgba(24, 14, 5, 0.18);
 }
 
 .breakdown-score-banner::before {
@@ -1372,7 +1565,8 @@ body {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #2563eb 0 42%, #dc2626 42% 58%, #dc2626 58% 100%);
+  border-radius: 5px 5px 0 0;
+  background: linear-gradient(90deg, #2563eb 0 44%, #cbd5e1 44% 56%, #dc2626 56% 100%);
 }
 
 .b-team {
@@ -1401,16 +1595,15 @@ body {
   font-size: clamp(13px, 1.8vmin, 20px);
   color: #475569;
   background: #e2e8f0;
-  border: 1.5px solid #64748b;
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 2px 11px;
 }
 
 .breakdown-columns,
 .game-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: clamp(8px, 1.4vmin, 16px);
+  gap: clamp(9px, 1.5vmin, 18px);
 }
 
 .game-stats-grid {
@@ -1421,23 +1614,37 @@ body {
 .breakdown-col,
 .cork-table-sheet {
   position: relative;
-  background: linear-gradient(180deg, #fcfaf4 0%, #f3ecdd 100%);
-  border: 2px solid #292524;
-  border-radius: 6px;
-  padding: clamp(8px, 1.4vmin, 15px) clamp(10px, 1.7vmin, 18px);
+  background: linear-gradient(180deg, #fdfbf6 0%, #f3ecdd 100%);
+  border: 1px solid rgba(120, 96, 68, 0.28);
+  border-radius: 3px;
+  padding: clamp(9px, 1.45vmin, 16px) clamp(11px, 1.8vmin, 20px);
   color: #1c1917;
-  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
+  box-shadow:
+    0 8px 18px rgba(32, 15, 4, 0.3),
+    0 2px 4px rgba(32, 15, 4, 0.16);
+}
+
+.cork-table-sheet::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 16px;
+  width: 44px;
+  height: 12px;
+  background: rgba(246, 236, 209, 0.84);
+  transform: rotate(-8deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
 }
 
 .breakdown-col h3,
 .impact-callout-box h3 {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: clamp(13px, 1.75vmin, 18px);
+  letter-spacing: 0.02em;
+  font-size: clamp(14px, 1.85vmin, 19.5px);
   color: #7c2d12;
-  border-bottom: 1.5px dashed #bda988;
+  border-bottom: 1.5px dashed rgba(168, 138, 96, 0.55);
   padding-bottom: 3px;
   margin-bottom: 6px;
 }
@@ -1467,9 +1674,9 @@ body {
   margin-top: 6px;
   display: flex;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid #d6d3d1;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(168, 162, 158, 0.4);
+  border-radius: 3px;
   padding: 2px 4px;
 }
 
@@ -1481,24 +1688,39 @@ body {
 /* Yellow Sticky-Note Organ Impact Callout */
 .impact-callout-box {
   position: relative;
-  background: linear-gradient(180deg, #fef9c3 0%, #fde68a 100%);
-  border: 2px solid #292524;
-  border-left: 5px solid #ca8a04;
-  border-radius: 6px;
-  padding: clamp(8px, 1.4vmin, 15px) clamp(10px, 1.7vmin, 18px);
+  background: linear-gradient(180deg, #fefce8 0%, #fde68a 100%);
+  border: 1px solid rgba(180, 120, 18, 0.32);
+  border-left: 4px solid #ca8a04;
+  border-radius: 2px;
+  padding: clamp(9px, 1.45vmin, 16px) clamp(11px, 1.8vmin, 20px);
   color: #1c1917;
-  box-shadow: 3px 4px 0 rgba(36, 19, 7, 0.32);
+  box-shadow:
+    0 9px 20px rgba(32, 15, 4, 0.3),
+    0 2px 4px rgba(32, 15, 4, 0.18);
+}
+
+.impact-callout-box::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(2.5deg);
+  width: 48px;
+  height: 11px;
+  background: rgba(246, 236, 209, 0.85);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
 }
 
 .impact-callout-box h3 {
-  border-bottom-color: rgba(161, 98, 7, 0.4);
+  border-bottom-color: rgba(161, 98, 7, 0.38);
   color: #713f12;
 }
 
 .impact-callout-box ul {
   padding-left: 16px;
   font-size: clamp(11px, 1.45vmin, 14.5px);
-  line-height: 1.42;
+  line-height: 1.44;
   color: #292524;
 }
 
@@ -1507,26 +1729,27 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #faf6ec;
-  border: 2px solid #292524;
-  border-radius: 6px;
-  padding: clamp(7px, 1.2vmin, 12px) clamp(10px, 1.6vmin, 16px);
+  background: #fcf9f0;
+  border: 1px solid rgba(120, 96, 68, 0.32);
+  border-left: 4px solid #78350f;
+  border-radius: 3px;
+  padding: clamp(7px, 1.25vmin, 13px) clamp(11px, 1.7vmin, 18px);
   font-size: clamp(12px, 1.55vmin, 16px);
   color: #1c1917;
-  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
+  box-shadow: 0 6px 14px rgba(32, 15, 4, 0.26);
 }
 
 .order-reason-sub {
-  font-size: clamp(10.5px, 1.35vmin, 13.5px);
+  font-size: clamp(11px, 1.35vmin, 13.5px);
   color: #57534e;
   margin-top: 2px;
 }
 
 .order-final-banner {
-  padding: clamp(8px, 1.3vmin, 14px) clamp(10px, 1.7vmin, 18px);
-  border-radius: 6px;
+  padding: clamp(8px, 1.35vmin, 14px) clamp(12px, 1.8vmin, 20px);
+  border-radius: 3px;
   font-size: clamp(12px, 1.55vmin, 16px);
-  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
+  box-shadow: 0 7px 16px rgba(32, 15, 4, 0.28);
 }
 
 .order-final-top {
@@ -1544,15 +1767,15 @@ body {
 
 .banner-pass {
   background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%);
-  border: 2px solid #15803d;
-  border-left-width: 6px;
+  border: 1px solid rgba(21, 128, 61, 0.35);
+  border-left: 5px solid #15803d;
   color: #14532d;
 }
 
 .banner-fail {
   background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
-  border: 2px solid #b91c1c;
-  border-left-width: 6px;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  border-left: 5px solid #b91c1c;
   color: #7f1d1d;
 }
 
@@ -1566,45 +1789,41 @@ body {
 .period-summary-table th {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: clamp(11px, 1.45vmin, 15px);
+  letter-spacing: 0.02em;
+  font-size: clamp(12px, 1.5vmin, 15.5px);
   color: #57534e;
   padding: 4px 5px;
-  border-bottom: 2px solid #292524;
+  border-bottom: 1.5px solid #78716c;
   text-align: center;
 }
 
 .period-summary-table td {
   font-family: 'JetBrains Mono', monospace;
   padding: 5px 5px;
-  border-bottom: 1px dashed #bda988;
+  border-bottom: 1px dashed rgba(168, 138, 96, 0.55);
   text-align: center;
 }
 
 .period-summary-table .total-row td {
-  background: rgba(234, 179, 8, 0.18);
-  border-top: 1.5px solid #292524;
+  background: rgba(234, 179, 8, 0.16);
+  border-top: 1.5px solid #78716c;
   border-bottom: none;
 }
 
 .bribes-final-box {
-  background: linear-gradient(180deg, #fef9c3 0%, #fef08a 100%);
-  border: 2px solid #292524;
-  border-left: 6px solid #ca8a04;
-  border-radius: 6px;
-  padding: clamp(8px, 1.4vmin, 14px) clamp(10px, 1.8vmin, 18px);
+  background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
+  border: 1px solid rgba(180, 120, 18, 0.34);
+  border-left: 5px solid #ca8a04;
+  border-radius: 3px;
+  padding: clamp(8px, 1.4vmin, 14px) clamp(11px, 1.8vmin, 18px);
   color: #1c1917;
-  box-shadow: 3px 3px 0 rgba(36, 19, 7, 0.3);
+  box-shadow: 0 7px 16px rgba(32, 15, 4, 0.28);
 }
 
 .bribes-final-heading {
-  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(11.5px, 1.5vmin, 15px);
-  font-weight: 800;
+  font-family: 'Permanent Marker', 'Barlow Condensed', sans-serif;
+  font-size: clamp(12.5px, 1.6vmin, 16.5px);
   color: #78350f;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   margin-bottom: 6px;
 }
 
@@ -1614,7 +1833,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 5px 0;
-  border-bottom: 1px dashed rgba(161, 98, 7, 0.4);
+  border-bottom: 1px dashed rgba(161, 98, 7, 0.38);
 }
 
 .bribe-row-item:last-child {
@@ -1643,7 +1862,7 @@ body {
 .pause-board-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(8px, 1.5vmin, 16px);
+  gap: clamp(10px, 1.7vmin, 20px);
   align-items: start;
 }
 
@@ -1657,18 +1876,16 @@ body {
 
 .pin-card-kicker {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(11px, 1.45vmin, 15px);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #78350f;
+  font-size: clamp(12px, 1.55vmin, 16px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #9a3412;
 }
 
 .pin-card-title {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(16px, 2.2vmin, 24px);
+  font-size: clamp(17px, 2.3vmin, 25px);
   font-weight: 800;
-  text-transform: uppercase;
   color: #1c1917;
   line-height: 1.15;
 }
@@ -1677,17 +1894,17 @@ body {
   font-size: clamp(11.5px, 1.5vmin, 15.5px);
   color: #44403c;
   margin: 4px 0 8px;
-  line-height: 1.4;
+  line-height: 1.42;
 }
 
 .pin-card-progress {
   font-size: clamp(11px, 1.45vmin, 14.5px);
   color: #1d4ed8;
-  font-weight: 800;
-  background: rgba(37, 99, 235, 0.1);
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.09);
   border-left: 3px solid #1d4ed8;
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 4px 9px;
+  border-radius: 2px;
 }
 
 .empty-bribes-note,
@@ -1699,13 +1916,14 @@ body {
 }
 
 .sticky-tip-card {
-  background: linear-gradient(180deg, #fef9c3 0%, #fde68a 100%);
-  border: 1.5px solid #a16207;
+  background: linear-gradient(180deg, #fefce8 0%, #fde68a 100%);
+  border: 1px solid rgba(180, 120, 18, 0.34);
   border-left: 4px solid #ca8a04;
-  border-radius: 5px;
+  border-radius: 2px;
   padding: 8px 10px;
-  margin-top: 6px;
-  box-shadow: 2px 2px 0 rgba(120, 53, 15, 0.2);
+  margin-top: 7px;
+  transform: rotate(-0.5deg);
+  box-shadow: 0 4px 10px rgba(120, 53, 15, 0.18);
 }
 
 .sticky-tip-top {
@@ -1724,7 +1942,7 @@ body {
   font-weight: 800;
   color: #14532d;
   background: #dcfce7;
-  border: 1px solid #15803d;
+  border: 1px solid rgba(21, 128, 61, 0.45);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -1748,16 +1966,33 @@ body {
    6. Organ Loft Workshop & Console Upgrade Shop
    ========================================================================== */
 .shop-header-bar {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  background: linear-gradient(180deg, #faf5e8 0%, #efe4c8 100%);
-  border: 2px solid #292524;
-  border-radius: 6px;
-  padding: clamp(7px, 1.2vmin, 13px) clamp(10px, 1.8vmin, 18px);
-  box-shadow: 3px 3px 0 rgba(28, 18, 8, 0.36);
+  background: linear-gradient(180deg, #fcf8ee 0%, #f0e3c6 100%);
+  border: 1px solid rgba(138, 108, 68, 0.34);
+  border-radius: 3px;
+  padding: clamp(7px, 1.25vmin, 13px) clamp(12px, 2vmin, 22px);
+  transform: rotate(-0.3deg);
+  box-shadow:
+    0 7px 18px rgba(32, 15, 4, 0.32),
+    0 2px 4px rgba(32, 15, 4, 0.18);
+}
+
+.shop-header-bar::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 18px;
+  width: 44px;
+  height: 12px;
+  background: rgba(246, 236, 209, 0.85);
+  transform: rotate(-12deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
 }
 
 .shop-header-bar .modal-eyebrow {
@@ -1765,6 +2000,7 @@ body {
   border: none;
   box-shadow: none;
   padding: 0;
+  transform: none;
   margin-bottom: 1px;
 }
 
@@ -1773,53 +2009,55 @@ body {
   flex-direction: row-reverse;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
+/* Overlapping tilted green cash tag */
 .cash-bankroll-badge {
-  background: #15803d;
+  background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
   color: #f0fdf4;
-  border: 2px solid #052e16;
-  border-radius: 5px;
-  padding: 2px 12px;
+  border: 1px solid rgba(5, 46, 22, 0.65);
+  border-radius: 4px;
+  padding: 2px 13px;
   font-family: 'JetBrains Mono', monospace;
   font-size: clamp(15px, 2.1vmin, 23px);
   font-weight: 800;
-  box-shadow: 2px 3px 0 #052e16;
+  transform: rotate(2.5deg);
+  box-shadow: 0 4px 10px rgba(5, 46, 22, 0.35);
 }
 
 .shop-rep-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .shop-board-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: clamp(8px, 1.5vmin, 16px);
+  grid-template-columns: 0.72fr 1.44fr;
+  gap: clamp(10px, 1.8vmin, 22px);
   align-items: start;
 }
 
 .shop-col {
   display: flex;
   flex-direction: column;
-  gap: clamp(8px, 1.4vmin, 14px);
+  gap: clamp(9px, 1.5vmin, 16px);
+  min-width: 0;
 }
 
 .scout-report-card {
   background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
-  border-top: 5px solid #1d4ed8;
+  border-top: 4px solid #1d4ed8;
 }
 
 .scout-kicker {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(10.5px, 1.35vmin, 14px);
-  font-weight: 800;
+  font-size: clamp(11.5px, 1.45vmin, 15px);
+  font-weight: 700;
   color: #1d4ed8;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .scout-opponent-title {
@@ -1827,9 +2065,8 @@ body {
   align-items: center;
   gap: 6px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(16px, 2.2vmin, 24px);
+  font-size: clamp(17px, 2.25vmin, 25px);
   font-weight: 800;
-  text-transform: uppercase;
   color: #0f172a;
   margin: 2px 0 6px;
 }
@@ -1839,17 +2076,18 @@ body {
   flex-direction: column;
   gap: 4px;
   font-size: clamp(11px, 1.45vmin, 14.5px);
-  line-height: 1.38;
+  line-height: 1.4;
   color: #1e293b;
 }
 
 .scout-highlight-tip {
-  margin-top: 3px;
+  margin-top: 4px;
   background: #fef08a;
   border-left: 4px solid #ca8a04;
-  padding: 4px 8px;
-  border-radius: 3px;
+  padding: 5px 8px;
+  border-radius: 2px;
   color: #451a03;
+  transform: rotate(0.4deg);
 }
 
 .shop-section-card .pin-card-kicker {
@@ -1857,25 +2095,12 @@ body {
   margin-bottom: 6px;
 }
 
-.shop-upgrade-row,
-.shop-catalog-row {
+.shop-upgrade-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  background: #fffdf7;
-  border: 1.5px solid #bda988;
-  border-radius: 5px;
-  padding: clamp(6px, 1.1vmin, 11px) clamp(8px, 1.4vmin, 14px);
-}
-
-.shop-catalog-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: clamp(110px, 32dvh, 300px);
-  overflow-y: auto;
-  padding-right: 2px;
+  padding-top: 2px;
 }
 
 .shop-item-copy {
@@ -1884,59 +2109,52 @@ body {
 
 .shop-item-title {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(13.5px, 1.75vmin, 18px);
+  font-size: clamp(14px, 1.8vmin, 18.5px);
   font-weight: 800;
-  text-transform: uppercase;
   color: #1c1917;
 }
 
 .shop-item-desc {
   font-size: clamp(10.5px, 1.35vmin, 13.5px);
   color: #57534e;
-  line-height: 1.32;
+  line-height: 1.34;
 }
 
 .shop-buy-btn {
-  min-height: 34px !important;
-  padding: 5px 12px !important;
-  font-size: clamp(11.5px, 1.45vmin, 14.5px) !important;
+  min-height: 32px !important;
+  padding: 4px 11px !important;
+  font-size: clamp(12px, 1.45vmin, 15px) !important;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .shop-max-banner {
   background: #dcfce7;
-  border: 2px solid #15803d;
-  border-radius: 5px;
-  padding: 8px 12px;
+  border-left: 4px solid #15803d;
+  border-radius: 3px;
+  padding: 7px 11px;
   color: #14532d;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-weight: 800;
-  font-size: clamp(12px, 1.55vmin, 15.5px);
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  font-size: clamp(12.5px, 1.55vmin, 16px);
   text-align: center;
 }
 
-/* Setlist Taped Chips for Equipped Songs */
+/* Single-Line Setlist Sheet-Music Strips in Shop */
 .setlist-chips-wrap {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
 
-.setlist-chip {
-  position: relative;
-  display: inline-flex;
+.setlist-chip.sheet-music-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  background: #f5f0e3;
-  border: 2px solid #78716c;
-  border-left: 5px solid var(--chip-accent, #eab308);
-  border-radius: 5px;
-  padding: 5px 10px;
+  gap: clamp(6px, 1vmin, 11px);
   cursor: pointer;
   user-select: none;
-  transition: transform 0.08s ease, background 0.12s ease, border-color 0.12s ease;
+  opacity: 0.88;
 }
 
 .setlist-chip input {
@@ -1946,33 +2164,60 @@ body {
 }
 
 .setlist-chip.is-equipped {
-  background: #fef9c3;
-  border-color: #1c1917;
-  box-shadow: 2px 2px 0 rgba(28, 25, 23, 0.3);
+  opacity: 1;
+  background-color: #fefce8;
+  background-image: linear-gradient(90deg, rgba(254, 240, 138, 0.5) 0%, rgba(253, 250, 240, 0.92) 45%);
+  box-shadow:
+    0 7px 16px rgba(32, 16, 4, 0.32),
+    0 0 0 1.5px rgba(202, 138, 4, 0.55);
+}
+
+.setlist-chip.sheet-music-strip:hover {
+  opacity: 1;
+  transform: rotate(0deg) translateY(-1px);
 }
 
 .setlist-check-box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #292524;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid #44403c;
   border-radius: 3px;
   background: #ffffff;
   font-weight: 900;
   font-size: 12px;
   color: #15803d;
   line-height: 1;
+  flex-shrink: 0;
 }
 
-.setlist-chip-label {
-  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(12px, 1.55vmin, 16px);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #1c1917;
+/* Single-Line Sheet Music Catalog Strips in Shop */
+.shop-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: clamp(112px, 31dvh, 290px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 5px 5px 7px 3px;
+}
+
+.shop-catalog-row.sheet-music-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: clamp(6px, 1vmin, 11px);
+}
+
+.shop-catalog-row.sheet-music-strip:hover {
+  transform: rotate(0deg) translateY(-1px);
+}
+
+.shop-music-col .sheet-staff-svg {
+  width: clamp(98px, 12.2vmin, 142px);
+  height: clamp(22px, 2.7vmin, 30px);
 }
 
 /* ==========================================================================
@@ -1985,12 +2230,12 @@ body {
 
 .season-hero-sheet.is-champion {
   background: linear-gradient(180deg, #fefce8 0%, #fef08a 100%);
-  border-color: #854d0e;
+  border-top: 4px solid #ca8a04;
 }
 
 .season-hero-sheet.is-dismissed {
   background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
-  border-color: #9f1239;
+  border-top: 4px solid #be123c;
 }
 
 .season-hero-sheet .modal-eyebrow {
@@ -1998,7 +2243,7 @@ body {
 }
 
 .season-trophy-icon {
-  font-size: clamp(28px, 4.2vmin, 44px);
+  font-size: clamp(26px, 4vmin, 42px);
   line-height: 1;
   margin-bottom: 4px;
 }
@@ -2011,19 +2256,19 @@ body {
 .season-lead-copy {
   font-size: clamp(12px, 1.55vmin, 16px);
   color: #292524;
-  max-width: 600px;
+  max-width: 620px;
   margin: 0 auto;
-  line-height: 1.42;
+  line-height: 1.44;
 }
 
 .season-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(6px, 1.2vmin, 14px);
+  gap: clamp(8px, 1.3vmin, 16px);
 }
 
 .season-stat-card {
-  padding: clamp(8px, 1.3vmin, 14px) clamp(9px, 1.4vmin, 16px);
+  padding: clamp(8px, 1.3vmin, 14px) clamp(10px, 1.5vmin, 16px);
 }
 
 .season-stat-big {
@@ -2060,56 +2305,45 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  gap: 8px;
 }
 
 .season-mastered-count {
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  font-size: clamp(12px, 1.55vmin, 16px);
+  font-size: clamp(12.5px, 1.6vmin, 16.5px);
   font-weight: 800;
-  text-transform: uppercase;
-  color: #854d0e;
+  color: #fef08a;
+  background: rgba(69, 26, 3, 0.55);
+  padding: 2px 10px;
+  border-radius: 999px;
+  transform: rotate(1.4deg);
 }
 
 .season-songs-scroll {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  max-height: 170px;
-  overflow-y: auto;
-}
-
-.season-song-row {
-  background: #fffdf7;
-  padding: 6px 10px;
-  border-radius: 5px;
-  border: 1.5px solid #bda988;
-  border-left: 5px solid var(--song-tab, #eab308);
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
+  max-height: clamp(116px, 26dvh, 230px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 5px 5px 7px 3px;
+}
+
+.season-song-row.sheet-music-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-}
-
-.season-song-title {
-  font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
-  text-transform: uppercase;
-  color: #1c1917;
-  font-size: clamp(13px, 1.65vmin, 16.5px);
-}
-
-.season-song-desc {
-  font-size: clamp(10px, 1.3vmin, 13px);
-  color: #57534e;
+  gap: clamp(8px, 1.2vmin, 14px);
 }
 
 /* ==========================================================================
-   Modal Actions & Tactile Athletic-Tape / Duct-Tape Buttons
+   Modal Actions & Arena Ticket-Stub / Athletic-Tape CTA Buttons
+   (Readable Title Case — NO ALL CAPS)
    ========================================================================== */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: clamp(8px, 1.3vmin, 14px);
+  gap: clamp(8px, 1.4vmin, 16px);
   margin-top: 2px;
 }
 
@@ -2123,48 +2357,60 @@ body {
 
 .primary-cta-btn,
 .secondary-cta-btn {
+  position: relative;
   min-height: clamp(36px, 5.2vmin, 48px);
-  padding: clamp(6px, 1.1vmin, 12px) clamp(14px, 2.4vmin, 26px);
-  border-radius: 6px;
+  padding: clamp(6px, 1.1vmin, 12px) clamp(18px, 2.7vmin, 30px);
+  border-radius: 4px;
   font-family: 'Barlow Condensed', 'Chakra Petch', sans-serif;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: clamp(14px, 2vmin, 21px);
+  letter-spacing: 0.02em;
+  font-size: clamp(15px, 2.15vmin, 22px);
   cursor: pointer;
-  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 
+/* Perforated golden arena admission ticket stub */
 .primary-cta-btn {
-  background: linear-gradient(180deg, #fde047 0%, #facc15 100%);
+  background:
+    radial-gradient(circle at 0 50%, #8a5a30 5px, transparent 5.5px),
+    radial-gradient(circle at 100% 50%, #8a5a30 5px, transparent 5.5px),
+    linear-gradient(180deg, #fde047 0%, #facc15 100%);
   color: #1c1917;
-  border: 2.5px solid #1c1917;
-  box-shadow: 0 4px 0 #1c1917;
+  border: 1.5px solid rgba(69, 26, 3, 0.65);
+  transform: rotate(-0.6deg);
+  box-shadow:
+    0 6px 14px rgba(24, 11, 2, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .primary-cta-btn:hover:not(:disabled) {
   filter: brightness(1.05);
+  transform: rotate(0deg) translateY(-1.5px);
+  box-shadow:
+    0 9px 18px rgba(24, 11, 2, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .primary-cta-btn:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 #1c1917;
+  transform: translateY(1.5px);
+  box-shadow: 0 2px 6px rgba(24, 11, 2, 0.35);
 }
 
 .secondary-cta-btn {
-  background: linear-gradient(180deg, #f5f5f4 0%, #d6d3d1 100%);
+  background: linear-gradient(180deg, #fafaf9 0%, #e7e5e4 100%);
   color: #1c1917;
-  border: 2px solid #292524;
-  box-shadow: 0 3px 0 #292524;
+  border: 1.5px solid rgba(68, 64, 60, 0.55);
+  transform: rotate(0.45deg);
+  box-shadow: 0 5px 12px rgba(24, 11, 2, 0.28);
 }
 
 .secondary-cta-btn:hover:not(:disabled) {
   filter: brightness(1.03);
+  transform: rotate(0deg) translateY(-1px);
 }
 
 .secondary-cta-btn:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #292524;
+  transform: translateY(1.5px);
 }
 
 .primary-cta-btn:disabled,
@@ -2176,12 +2422,10 @@ body {
 }
 
 @media (max-width: 640px) {
-  .seat-tips-grid,
   .breakdown-columns,
   .game-stats-grid,
   .pause-board-grid,
-  .shop-board-grid,
-  .season-songs-scroll {
+  .shop-board-grid {
     grid-template-columns: 1fr;
   }
   .season-stats-grid {
@@ -2283,7 +2527,7 @@ body {
   margin-top: 4px;
 }
 
-/* Compact 16:9 Mobile Landscape Adjustments */
+/* Compact 16:9 Mobile Landscape Adjustments (e.g. 844x390) */
 @media (max-height: 500px), (max-width: 860px) {
   .jumbotron-hud {
     min-height: 36px;
@@ -2363,25 +2607,36 @@ body {
   }
   .modal-card,
   .modal-card.wide-board-host {
-    width: min(96vw, 820px);
+    width: min(96vw, 824px);
     max-height: 96dvh;
     border-width: 5px;
-    padding: 6px 11px;
+    padding: 7px 12px;
+  }
+  .tilt-neg-sm {
+    transform: rotate(-0.45deg);
+  }
+  .tilt-pos-sm {
+    transform: rotate(0.45deg);
+  }
+  .tilt-neg-xs {
+    transform: rotate(-0.25deg);
+  }
+  .tilt-pos-xs {
+    transform: rotate(0.25deg);
   }
   .modal-inner {
     gap: 5px;
   }
   .modal-title {
-    font-size: 17px;
+    font-size: 18px;
   }
   .cork-header-strip,
-  .modal-inner > .modal-title,
   .shop-header-bar {
-    padding: 4px 9px;
+    padding: 4px 10px;
   }
   .modal-lead {
     font-size: 11.5px;
-    line-height: 1.34;
+    line-height: 1.35;
   }
   .cork-pinned-sheet,
   .greaseboard-card,
@@ -2392,7 +2647,7 @@ body {
   .bribes-final-box,
   .order-check-row,
   .order-final-banner {
-    padding: 5px 9px;
+    padding: 5px 10px;
   }
   .seat-tips-grid,
   .breakdown-columns,
@@ -2402,9 +2657,31 @@ body {
   .shop-col {
     gap: 6px;
   }
-  .seat-tip {
-    padding: 6px 9px;
-    font-size: 11px;
+  .seat-repertoire-heading,
+  .board-scrawl-heading {
+    font-size: 13.5px;
+    padding-bottom: 1px;
+  }
+  .sheet-music-strip,
+  .seat-tip.sheet-music-strip {
+    padding: 4px 9px;
+  }
+  .sheet-strip-copy strong,
+  .sheet-music-strip .shop-item-title,
+  .sheet-music-strip .setlist-chip-label,
+  .sheet-music-strip .season-song-title {
+    font-size: 13px;
+  }
+  .sheet-strip-effect {
+    font-size: 10.5px;
+  }
+  .sheet-staff-svg {
+    width: 106px;
+    height: 22px;
+  }
+  .shop-music-col .sheet-staff-svg {
+    width: 84px;
+    height: 19px;
   }
   .breakdown-score-banner {
     padding: 3px 10px;
@@ -2412,12 +2689,12 @@ body {
   .b-team span {
     font-size: 19px;
   }
-  .breakdown-modal:not(.game-over-modal) .modal-eyebrow {
+  .breakdown-modal .modal-eyebrow {
     display: none;
   }
   .breakdown-col h3,
   .impact-callout-box h3 {
-    font-size: 12px;
+    font-size: 12.5px;
     padding-bottom: 1px;
     margin-bottom: 2px;
   }
@@ -2444,30 +2721,43 @@ body {
     padding: 2px 0;
   }
   .scout-opponent-title {
-    font-size: 15px;
-    margin: 1px 0 3px;
+    font-size: 14px;
+    margin: 0 0 2px;
   }
   .scout-notes-list {
-    gap: 2px;
-    font-size: 10.5px;
-    line-height: 1.28;
+    gap: 1px;
+    font-size: 10px;
+    line-height: 1.2;
   }
   .scout-highlight-tip {
     padding: 2px 6px;
   }
   .shop-section-card .pin-card-kicker {
-    margin-bottom: 3px;
+    margin-bottom: 1px;
+    font-size: 11px;
   }
-  .shop-upgrade-row,
-  .shop-catalog-row {
-    padding: 4px 8px;
+  .shop-item-title {
+    font-size: 13px;
+  }
+  .shop-item-desc {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  .shop-buy-btn {
+    min-height: 25px !important;
+    padding: 2px 8px !important;
+    font-size: 11.5px !important;
+  }
+  .setlist-chips-wrap {
+    gap: 3px;
   }
   .shop-catalog-list {
-    max-height: 102px;
-    gap: 4px;
+    max-height: 82px;
+    gap: 3px;
+    padding: 3px 4px 4px 2px;
   }
-  .setlist-chip {
-    padding: 3px 8px;
+  .shop-modal .modal-cta-row {
+    margin-top: 0;
   }
   .season-hero-sheet {
     padding: 5px 10px;
@@ -2477,7 +2767,7 @@ body {
     margin-bottom: 1px;
   }
   .season-songs-scroll {
-    max-height: 92px;
+    max-height: 86px;
   }
   .tip-note-card {
     width: min(92vw, 720px);
@@ -2486,9 +2776,8 @@ body {
   }
   .primary-cta-btn,
   .secondary-cta-btn {
-    min-height: 30px;
-    padding: 4px 14px;
+    min-height: 28px;
+    padding: 3px 15px;
     font-size: 13px;
-    box-shadow: 0 2px 0 #1c1917;
   }
 }
